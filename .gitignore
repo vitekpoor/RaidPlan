@@ -1,1 +1,3 @@
-__pycache__
+__pycache__/
+# contains RaidPlan.io edit keys (grant edit access) - do not publish
+venomabyss_plans.txt
