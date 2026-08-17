@@ -165,6 +165,20 @@ th {
 td { padding: .55rem .9rem; border-bottom: 1px solid var(--line); }
 tr:last-child td { border-bottom: none; }
 
+.bossnav {
+  position: sticky; top: 0; z-index: 10; background: var(--ground);
+  display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 0 .75rem;
+  border-bottom: 1px solid var(--line); margin-bottom: .5rem;
+}
+.bossnav a {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: .28rem .8rem; font-size: .82rem; color: var(--ink);
+  text-decoration: none; white-space: nowrap;
+}
+.bossnav a:hover { border-color: var(--jade); }
+.bossnav a.active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
+.bossnav a.home { border-color: var(--gold); }
+.bossnav a.home.active { color: var(--gold); background: var(--surface2); }
 footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
 footer p { color: var(--muted); font-size: .82rem; }
 footer a { color: var(--jade); }
@@ -179,6 +193,20 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   <h1>The Venomous Abyss</h1>
   </header>
 
+<nav class="bossnav">
+  <a class="home" href="#home">Přehled</a>
+  <a href="#boss-1">I · Nek'zali</a>
+  <a href="#boss-2">II · Sentinels</a>
+  <a href="#boss-3">III · Vashnik</a>
+  <a href="#boss-4">IV · Explorers</a>
+  <a href="#boss-5">V · Sszorak</a>
+  <a href="#boss-6">VI · Twin Fangs</a>
+  <a href="#boss-7">VII · Coiled Altar</a>
+  <a href="#boss-8">VIII · Ula'tek</a>
+</nav>
+
+
+<div class="view-home">
 <h2>Postup raidem</h2>
 <div class="path">
   <span class="node">Nek'zali the Soulcoiler</span>
@@ -195,8 +223,8 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   <span class="node final">Ula'tek</span>
 </div>
 <p class="pathnote">Raid se po Nek'zali větví: obě dvojice křídel můžete vyčistit v libovolném pořadí podle složení raidu a pak se cesty spojí u Twin Fangs.</p>
+</div>
 
-<h2>Plány na bossy</h2>
 
 <section class="boss">
   <div class="boss-head"><span class="boss-num">I</span><h3>Nek'zali the Soulcoiler</h3><a class="rplink" href="https://raidplan.io/plan/egs7gyaq69pg7xhs" target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Add-cleave · P1 → intermission → P2 · 2T/4H</span></div>
@@ -428,6 +456,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   <p class="posn"><strong>Pozicování:</strong> jak se platforma trhá, pohyb je naplánovaný předem — raid se mezi zmenšujícími se bezpečnými zónami přesouvá jako jedna skupina.</p>
 </section>
 
+<div class="view-home">
 <h2>Item levely lootu</h2>
 <div class="tablewrap"><table>
   <thead><tr><th>Obtížnost</th><th>Boss 1</th><th>Bossové 2–3</th><th>Bossové 4–6</th><th>Bossové 7–8</th></tr></thead>
@@ -438,6 +467,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   </tbody>
 </table></div>
 <p class="pathnote">Tokeny Tier 36: Entombed Sentinels (hands), Lost Explorers (shoulders), Vashnik (chest), Sszorak (legs), Twin Fangs (head). Ula'tek dropí flexibilní Slumbering Coil Curio.</p>
+</div>
 
 <footer>
   <p>Sestaveno 16. 8. 2026 z návodů založených na PTR — po otevření raidu 18. 8. čekejte změny v tuningu. Bossové I–VI aktualizováni podle heroic guidů <a href="https://www.method.gg/guides/the-venomous-abyss">Method.gg</a> a <a href="https://raidstrats.gg">Raidstrats.gg</a> (Consequence US); Coiled Altar a Ula'tek zatím Method guide nemají — jejich sekce vychází z PTR přehledů. Další zdroje:
@@ -449,5 +479,26 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </footer>
 </div>
 
+<script>
+(function () {
+  var nav = document.querySelectorAll('.bossnav a');
+  var home = document.querySelectorAll('.view-home');
+  var bosses = document.querySelectorAll('section.boss');
+  function route() {
+    var h = location.hash.replace('#', '') || 'home';
+    if (!/^boss-[1-8]$/.test(h)) h = 'home';
+    home.forEach(function (el) { el.style.display = (h === 'home') ? '' : 'none'; });
+    bosses.forEach(function (el, i) {
+      el.style.display = (h === 'home' || h === 'boss-' + (i + 1)) ? '' : 'none';
+    });
+    nav.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + h);
+    });
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
+  route();
+})();
+</script>
 </body>
 </html>
