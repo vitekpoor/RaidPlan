@@ -197,7 +197,6 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   </header>
 
 <nav class="bossnav">
-  <a class="home" href="#home">Přehled</a>
   <a href="#boss-1">I · Nek'zali</a>
   <a href="#boss-2">II · Sentinels</a>
   <a href="#boss-3">III · Vashnik</a>
@@ -578,11 +577,11 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   var home = document.querySelectorAll('.view-home');
   var bosses = document.querySelectorAll('section.boss');
   function route() {
-    var h = location.hash.replace('#', '') || 'home';
-    if (!/^boss-[1-8]$/.test(h)) h = 'home';
-    home.forEach(function (el) { el.style.display = (h === 'home') ? '' : 'none'; });
+    var h = location.hash.replace('#', '') || 'boss-1';
+    if (!/^boss-[1-8]$/.test(h)) h = 'boss-1';
+    home.forEach(function (el) { el.style.display = 'none'; });
     bosses.forEach(function (el, i) {
-      el.style.display = (h === 'home' || h === 'boss-' + (i + 1)) ? '' : 'none';
+      el.style.display = (h === 'boss-' + (i + 1)) ? '' : 'none';
     });
     nav.forEach(function (a) {
       a.classList.toggle('active', a.getAttribute('href') === '#' + h);
