@@ -117,6 +117,19 @@ h2 {
   padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
   font-size: .93rem;
 }
+.ability {
+  border-left: 3px solid var(--jade); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 .9rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.ability .hc-label {
+  display: block; color: var(--jade); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.ability ul { margin: 0; padding-left: 1.1rem; }
+.ability li { margin-bottom: .3rem; }
+.ability li::marker { color: var(--jade); }
+.ability li strong { color: var(--jade); font-weight: 600; }
 .hc {
   border-left: 3px solid var(--gold); background: var(--surface2);
   padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
@@ -187,7 +200,18 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 
 <section class="boss">
   <div class="boss-head"><span class="boss-num">I</span><h3>Nek'zali the Soulcoiler</h3><a class="rplink" href="https://raidplan.io/plan/egs7gyaq69pg7xhs" target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Add-cleave · P1 → intermission → P2 · 2T/4H</span></div>
-  <p class="callout"><strong>Wipe mechanika:</strong> Soulcoil Well uprostřed sálu. Addy (Restless Amani) se hrnou z rakví po obvodu — mají magický štít, po jeho zlomení teprve získají aggro. Každý add, který dojde do studny, dá bossovi <strong>5 energie; na 100 boss enrage</strong> — a v P2 už není plán B. Průběh: P1 → intermission při 50 % HP (Ritual of Awakening, 2× Echo of Jawae) → P2 (Uncoiling — energie od 0, závod o kill).</p>
+  <p class="callout"><strong>Wipe mechanika:</strong> Soulcoil Well (studna) uprostřed. Addy (Restless Amani) se spawnujou z rakví po obvodu — mají magic shield (štít jde zničit jenom magií!!!). Dokud je štít aktivní, addy mají fixate do studny uprostřed. Když se štít probije, addy mají klasické aggro. Každý add, který dojde do studny, dá bossovi <strong>5 energie + na HC debuff (Ritual Burn) - NECHCEŠ ADDU VE STUDNI A ANI HRÁČE!!!; na 100 energie boss enrage</strong>. Průběh: P1 → intermission při 50 energie (ideálně bosse stáhnout pod 50% hp) - Ritual of Awakening, 2× Echo of Jawae → P2 BL (Uncoiling — energie od 0).</p>
+  <div class="ability"><span class="hc-label">Ability</span><ul>
+    <li><strong>Soulcoil Ignition</strong> — 5x po sobě provolá abilitu Soulcoil Rite. (tzn. dá 25 energie bossovi, jebne to AOE dmg do raidu a na HC to aplikuje Ritual Burn 5x stacků)</li>
+    <li><strong>Soulcoil Rite</strong> — Dá 5 energie bossovi a jebne AOE dmg. Na HC to aplikuje navíc stack Ritual Burn.</li>
+    <li><strong>Ritual Burn</strong> — Debuff aplikovaný na hráče, který zvyšuje poškození od dalších útoků bosse. 15% za stack.</li>
+    <li><strong>Essence Rend</strong> — Magic debuff který je dispelovatelný. Jdeš s ním ke kraji místnosti. Při dispelu tě jebne po hlavě a nechá sračku na zemi. Jestli bude nějaká sračka mimo kraj tak si tě najdu a vykastruju. Na HC při castu Invoke se sračky začnou hejbat.</li>
+    <li><strong>Possession Barrage</strong> — Spektrální projektily letí na tanka. Tank musí jít dopiče od raidu a raid musí bejt za bossem. Je to proxy dmg, takže čím dál tím líp. Na HC ti každej hit dá stack Hollowing Strike.</li>
+    <li><strong>Hollowing Strikes</strong> — Tank debuff boss autoattackem. 5% heal redukce za stack.</li>
+    <li><strong>Hungering Pyre</strong> — Tank soak - musíš s tím jít na mrtvé addky, ono je to spálí. Soakujou melečka. Kdo to nesoukne dostane Slithering Flame. Slithering Flame je personální kolečko a musíš s tím jít spálit addky co ještě nejsou spálený. Tzn. dostanou ho všechny rangedka (respketive každej kdo nebyl v tank souku).  </li>
+    <li><strong>Uncoiled Rage</strong> — enrage</li>
+  </ul>
+</div>
   <div class="hc"><span class="hc-label">Nové v Heroicu</span><ul>
       <li>Soulcoil Ignition a Invoke nově aplikují i Ritual Burn.</li>
       <li>Restless Amani po smrti nechávají Vessel of Awakening (mrtvoly) — v intermission se pálí přes Hungering Pyre a Slithering Flame.</li>
@@ -195,22 +219,22 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
     </ul></div>
   <div class="roles">
     <div class="role tank"><h4>Tanky</h4><ul>
-      <li>Boss jihovýchodně od studny (směrem ke vchodu), čelem od raidu — stejný camp celý fight; melee těsně jižně od bosse, ranged a healeři za nimi.</li>
-      <li>Possession Barrage: 4 spektrální projektily letí na tanka a dmg klesá se vzdáleností — aktivní tank odbíhá 30+ yd na severovýchod (mimo raid); nikdo nesmí stát mezi bossem a tankem.</li>
+      <li>Bosse směrem ke vchodu - kousek od studny, čelem od raidu — koukáš do prava od vchodu - tam budeš běhat s baráží.</li>
+      <li>Possession Barrage: 4 spektrální projektily letí na tanka a dmg klesá se vzdáleností — aktivní tank odbíhá 30+ yd dopiče; nikdo nesmí stát mezi bossem a tankem.</li>
       <li>Hollowing Strikes stackuje healing reduction — taunt swap kolem 30–40 %.</li>
-      <li>Volný tank sbírá addy se zlomeným štítem a odtahuje je od studny; v intermission se Echo of Jawae tankuje na značce X (západ), druhé na skullu (východ) — melee soak pile je v JZ rohu.</li>
+      <li>Volný tank sbírá addy se zlomeným štítem a odtahuje je od studny; v intermission se Echo of Jawae tankuje na značce X, druhé na skullu. Reálně s adkou budeš chodit tam kde je nejvíc addek, stejně jako s bossem v p1 a p2</li>
     </ul></div>
     <div class="role heal"><h4>Healeři</h4><ul>
-      <li>Soulcoil Ignition = čtyři po sobě jdoucí celoraidové hity + padající swirly — raid do něj musí jít s 0 stacky Ritual Burn; heal cooldown, žádný kick.</li>
-      <li>Essence Rend: zasažené nejdřív přitáhne ke středu, pak odhodí s 15s DoTem — odnést do jižních rohů a tam dispelnout; vznikne <em>trvalá</em> kaluž.</li>
-      <li>V intermission toho moc není — pomáhejte se soaky a displacementy na addy.</li>
-      <li>P2: Uncoiling dává stálý celoraidový dmg a Invoke ramuje — cooldowny na závěr.</li>
+      <li>Soulcoil Ignition = AOE + padající swirly — raid do něj musí jít s 0 stacky Ritual Burn; heal cooldown.</li>
+      <li>Essence Rend: zasažené nejdřív přitáhne ke středu, pak odhodí s 15s DoTem — odnést nakraj a tam dispelnout nebo nechat vytikat. Dělá to dmg když to tiká; vznikne <em>trvalá</em> kaluž.</li>
+      <li>V intermission toho moc není?</li>
+      <li>P2: Uncoiling dává stálý celoraidový dmg a Invoke dává stacky debuffu — cooldowny, BL, enjoy.</li>
     </ul></div>
     <div class="role dps"><h4>DPS</h4><ul>
       <li>Ranged s magic damage: priorita je lámat štíty nových addů, ne dorážet staré.</li>
-      <li>CC (rooty, trapy, novy) na vzdálené addy, dokud nemají zlomený štít; DK stahují addy na bosse (grip).</li>
-      <li>Intermission: kill 2× Echo of Jawae po jednom (Soul Transfer channeluje 15 s — odejít před výbuchem); melee soakují Hungering Pyre na hromadě mrtvol, kdo nesoakne, dostane Slithering Flame a položí ho na zbylé mrtvoly. <strong>Nespálené mrtvoly ožijí jako posílené addy.</strong></li>
-      <li>P2: LUST a cooldowny hned na startu; addy chodí dál (~po 50 s) — breakovat a cleavovat; boss musí zemřít před 100 energie.</li>
+      <li>CC (rooty, trapy, novy) na vzdálené addy, dokud nemají zlomený štít; DK stahují addy na bosse (grip) nebo tank tantuje probité. Ideální stav je mít je zabite u sebe aby se pak dali pálit.</li>
+      <li>Intermission: kill 2× Echo of Jawae po jednom - aktivní je vždy jeden co začně castit Soul Transfer - channeluje 15 s (můžeš v tom stát a vyběhnout jenom na ten finish castu; melee soakují tanka alá Hungering Pyre na hromadě mrtvol, kdo nesoakne (ranged), dostane Slithering Flame a položí ho na zbylé mrtvoly. <strong>Nespálené mrtvoly ožijí jako posílené addy a já vás nakopu doprdele.</strong></li>
+      <li>P2: LUST a cooldowny hned na startu; addy chodí dál (~po 50 s) — breakovat a cleavovat; boss musí zemřít před 100 energie. Je to chaoz, priorita jsou ale pořád addky, nemůžou dojít doprostřed.</li>
     </ul></div>
   </div>
   <p class="posn"><strong>Pozicování:</strong> volný spread kolem bosse; kaluže z Essence Rend pokládat na okraj — v P1 tvoří trvalý „minefield", a po každém Invoke v P2 se <em>všechny přesunou</em>, takže uhýbat; mrtvoly addů nechávat pohromadě, ať je intermission spálí. Sestava: 2 tanky / 4 healeři / 14 DPS.</p>
