@@ -130,6 +130,9 @@ h2 {
 .ability li { margin-bottom: .3rem; }
 .ability li::marker { color: var(--jade); }
 .ability li strong { color: var(--jade); font-weight: 600; }
+figure.shot { margin: -0.35rem 0 1.25rem; }
+figure.shot img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; display: block; }
+figure.shot figcaption { color: var(--muted); font-size: .8rem; margin-top: .35rem; }
 .hc {
   border-left: 3px solid var(--gold); background: var(--surface2);
   padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
@@ -270,7 +273,8 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 
 <section class="boss">
   <div class="boss-head"><span class="boss-num">II</span><h3>Entombed Sentinels</h3><a class="rplink" href="https://raidplan.io/plan/xtxvjvkrhxhh2bfs" target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Dva golemy · rotace stran · tier: hands</span></div>
-  <p class="callout"><strong>Základní smyčka:</strong> raid se dělí na zelenou (Breath of Ula'tek) a červenou (Blood of Ula'tek) skupinu, golemy drženy daleko od sebe. Na 100 energie přijde Vitriolic Stasis: oba golemi se stáhnou do středu, na 30 s mají 99% DR a slabší se dohealuje na úroveň silnějšího — HP se tedy dorovnává samo. Po každé Stasis si <strong>obě skupiny i tanky vymění strany</strong> a cyklus se opakuje do killu. LUST na pull — žádná burn fáze není.</p>
+  <p class="callout">Raid se dělí dvě grupy - na zelenou (Breath of Ula'tek) a červenou (Blood of Ula'tek) skupinu. Bossové jsou min 40y od sebe jinak mají 99% reduction. Na 100 energie přijde Vitriolic Stasis: bossové jdou do středu, na 30 s mají 99% DR a slabší se dohealuje na úroveň silnějšího — HP se tedy dorovnává samo. V mezifázi je minihra spojování hráčů (viz. obrazek). Každej hráč nad sebe dostane marku se zelenými kuličky, které jsou spojené. Může jich být 1 až 3. Hledáš hráče tak, aby zelené kuličky byly dohromady 4 (tzn. pokud máš nad hlavou 3 zelené kuličky tak hledáš někoho kdo má jednu zelenou kuličky etc.). Pokud to někomu nedošlo tak boss je imunní na dmg v mezifázi protože je u sebe. TAKŽE SI DEJ PRE-SPREAD A MÁŠ 30s ČASU NA TO TO ZAHRÁT. NA HC ŠPATNÉ SPOJENÍ JEBNE MEGA SRAČKU POD VÁS, POKUD NĚJAKOU UVIDÍM (RENDLIKU) TAK VAS POJEBU. Po každé Stasis si <strong>obě skupiny i tanky vymění strany</strong> a cyklus se opakuje do killu. LUST na pull.</p>
+  <figure class="shot"><a href="boss_2_marks.png" target="_blank" rel="noopener"><img src="boss_2_marks.png" alt="Helical Toxins - marky se zelenymi kulickami nad hraci" loading="lazy"></a><figcaption>Helical Toxins během Vitriolic Stasis: počet zelených kuliček nad hlavou (1–3) — spojuj se s hráčem tak, aby součet byl přesně 4. Klikni pro plnou velikost.</figcaption></figure>
   <div class="ability"><span class="hc-label">Ability</span><ul>
     <li><strong>Ula'tek's Dominance</strong> — bossové blízko sebe = 99% damage reduction — držet ≥40 yd od sebe.</li>
     <li><strong>Empowering Slam</strong> — tank buster od Breath (green). Těžký fyzický hit, stackuje — resetne se až výměnou bossů při intermission.</li>
