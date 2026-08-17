@@ -315,15 +315,15 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 
 <section class="boss">
   <div class="boss-head"><span class="boss-num">III</span><h3>Vashnik the Malignant</h3><a class="rplink" href="https://raidplan.io/plan/q8pqzrw3vf5p3q6c" target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Jedna fáze · rotace fontán · tier: chest</span></div>
-  <p class="callout"><strong>Základní smyčka:</strong> tři fontány (Blood, Shadow, Fire) a jeden energy bar. Vashnik při každém Imbibe pije ze <strong>dvou nejbližších</strong> fontán — pozice bosse tedy řídí celý fight. Výchozí rotace: <strong>Blood+Shadow → Fire+Shadow → Fire+Blood → repeat</strong> (vždy jen jedna nová fontána, aby se nikdy nestackla stejná Infusion do letální expulze). Aktivní fontány zároveň předem prozrazují typ addů i infekce. Toxic Vapor pořád stoupá — soft enrage: čistý fight je důležitější než rychlý.</p>
+  <p class="callout">Tři fontány (Blood, Shadow, Fire) a boss má energy bar. Při 100 energy - Imbibe - pije ze <strong>dvou nejbližších</strong> fontán. Každá fontána dá stack bossovi. Tzn. každý přesun dá druhej stack. Výchozí rotace: <strong>Fire+Shadow → Shadow+Blood → Blood+Fire → repeat</strong> (Fire je nejtěžší takže začít tam aby neměla dva stacky.). Každá aktivní fontána spawne addy a má svoje infekce na hráče. Fire spawnuje addy které pulzujou a při smrti dají debuff, takže JE NECHCEŠ SPLOŠNIT (jsou dvě a jdou gripovat...). Shadow spawnuje miliardu malejch addek, které se splošní - stačí pár AOE lidí co to udělá - boss je zatím na jiné fontáně. Blood spawne addku která nejde CC a po smrti se rozdělí a etc. Infkece jsou: Fire - debuff s proxy dmg (4červená šipka nad hlavou = pryč od raidu), Shadow - sračky na zemi, Blood - heal absorb = pod bosse, musí soakovat lidi. Boss má soft enrage, takže stačí hrát mechaniky.</p>
   <div class="ability"><span class="hc-label">Ability</span><ul>
-    <li><strong>Imbibe</strong> — boss se napije ze 2 nejbližších fontán: buff na 2 min + spawn addů podle fontán (1 Blood add — CC immune, splituje se; 2 Fire addy — explodují při smrti; 5 Shadow addů — swirlies).</li>
-    <li><strong>Dripping Fangs</strong> — tank buster: těžký fyzický hit + magic DoT + 100 % increased physical na 32 s — defensiva na hit, hard swap po každém castu.</li>
-    <li><strong>Malignant Catalyst</strong> — (HC) raid dmg + spawn Catalytic Bile — každý dopad pokrýt 1 hráčem.</li>
+    <li><strong>Imbibe</strong> — boss se napije ze 2 nejbližších fontán: buff na 2 min + spawn addů podle fontán (1 Blood add — CC immune, splituje se; 2 Fire addy — explodují při smrti (nezabit najednou, jdou gripovat); 5 Shadow addů — sračky na zemi po killu).</li>
+    <li><strong>Dripping Fangs</strong> — tank buster: jeba jak sviňa + magic DoT + 100 % increased physical na 32s — defku na hit, hard swap po každém castu.</li>
+    <li><strong>Malignant Catalyst</strong> — (HC) raid dmg + spawn Catalytic Bile — ZELENÉ SOAKY - 1 hráč stačí.</li>
     <li><strong>Adaptive Infection</strong> — debuffy podle aktivních fontán: Siphoning (velký heal absorb — vysaješ HP od okolních hráčů), Stygian (kaluže pod nohama — spread), Exploding (dispel = raid hit — staggerovat).</li>
-    <li><strong>Malignant Burst</strong> — stackující debuff na raid, když add dojde do prostředního poolu — proto kill addů hned.</li>
-    <li><strong>Hardened Venom</strong> — add živý 60 s = CC immune sprinter. „Necháme na později“ neexistuje.</li>
-    <li><strong>Hardened Tumor</strong> — štít poison adda — sundává se zásahem Plague Wave.</li>
+    <li><strong>Malignant Burst</strong> — stackující debuff na raid, když add dojde do prostředního poolu — TO SE ALE NESTANE RIGHT???.</li>
+    <li><strong>Hardened Venom</strong> — add živý 60s = CC immune sprinter. „Necháme na později“ NEEXISTUJE.</li>
+    <li><strong>Hardened Tumor</strong> — štít poison adda — sundává se zásahem Plague Wave. Malé adky na zemi sejmeš zelenýma čárama co jdou z tebe do kříže.</li>
     <li><strong>Splitting Clot</strong> — blood add se při smrti dělí na menší kusy — počítat a dorážet.</li>
     <li><strong>Caustic Surge</strong> — (HC) fire addy při smrti explodují a nechávají stackující debuff — proto nikdy nezabít oba naráz.</li>
     <li><strong>Umbral Ejection</strong> — swirlies od shadow addů — uhýbat, kruhy pokládat cíleně.</li>
@@ -332,7 +332,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   </ul>
 </div>
   <div class="hc"><span class="hc-label">Nové v Heroicu</span><ul>
-      <li>Vashnik nově castí Malignant Catalyst — celoraidový dmg + spawn Catalytic Bile k soaknutí.</li>
+      <li>Vashnik nově castí Malignant Catalyst — celoraidový dmg + spawn Catalytic Bile k soaknutí (zelené souky).</li>
       <li>Blood add už nejde gripnout.</li>
       <li>Exploze Fire adda při smrti nechává na raidu stackující debuff (proto stagger killy).</li>
     </ul></div>
@@ -342,16 +342,17 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
       <li>Dripping Fangs: hard swap každý cast — 100% physical amp se nedá tankovat dvakrát.</li>
     </ul></div>
     <div class="role heal"><h4>Healeři</h4><ul>
-      <li>Infekce čtěte z fontán a reakci si předdomluvte: Blood = Siphoning Infection (infikovaní potřebují těla v kruhu na prosátí heal-blocku — domluvte feed vs. absorb a dělejte to pokaždé stejně).</li>
-      <li>Shadow = Stygian Infection: healovatelná, infikovaní se rozestoupí, ať Stygian Burst nechytá raid — pohybová záležitost, ne healing emergency.</li>
+      <li>Infekce různé dle aktivních fontán: </li>
+      <li>Blood = Siphoning Infection (infikovaní potřebují soak kamarádů v kruhu na prosátí heal-blocku).</li>
+      <li>Shadow = Stygian Infection: healovatelná, infikovaní se rozestoupí, ať Stygian Burst nechytá raid — není potřeba healing.</li>
       <li>Fire = Exploding Infection: čistě o časování dispelů — staggerovat, a když je raid nízko, dispely úplně podržet. Každý dispel = celoraidový hit.</li>
     </ul></div>
     <div class="role dps"><h4>DPS</h4><ul>
-      <li>Add control je skutečný fight: každý add pathuje do prostředního poolu (Malignant Burst = raid DoT) a po 60 s dostane Hardened Venom — CC-immune sprinter. „Necháme na později" neexistuje, kill na spawnu.</li>
-      <li>Blood (Clotting Venom): žádné CC — čistý burn, cleavovat splity hned a počítat kusy.</li>
-      <li>Shadow (Shrouded Venom): extra kusy CC-nout; kruhy z Umbral Ejection pokládat tam, kam chcete — zabíjet cíleně.</li>
-      <li>Fire (Burning Venom): nejnebezpečnější pár — pulzují do raidu a při smrti pokládají stackující výbuch. CC jeden, nuke druhý, prvního dorazit až spadne debuff — nikdy nesmí zemřít oba naráz.</li>
-      <li>Malignant Catalyst: každý dopad Catalytic Bile pokrýt aspoň jedním tělem — spread, ne stack.</li>
+      <li>ADD > BOSS.</li>
+      <li>Blood: cleave přes bosse / AOE po rozdělení.</li>
+      <li>Shadow: pár heavy AOE dps jde od bosse je zabít. Boss bude jinde v tu chvíli.</li>
+      <li>Fire: nejnebezpečnější pár — pulzují do raidu a při smrti pokládají stackující výbuch. CC jeden, nuke druhý, prvního dorazit až spadne debuff — nikdy nesmí zemřít oba naráz.</li>
+      <li>Malignant Catalyst: zelené soaky alespoň jeden hráč — spread, ne stack.</li>
     </ul></div>
   </div>
   <p class="posn"><strong>Pozicování:</strong> pool uprostřed, add-kill skupina jihovýchodně od něj čelem k novým spawnům (geometrie je předvídatelná — addy jdou vždy dovnitř). Plague Froth: zasažení ven a všichni mimo osy plus-tvaré Plague Wave (směr je fixně kardinální — stůjte diagonálně). Pozice v RaidPlanu dle Method diagramů (horizontální mapa).</p>
@@ -377,6 +378,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </div>
   <div class="hc"><span class="hc-label">Nové v Heroicu</span><ul>
       <li>Explosive Surprise (Gebbova bomba) nově nechává velkou plochu Spreading Flames.</li>
+      <li>United Defense (Nama).</li>
     </ul></div>
   <div class="roles">
     <div class="role tank"><h4>Tanky</h4><ul>
