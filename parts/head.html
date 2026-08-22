@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<!-- GENEROVANÝ SOUBOR - needituj venomous-abyss.html ani index.html přímo!
+     Zdroje jsou parts\head.html, bosses\*.html a parts\tail.html.
+     Po úpravě spusť build.bat (nebo publish.bat, který builduje sám). -->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Venomous Abyss</title>
+<style>
+/* minimal reset (normally added by the artifact host) */
+*,*::before,*::after { box-sizing: border-box; }
+html,body { margin: 0; padding: 0; }
+img,svg { max-width: 100%; }
+</style>
+<style>
+:root {
+  --ground: #0c1210;
+  --surface: #131b18;
+  --surface2: #18231f;
+  --line: #24322c;
+  --ink: #d9e4de;
+  --muted: #8ba49a;
+  --jade: #55b98a;
+  --gold: #c9a24b;
+  --tank: #6f9fd8;
+  --heal: #5cb87c;
+  --dps: #d4796a;
+  --callout-bg: #16241e;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #eef2ef;
+    --surface: #ffffff;
+    --surface2: #f4f7f4;
+    --line: #d5ded8;
+    --ink: #1a2420;
+    --muted: #5c6f67;
+    --jade: #2e8663;
+    --gold: #96742a;
+    --tank: #2e64a8;
+    --heal: #2c7d4f;
+    --dps: #b04a3a;
+    --callout-bg: #e6efe9;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #eef2ef;
+  --surface: #ffffff;
+  --surface2: #f4f7f4;
+  --line: #d5ded8;
+  --ink: #1a2420;
+  --muted: #5c6f67;
+  --jade: #2e8663;
+  --gold: #96742a;
+  --tank: #2e64a8;
+  --heal: #2c7d4f;
+  --dps: #b04a3a;
+  --callout-bg: #e6efe9;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "Segoe UI", -apple-system, sans-serif;
+  line-height: 1.55;
+  margin: 0;
+  padding: 0 1.25rem 4rem;
+}
+.wrap { max-width: 62rem; margin: 0 auto; }
+.mono { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+
+header { padding: 3.5rem 0 2rem; border-bottom: 1px solid var(--line); }
+.eyebrow {
+  text-transform: uppercase; letter-spacing: .18em; font-size: .72rem;
+  color: var(--gold); font-weight: 600; margin: 0 0 .6rem;
+}
+h1 {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 600;
+  margin: 0 0 .5rem; letter-spacing: .01em; text-wrap: balance;
+}
+
+h2 {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.5rem; font-weight: 600; margin: 3rem 0 1rem; text-wrap: balance;
+}
+.path { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .85rem; }
+.path .node {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: .3rem .85rem; white-space: nowrap;
+}
+.path .branch { display: flex; flex-direction: column; gap: .4rem; }
+.path .arrow { color: var(--muted); }
+.path .final { border-color: var(--gold); color: var(--gold); }
+.pathnote { color: var(--muted); font-size: .85rem; margin-top: .75rem; }
+
+.boss {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  margin: 1.5rem 0; padding: 1.5rem 1.75rem 1.75rem;
+}
+.boss-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.boss-num {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  color: var(--gold); font-size: 1.1rem;
+}
+.boss h3 {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.45rem; font-weight: 600; margin: 0; text-wrap: balance;
+}
+.boss .tag { color: var(--muted); font-size: .8rem; margin-left: auto; }
+.rplink {
+  font-size: .74rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--jade); text-decoration: none; border: 1px solid var(--jade);
+  border-radius: 999px; padding: .15rem .7rem; white-space: nowrap;
+}
+.rplink:hover { background: var(--callout-bg); }
+.callout {
+  background: var(--callout-bg); border-left: 3px solid var(--jade);
+  padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
+  font-size: .93rem;
+}
+.ability {
+  border-left: 3px solid var(--jade); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 .9rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.ability .hc-label {
+  display: block; color: var(--jade); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.ability ul { margin: 0; padding-left: 1.1rem; }
+.ability li { margin-bottom: .3rem; }
+.ability li::marker { color: var(--jade); }
+.ability li strong { color: var(--jade); font-weight: 600; }
+figure.shot { margin: -0.35rem 0 1.25rem; }
+figure.shot img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; display: block; }
+figure.shot figcaption { color: var(--muted); font-size: .8rem; margin-top: .35rem; }
+.hc {
+  border-left: 3px solid var(--gold); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.hc .hc-label {
+  display: block; color: var(--gold); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.hc ul { margin: 0; padding-left: 1.1rem; }
+.hc li { margin-bottom: .2rem; }
+.callout strong { color: var(--jade); }
+.movement {
+  background: var(--callout-bg); border-left: 3px solid var(--tank);
+  padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
+  font-size: .93rem;
+}
+.movement strong { color: var(--tank); }
+.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+.role h4 {
+  margin: 0 0 .4rem; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .14em; font-weight: 700;
+}
+.role.tank h4 { color: var(--tank); }
+.role.heal h4 { color: var(--heal); }
+.role.dps h4 { color: var(--dps); }
+.role ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
+.role li { margin-bottom: .35rem; }
+.posn { font-size: .88rem; color: var(--muted); margin: 1.1rem 0 0; }
+.posn strong { color: var(--ink); font-weight: 600; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; background: var(--surface); }
+th {
+  text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--muted); padding: .6rem .9rem; border-bottom: 1px solid var(--line);
+  background: var(--surface2);
+}
+td { padding: .55rem .9rem; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: none; }
+
+.bossnav {
+  position: sticky; top: 0; z-index: 10; background: var(--ground);
+  display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 0 .75rem;
+  border-bottom: 1px solid var(--line); margin-bottom: .5rem;
+}
+.bossnav a {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: .28rem .8rem; font-size: .82rem; color: var(--ink);
+  text-decoration: none; white-space: nowrap;
+}
+.bossnav a:hover { border-color: var(--jade); }
+.bossnav a.active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
+.bossnav a.home { border-color: var(--gold); }
+.bossnav a.home.active { color: var(--gold); background: var(--surface2); }
+.bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
+.bossnav a.lair { border-color: var(--gold); }
+.bossnav a.lair:hover { border-color: var(--gold); }
+.bossnav a.lair.active { border-color: var(--gold); color: var(--gold); background: var(--surface2); }
+footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
+footer p { color: var(--muted); font-size: .82rem; }
+footer a { color: var(--jade); }
+a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow" id="page-eyebrow">Midnight · Patch 12.1 · Raid 2. sezóny</p>
+  <h1 id="page-title">The Venomous Abyss</h1>
+  </header>
+
+<nav class="bossnav">
+  <a href="#boss-1">I · Nek'zali</a>
+  <a href="#boss-2">II · Sentinels</a>
+  <a href="#boss-3">III · Vashnik</a>
+  <a href="#boss-4">IV · Explorers</a>
+  <a href="#boss-5">V · Sszorak</a>
+  <a href="#boss-6">VI · Twin Fangs</a>
+  <a href="#boss-7">VII · Coiled Altar</a>
+  <a href="#boss-8">VIII · Ula'tek</a>
+  <span class="sep" aria-hidden="true"></span>
+  <a href="#boss-9" class="lair">Lair · Nymrissa</a>
+</nav>
+
+
+<div class="view-home">
+<h2>Postup raidem</h2>
+<div class="path">
+  <span class="node">Nek'zali the Soulcoiler</span>
+  <span class="arrow">→</span>
+  <span class="branch">
+    <span class="node">Entombed Sentinels → Vashnik</span>
+    <span class="node">Lost Explorers → Sszorak</span>
+  </span>
+  <span class="arrow">→</span>
+  <span class="node">The Twin Fangs</span>
+  <span class="arrow">→</span>
+  <span class="node">The Coiled Altar</span>
+  <span class="arrow">→</span>
+  <span class="node final">Ula'tek</span>
+</div>
+<p class="pathnote">Raid se po Nek'zali větví: obě dvojice křídel můžete vyčistit v libovolném pořadí podle složení raidu a pak se cesty spojí u Twin Fangs.</p>
+</div>
+
+

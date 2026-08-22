@@ -2,8 +2,10 @@
 setlocal
 cd /d "%~dp0"
 
-rem venomous-abyss.html is the master copy - mirror it to index.html
-copy /y venomous-abyss.html index.html >nul
+rem parts\ and bosses\ are the master copies - build the single page
+rem (venomous-abyss.html + index.html) from them before committing
+call build.bat
+if errorlevel 1 goto :end
 
 git add -A
 

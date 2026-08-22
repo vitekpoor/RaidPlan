@@ -1,0 +1,54 @@
+
+<div class="view-home">
+<h2>Item levely lootu</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Obtížnost</th><th>Boss 1</th><th>Bossové 2–3</th><th>Bossové 4–6</th><th>Bossové 7–8</th></tr></thead>
+  <tbody>
+    <tr><td>Normal</td><td class="mono">292</td><td class="mono">295</td><td class="mono">298</td><td class="mono">302</td></tr>
+    <tr><td>Heroic</td><td class="mono">305</td><td class="mono">308</td><td class="mono">311</td><td class="mono">315</td></tr>
+    <tr><td>Mythic</td><td class="mono">318</td><td class="mono">321</td><td class="mono">324</td><td class="mono">344 (very rare)</td></tr>
+  </tbody>
+</table></div>
+<p class="pathnote">Tokeny Tier 36: Entombed Sentinels (hands), Lost Explorers (shoulders), Vashnik (chest), Sszorak (legs), Twin Fangs (head). Ula'tek dropí flexibilní Slumbering Coil Curio.</p>
+</div>
+
+<footer>
+  <p>Sestaveno 16. 8. 2026 z návodů založených na PTR — po otevření raidu 18. 8. čekejte změny v tuningu. Bossové I–VI aktualizováni podle heroic guidů <a href="https://www.method.gg/guides/the-venomous-abyss">Method.gg</a> a <a href="https://raidstrats.gg">Raidstrats.gg</a> (Consequence US); Coiled Altar a Ula'tek zatím Method guide nemají — jejich sekce vychází z PTR přehledů. Další zdroje:
+  <a href="https://expcarry.com/venomous-abyss-raid-overview-wow-midnight">ExpCarry</a> ·
+  <a href="https://onlyfarms.gg/guides/wow-venomous-abyss-raid-guide/">OnlyFarms</a> ·
+  <a href="https://koroboost.com/guide/midnight-venomous-abyss-raid-guide">KoroBoost</a> ·
+  <a href="https://warcraft.wiki.gg/wiki/Venomous_Abyss">Warcraft Wiki</a> ·
+  <a href="https://www.wowhead.com/guide/midnight/raids/the-venomous-abyss-overview-location-rewards-bosses">Wowhead</a>.
+  Nymrissa Wavecaller (lair) podle <a href="https://www.wowhead.com/guide/midnight/nymrissa-wavecaller-tidebound-grotto-lair-boss-strategy-rewards">Wowhead</a>,
+  <a href="https://skycoach.gg/blog/wow/articles/nymrissa-wavecaller-lair-boss-guide">Skycoach</a> a
+  <a href="https://mythic-store.com/blog/nymrissa-wavecaller-guide-tidebound-grotto-lair-strategy-and-rewards">Mythic Store</a>.</p>
+</footer>
+</div>
+
+<script>
+(function () {
+  var nav = document.querySelectorAll('.bossnav a');
+  var home = document.querySelectorAll('.view-home');
+  var bosses = document.querySelectorAll('section.boss');
+  function route() {
+    var h = location.hash.replace('#', '') || 'boss-1';
+    if (!/^boss-[1-9]$/.test(h)) h = 'boss-1';
+    var isLair = (h === 'boss-9');
+    document.getElementById('page-title').textContent = isLair ? 'The Tidebound Grotto' : 'The Venomous Abyss';
+    document.getElementById('page-eyebrow').textContent = isLair ? 'Midnight · Patch 12.1 · Lair boss 2. sezóny' : 'Midnight · Patch 12.1 · Raid 2. sezóny';
+    document.title = isLair ? 'The Tidebound Grotto' : 'The Venomous Abyss';
+    home.forEach(function (el) { el.style.display = 'none'; });
+    bosses.forEach(function (el, i) {
+      el.style.display = (h === 'boss-' + (i + 1)) ? '' : 'none';
+    });
+    nav.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + h);
+    });
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
+  route();
+})();
+</script>
+</body>
+</html>
