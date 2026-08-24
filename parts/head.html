@@ -95,6 +95,22 @@ h2 {
 .path .final { border-color: var(--gold); color: var(--gold); }
 .pathnote { color: var(--muted); font-size: .85rem; margin-top: .75rem; }
 
+.killorder {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .75rem;
+  margin: 0 0 1.25rem;
+}
+.killorder .ko-label {
+  flex-basis: 100%; color: var(--muted); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em;
+}
+.killorder .ko-node {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.35rem; font-weight: 700; letter-spacing: .06em;
+  background: var(--callout-bg); border: 2px solid var(--jade); color: var(--jade);
+  border-radius: 999px; padding: .45rem 1.4rem; white-space: nowrap;
+}
+.killorder .ko-arrow { color: var(--muted); font-size: 1.5rem; }
+
 .boss {
   background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
   margin: 1.5rem 0; padding: 1.5rem 1.75rem 1.75rem;
