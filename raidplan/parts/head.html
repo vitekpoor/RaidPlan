@@ -26,6 +26,7 @@ img,svg { max-width: 100%; }
   --tank: #6f9fd8;
   --heal: #5cb87c;
   --dps: #d4796a;
+  --mythic: #e08a3c;
   --callout-bg: #16241e;
 }
 @media (prefers-color-scheme: light) {
@@ -41,6 +42,7 @@ img,svg { max-width: 100%; }
     --tank: #2e64a8;
     --heal: #2c7d4f;
     --dps: #b04a3a;
+    --mythic: #a85f1c;
     --callout-bg: #e6efe9;
   }
 }
@@ -56,6 +58,7 @@ img,svg { max-width: 100%; }
   --tank: #2e64a8;
   --heal: #2c7d4f;
   --dps: #b04a3a;
+  --mythic: #a85f1c;
   --callout-bg: #e6efe9;
 }
 * { box-sizing: border-box; }
@@ -163,6 +166,29 @@ figure.shot figcaption { color: var(--muted); font-size: .8rem; margin-top: .35r
 }
 .hc ul { margin: 0; padding-left: 1.1rem; }
 .hc li { margin-bottom: .2rem; }
+.mythic {
+  border-left: 3px solid var(--mythic); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.mythic .mythic-label {
+  display: block; color: var(--mythic); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.mythic ul { margin: 0; padding-left: 1.1rem; }
+.mythic li { margin-bottom: .2rem; }
+.mythic li::marker { color: var(--mythic); }
+.mythic li strong { color: var(--mythic); font-weight: 600; }
+/* WoW macro block: each command on its own line (newlines in the markup are
+   kept, indentation is collapsed) */
+code {
+  display: block; white-space: pre-line;
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: .84em;
+  background: var(--callout-bg); border: 1px solid var(--line);
+  border-left: 3px solid var(--gold); border-radius: 0 4px 4px 0;
+  color: var(--gold); padding: .45rem .75rem; margin: .35rem 0 .45rem;
+  overflow-x: auto;
+}
 .callout strong { color: var(--jade); }
 .movement {
   background: var(--callout-bg); border-left: 3px solid var(--tank);

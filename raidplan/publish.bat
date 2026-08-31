@@ -3,11 +3,13 @@ setlocal
 cd /d "%~dp0"
 
 rem parts\ and bosses\ are the master copies - build the single page
-rem (venomous-abyss.html + index.html) from them before committing
+rem (venomous-abyss.html + root index.html) from them before committing
 call build.bat
 if errorlevel 1 goto :end
 
-git add -A
+rem stage only the raid guide (this folder + the published root index.html);
+rem Roster\ is managed separately and is never published by this script
+git add -A -- . ..\index.html ..\.gitignore
 
 rem exit if there is nothing new to commit
 git diff --cached --quiet

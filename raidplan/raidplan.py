@@ -1,35 +1,63 @@
 #!/usr/bin/env python3
 """
-raidplan_rename.py — swap player names in a RaidPlan.io plan across all steps.
+raidplan.py — sync player names in RaidPlan.io plans.
 
-Takes a plan URL and a set of renames (Old=New). Clones the plan via the
-RaidPlan API, replaces the names in every marker and text label on every
-slide, syncs class icons/colors from the guild roster Google Sheet (cell
-fill color = WoW class color), saves the clone and prints its URL.
-The original plan is never touched.
+Two modes:
 
-Usage:
-  python raidplan_rename.py <plan-url-or-code> "Old=New" ["Old2=New2" ...]
-      [--sheet URL] [--gid N] [--name "Plan name"] [--dry-run] [--check]
+1) Manual renames (original mode): takes a plan URL and a set of renames
+   (Old=New), replaces the names in every marker and text label on every
+   slide, syncs class icons/colors from the guild roster Google Sheet
+   (cell fill color = WoW class color), and saves a clone (or the same
+   plan in place when an edit link / --in-place is used).
 
-Examples:
-  python raidplan_rename.py https://raidplan.io/plan/kdwu3c3tfgv5tkdu/edit "Irdwy=Meslock"
-  python raidplan_rename.py kdwu3c3tfgv5tkdu "Irdwy=Meslock" "Hase=Mikyywar" --dry-run
+     python raidplan.py <plan-url-or-code> "Old=New" ["Old2=New2" ...]
+         [--sheet URL] [--gid N] [--name "Plan name"] [--dry-run] [--check]
+
+2) Boss lineup sync (--boss): reads the "Boss sestavy" tab of the wishlist
+   spreadsheet (built by buildBossLineups in Roster/class_loot_dropdowns.gs;
+   column headers "NN Boss"), compares the lineup with the player names in
+   the plan (edit keys come from venomabyss_plans.txt next to this script),
+   and renames players who dropped out of the lineup to their replacements
+   (paired by roster role: tank/heal/dps). Class icons, border colors and
+   name spelling come from the Roster tab. Saves the plan IN PLACE.
+   Players it cannot pair are listed for manual placement/removal.
+
+     python raidplan.py --boss 02              # one boss
+     python raidplan.py --boss 02 05           # several
+     python raidplan.py --boss all             # every plan
+     python raidplan.py --boss 02 --dry-run    # preview only
+   One-click: update_plans.bat [NN ...]
 
 Rename separators accepted: "Old=New", "Old->New", "Old - New".
-Requires: openpyxl (pip install openpyxl)
+Mode 1 requires: openpyxl (pip install openpyxl); mode 2 has no extra deps.
 """
 
 import argparse
+import copy
+import csv
 import io
 import json
+import os
 import re
 import sys
 import unicodedata
+import urllib.parse
 import urllib.request
 
 DEFAULT_SHEET = "https://docs.google.com/spreadsheets/d/1XwIuLB7o0kHDiViG9tVXF1Sk7ZBgvYqh3icINuNqFbE"
 DEFAULT_GID = "384829141"
+
+# Wishlist spreadsheet: holds the Roster tab (source of truth for players,
+# classes, roles) and the Boss sestavy tab (who goes to which boss).
+WISHLIST_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI"
+ROSTER_TAB = "Roster"
+LINEUP_TAB = "Boss sestavy"
+LINEUP_SIZE = 20
+# Boss sestavy layout (must match class_loot_dropdowns.gs): row 1 header
+# "NN Boss", row 2 links, row 3 date, row 4 count, row 5 spacer, rows 6-25 slots.
+LINEUP_FIRST_SLOT_ROW = 6
+DEFAULT_PLANS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "venomabyss_plans.txt")
 
 # Standard WoW class colors as used by the roster sheet cell fills.
 CLASS_COLORS = {
@@ -70,10 +98,11 @@ ASSUMED_TANK_ROLES = set()
 
 
 def role_key(role):
-    """Map a roster role label to tank/heal/ranged/melee. Unrecognized
-    non-empty labels (guild slang like 'Firer', 'Kúň') are assumed tanks."""
+    """Map a roster role label to tank/heal/ranged/melee. 'dps' (Roster tab)
+    is ambiguous — no spec is implied. Unrecognized non-empty labels
+    (guild slang like 'Firer', 'Kúň') are assumed tanks."""
     r = norm(role)
-    if not r:
+    if not r or r == "dps":
         return None
     if "heal" in r:
         return "heal"
@@ -187,6 +216,206 @@ def roster_lookup(roster, name):
     return None
 
 
+def gviz_rows(doc_id, sheet_name):
+    """Download a sheet tab as CSV rows via the gviz endpoint (by tab NAME,
+    no gid needed). headers=1 pins row 1 as the header row."""
+    url = ("https://docs.google.com/spreadsheets/d/%s/gviz/tq"
+           "?tqx=out:csv&headers=1&sheet=%s"
+           % (doc_id, urllib.parse.quote(sheet_name)))
+    text = http_bytes(url).decode("utf-8", "replace")
+    return list(csv.reader(io.StringIO(text)))
+
+
+def load_roster_tab():
+    """Roster tab -> {norm(player): (Player, class_key, role)}.
+    class_key matches CLASS_COLORS keys ('Death Knight' -> 'deathknight')."""
+    rows = gviz_rows(WISHLIST_ID, ROSTER_TAB)
+    if not rows or len(rows) < 2:
+        sys.exit(f"Tab '{ROSTER_TAB}' is empty or missing in the wishlist sheet.")
+    header = [norm(h) for h in rows[0]]
+
+    def col(name):
+        if norm(name) not in header:
+            sys.exit(f"Tab '{ROSTER_TAB}' has no column '{name}' "
+                     f"(found: {', '.join(rows[0])}).")
+        return header.index(norm(name))
+
+    ip, ic, ir = col("Hráč"), col("Main classa"), col("Main role")
+    roster = {}
+    for r in rows[1:]:
+        cell = lambda i: r[i].strip() if i < len(r) else ""
+        player, cls, role = cell(ip), cell(ic), cell(ir)
+        if not player or not cls:
+            continue
+        cls_key = cls.lower().replace(" ", "")
+        if cls_key not in CLASS_COLORS:
+            print(f"  WARNING: {player} has unknown class '{cls}' in the Roster")
+        roster[norm(player)] = (player, cls_key, role.lower())
+    if not roster:
+        sys.exit(f"Tab '{ROSTER_TAB}' contains no players.")
+    return roster
+
+
+def load_plans_file(path):
+    """Parse venomabyss_plans.txt -> {'01': {name, code, key}, ...}."""
+    plans, cur = {}, None
+    try:
+        f = open(path, encoding="utf-8-sig")
+    except OSError as e:
+        sys.exit(f"Cannot read plans file {path}: {e}")
+    with f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            m = re.match(r"^(\d{2})\s+(.+)$", line)
+            if m:
+                cur = m.group(1)
+                plans[cur] = {"name": m.group(2).strip()}
+                continue
+            m = re.match(r"^(view|edit):\s*(\S+)", line)
+            if m and cur:
+                code, key = plan_code(m.group(2))
+                plans[cur]["code"] = code
+                if m.group(1) == "edit" and key:
+                    plans[cur]["key"] = key
+    return plans
+
+
+def load_lineups():
+    """Boss sestavy tab -> {'01': {'header': ..., 'date': ..., 'players': [...]}}"""
+    rows = gviz_rows(WISHLIST_ID, LINEUP_TAB)
+    if not rows:
+        sys.exit(f"Tab '{LINEUP_TAB}' is missing — run buildBossLineups "
+                 f"in the wishlist sheet's Apps Script first.")
+    lineups = {}
+    # CSV row indexes (headers=1): rows[0]=sheet row 1 (headers), so sheet
+    # row N is rows[N-1]. Slots live on sheet rows 6..25.
+    first, last = LINEUP_FIRST_SLOT_ROW - 1, LINEUP_FIRST_SLOT_ROW - 1 + LINEUP_SIZE
+    for ci, head in enumerate(rows[0]):
+        m = re.match(r"^(\d{2})\s", head.strip())
+        if not m:
+            continue
+        date_str = rows[2][ci].strip() if len(rows) > 2 and ci < len(rows[2]) else ""
+        players = []
+        for r in rows[first:last]:
+            v = r[ci].strip() if ci < len(r) else ""
+            if v:
+                players.append(v)
+        lineups[m.group(1)] = {"header": head.strip(), "date": date_str,
+                               "players": players}
+    if not lineups:
+        # gviz silently serves the DEFAULT tab when the name doesn't exist,
+        # so this usually means the tab was never created (or was renamed).
+        sys.exit(f"Tab '{LINEUP_TAB}' not found (or has no '01 ...'-style "
+                 f"boss headers) — run buildBossLineups in the wishlist "
+                 f"sheet's Apps Script (class_loot_dropdowns.gs) first.")
+    return lineups
+
+
+def lineup_renames(doc, lineup, roster, extra_renames):
+    """Compare plan markers with the boss lineup; return (renames, leftovers).
+
+    Plan players missing from the lineup are renamed to lineup players not
+    yet in the plan, paired by roster role (tank/heal/dps). extra_renames
+    (from the command line) always win. leftovers = (to_add, to_remove) that
+    could not be paired and need manual editing in RaidPlan."""
+    known, unknown = [], []
+    for p in lineup["players"]:
+        hit = roster_lookup(roster, p)
+        (known if hit else unknown).append(hit[0] if hit else p)
+    if unknown:
+        print(f"  WARNING: lineup names not in the Roster (ignored): "
+              f"{', '.join(unknown)}")
+    dupes = {n for n in known if known.count(n) > 1}
+    if dupes:
+        print(f"  WARNING: duplicated in the lineup: {', '.join(sorted(dupes))}")
+    lineup_norm = {norm(p) for p in known}
+
+    plan_display = {}  # norm(roster name) -> marker text as spelled in the plan
+    for node in doc["nodes"]:
+        if node["type"] == "marker":
+            txt = (node["attr"].get("text") or "").strip()
+            hit = roster_lookup(roster, txt) if txt else None
+            if hit:
+                plan_display.setdefault(norm(hit[0]), txt)
+
+    extra_norm = {norm(o) for o in extra_renames}
+    removed = [n for n in plan_display
+               if n not in lineup_norm and n not in extra_norm]
+    added = [norm(p) for p in known if norm(p) not in plan_display]
+
+    renames = dict(extra_renames)
+    used = set()
+    role_of = lambda n: roster[n][2] if n in roster else ""
+    for rn in removed:
+        # same role first, then anyone still free
+        cand = next((a for a in added if a not in used
+                     and role_of(a) == role_of(rn)), None)
+        if cand is None:
+            cand = next((a for a in added if a not in used), None)
+        if cand is None:
+            continue
+        used.add(cand)
+        renames[plan_display[rn]] = roster[cand][0]
+        print(f"  swap: {plan_display[rn]} ({role_of(rn) or '?'}) -> "
+              f"{roster[cand][0]} ({role_of(cand) or '?'})")
+    to_remove = [plan_display[n] for n in removed if plan_display[n] not in renames]
+    to_add = [roster[a][0] for a in added if a not in used]
+    return renames, (to_add, to_remove)
+
+
+def boss_mode(args, cli_renames):
+    """--boss NN [NN ...] | all — sync plans with the Boss sestavy tab."""
+    plans = load_plans_file(args.plans_file)
+    print(f"Loading '{LINEUP_TAB}' and '{ROSTER_TAB}' tabs ...")
+    lineups = load_lineups()
+    roster = load_roster_tab()
+    print(f"  {len(lineups)} boss lineups, {len(roster)} roster players")
+
+    if any(b.lower() == "all" for b in args.boss):
+        nums = sorted(n for n in plans if n in lineups)
+    else:
+        nums = [b.zfill(2) for b in args.boss]
+    for num in nums:
+        if num not in plans:
+            sys.exit(f"Plans file has no boss '{num}' (known: {', '.join(sorted(plans))}).")
+
+    for num in nums:
+        info = plans[num]
+        lu = lineups.get(num)
+        print(f"\n===== {num} {info['name']} =====")
+        if lu is None:
+            print(f"  no '{num} ...' column in {LINEUP_TAB} — skipped")
+            continue
+        if "key" not in info:
+            print(f"  no edit link in {os.path.basename(args.plans_file)} — skipped")
+            continue
+        n = len(lu["players"])
+        print(f"  lineup: {n} players" +
+              (f" (NOT {LINEUP_SIZE}!)" if n != LINEUP_SIZE else "") +
+              (f", raid date {lu['date']}" if lu["date"] else ", no date set") +
+              "  (absence colors live in the sheet)")
+
+        print(f"  Fetching plan {info['code']} ...")
+        meta = http_json(f"https://raidplan.io/api/plan/{info['code']}")
+        plan = meta["plan"]
+        doc = http_json(plan["doc_url"])
+        print(f"  '{plan['name']}' — {plan['title']}, {plan['steps']} steps, "
+              f"{len(doc['nodes'])} nodes")
+
+        renames, (to_add, to_remove) = lineup_renames(doc, lu, roster, cli_renames)
+        a = copy.copy(args)
+        a.in_place, a.key = True, info["key"]
+        process_plan(info["code"], a, doc, plan, renames, roster)
+        if to_add:
+            print(f"  PLACE MANUALLY (in the lineup, nowhere in the plan): "
+                  f"{', '.join(sorted(to_add))}")
+        if to_remove:
+            print(f"  REMOVE MANUALLY (in the plan, not in the lineup, no free "
+                  f"replacement): {', '.join(sorted(to_remove))}")
+
+
 def replace_in_text(text, renames, hits=None):
     """Word-boundary, case/diacritics-insensitive replacement in free text.
 
@@ -247,10 +476,19 @@ def main():
         description="Rename players in a RaidPlan.io plan.",
         epilog=key_help("<plan-code>"),
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("plan", help="plan URL or code")
+    ap.add_argument("plan", nargs="?", default=None,
+                    help="plan URL or code (omit when using --boss)")
     ap.add_argument("renames", nargs="*",
                     help='renames like "Old=New" / "Old->New" / "Old - New", '
                          'or position swaps like "PlayerA<->PlayerB"')
+    ap.add_argument("--boss", nargs="+", metavar="NN",
+                    help="sync plan(s) with the '" + LINEUP_TAB + "' sheet tab: "
+                         "plan numbers like 02, or 'all'. Edit keys are read "
+                         "from the plans file; saves IN PLACE. Extra Old=New "
+                         "renames are applied on top.")
+    ap.add_argument("--plans-file", default=DEFAULT_PLANS_FILE,
+                    help="boss list with view/edit links (default: "
+                         "venomabyss_plans.txt next to this script)")
     ap.add_argument("--sheet", default=DEFAULT_SHEET, help="roster Google Sheet URL")
     ap.add_argument("--gid", default=DEFAULT_GID, help="roster tab gid")
     ap.add_argument("--name", default=None, help="name for the new plan (default: '<old> v2')")
@@ -278,6 +516,11 @@ def main():
                     help="raidplan.io Cookie header value, for plans owned by a logged-in account")
     args = ap.parse_args()
 
+    # in --boss mode a rename may have landed in the positional plan slot
+    if args.boss and args.plan and re.search(r"=|->|<->|<>", args.plan):
+        args.renames = [args.plan] + args.renames
+        args.plan = None
+
     pairs = list(args.renames)
     if args.file:
         with open(args.file, encoding="utf-8-sig") as f:
@@ -300,6 +543,13 @@ def main():
         if not old or not new:
             sys.exit(f"Cannot parse rename {pair!r} — use Old=New")
         renames[old] = new
+
+    if args.boss:
+        boss_mode(args, renames)
+        return
+
+    if not args.plan:
+        sys.exit("Give a plan URL/code, or use --boss NN / --boss all.")
     if not renames and not args.check and not args.normalize and not args.sync_names:
         sys.exit("No renames given (and no --check/--normalize/--sync-names) — nothing to do.")
 
@@ -313,12 +563,18 @@ def main():
     meta = http_json(f"https://raidplan.io/api/plan/{code}")
     plan = meta["plan"]
     doc = http_json(plan["doc_url"])
-    original_doc = json.loads(json.dumps(doc))  # pristine copy for --in-place backup
     print(f"  '{plan['name']}' — {plan['title']}, {plan['steps']} steps, {len(doc['nodes'])} nodes")
 
     print("Loading roster sheet ...")
     roster, tab = load_roster(args.sheet, args.gid)
     print(f"  tab '{tab}': {len(roster)} raiders")
+    process_plan(code, args, doc, plan, renames, roster)
+
+
+def process_plan(code, args, doc, plan, renames, roster):
+    """Apply renames/--sync-names/--check/--normalize to a fetched plan
+    document and save it (clone, or in place per args)."""
+    original_doc = json.loads(json.dumps(doc))  # pristine copy for --in-place backup
 
     # Warn early about unknown replacement names, and resolve their classes.
     new_class = {}
@@ -493,7 +749,8 @@ def main():
         print("\nDry run — no plan created.")
         return
     if not (marker_hits or text_hits or icon_hits or fmt_hits):
-        print("\nNo changes to make — plan left untouched." if (args.check or args.sync_names)
+        print("\nNo changes to make — plan left untouched."
+              if (args.check or args.sync_names or args.in_place)
               else "\nNothing matched — no plan created.")
         return
 

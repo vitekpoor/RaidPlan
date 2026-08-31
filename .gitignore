@@ -1,3 +1,5 @@
 __pycache__/
 # contains RaidPlan.io edit keys (grant edit access) - do not publish
-venomabyss_plans.txt
+raidplan/venomabyss_plans.txt
+# pre-save snapshots written by raidplan.py --in-place / --boss
+raidplan/backup_*.json

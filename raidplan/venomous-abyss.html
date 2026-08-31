@@ -26,6 +26,7 @@ img,svg { max-width: 100%; }
   --tank: #6f9fd8;
   --heal: #5cb87c;
   --dps: #d4796a;
+  --mythic: #e08a3c;
   --callout-bg: #16241e;
 }
 @media (prefers-color-scheme: light) {
@@ -41,6 +42,7 @@ img,svg { max-width: 100%; }
     --tank: #2e64a8;
     --heal: #2c7d4f;
     --dps: #b04a3a;
+    --mythic: #a85f1c;
     --callout-bg: #e6efe9;
   }
 }
@@ -56,6 +58,7 @@ img,svg { max-width: 100%; }
   --tank: #2e64a8;
   --heal: #2c7d4f;
   --dps: #b04a3a;
+  --mythic: #a85f1c;
   --callout-bg: #e6efe9;
 }
 * { box-sizing: border-box; }
@@ -163,6 +166,29 @@ figure.shot figcaption { color: var(--muted); font-size: .8rem; margin-top: .35r
 }
 .hc ul { margin: 0; padding-left: 1.1rem; }
 .hc li { margin-bottom: .2rem; }
+.mythic {
+  border-left: 3px solid var(--mythic); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.mythic .mythic-label {
+  display: block; color: var(--mythic); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.mythic ul { margin: 0; padding-left: 1.1rem; }
+.mythic li { margin-bottom: .2rem; }
+.mythic li::marker { color: var(--mythic); }
+.mythic li strong { color: var(--mythic); font-weight: 600; }
+/* WoW macro block: each command on its own line (newlines in the markup are
+   kept, indentation is collapsed) */
+code {
+  display: block; white-space: pre-line;
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: .84em;
+  background: var(--callout-bg); border: 1px solid var(--line);
+  border-left: 3px solid var(--gold); border-radius: 0 4px 4px 0;
+  color: var(--gold); padding: .45rem .75rem; margin: .35rem 0 .45rem;
+  overflow-x: auto;
+}
 .callout strong { color: var(--jade); }
 .movement {
   background: var(--callout-bg); border-left: 3px solid var(--tank);
@@ -262,7 +288,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 <section class="boss">
   <div class="boss-head"><span class="boss-num">I</span>
     <h3>Nek'zali the Soulcoiler</h3><a class="rplink" href="https://raidplan.io/plan/egs7gyaq69pg7xhs" target="_blank"
-      rel="noopener">RaidPlan ↗</a><span class="tag">Add-cleave · P1 → intermission → P2 · 2T/4H</span>
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Add-cleave · P1 → intermission → P2 · 2T/4H</span>
   </div>
   <p class="callout"><strong>Overview:</strong> Soulcoil Well je studna uprostřed, do které nesmí dojít Addy (Restless
     Amani). Addy se spawnujou z rakví po obvodu — mají magic shield (štít jde zničit jenom magií!!!) Dokud je štít
@@ -367,56 +393,130 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
     </div>
   </div>
 </section><section class="boss">
-  <div class="boss-head"><span class="boss-num">II</span><h3>Entombed Sentinels</h3><a class="rplink" href="https://raidplan.io/plan/xtxvjvkrhxhh2bfs" target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Dva golemy · rotace stran · tier: hands</span></div>
-  <p class="callout">Raid se dělí dvě grupy - na zelenou (Breath of Ula'tek) a červenou (Blood of Ula'tek) skupinu. Bossové jsou min 40y od sebe jinak mají 99% reduction. Na 100 energie přijde Vitriolic Stasis: bossové jdou do středu, na 30 s mají 99% DR a slabší se dohealuje na úroveň silnějšího — HP se tedy dorovnává samo. V mezifázi je minihra spojování hráčů (viz. obrazek). Každej hráč nad sebe dostane marku se zelenými kuličky, které jsou spojené. Může jich být 1 až 3. Hledáš hráče tak, aby zelené kuličky byly dohromady 4 (tzn. pokud máš nad hlavou 3 zelené kuličky tak hledáš někoho kdo má jednu zelenou kuličky etc.). Pokud to někomu nedošlo tak boss je imunní na dmg v mezifázi protože je u sebe. TAKŽE SI DEJ PRE-SPREAD A MÁŠ 30s ČASU NA TO TO ZAHRÁT. NA HC ŠPATNÉ SPOJENÍ JEBNE MEGA SRAČKU POD VÁS, POKUD NĚJAKOU UVIDÍM (RENDLIKU) TAK VAS POJEBU. Po každé Stasis si <strong>obě skupiny i tanky vymění strany</strong> a cyklus se opakuje do killu. LUST na pull.</p>
-  <figure class="shot"><a href="boss_2_marks.png" target="_blank" rel="noopener"><img src="boss_2_marks.png" alt="Helical Toxins - marky se zelenymi kulickami nad hraci" loading="lazy"></a><figcaption>Helical Toxins během Vitriolic Stasis: počet zelených kuliček nad hlavou (1–3) — spojuj se s hráčem tak, aby součet byl přesně 4. Klikni pro plnou velikost.</figcaption></figure>
-  <div class="ability"><span class="hc-label">Ability</span><ul>
-    <li><strong>Ula'tek's Dominance</strong> — bossové blízko sebe = 99% damage reduction — držet ≥40 yd od sebe.</li>
-    <li><strong>Empowering Slam</strong> — tank buster od Breath (green). Hit jako kráva, stackuje — resetne se až výměnou bossů při mezifázi.</li>
-    <li><strong>Bloodvenom Injection</strong> — tank buster od Blood (red). Hit jako kráva + shadow DoT; po vypršení debuffu spadne velká kaluž (dle stacků z dotky a dle souknutých lidí, ideálně kolem 5 lidí soak a healeri dispelovat hrace aby sračka na zemi byla co nejmenší) — před vypršením dojdi co nejvíc na stranu.</li>
-    <li><strong>Living Venom</strong> — na HC každá jedová mechanika od Breath vystřelí zpátky k bossovi — nestůj v lajně mezi zelenou malou sračkou na zemi a bossem. Může to bejt až v africe, bacha na to.</li>
-    <li><strong>Toxic Droplets</strong> — malé blob addy, umírají sešlápnutím (1 hráč = 1 orb + malý DoT) - prostě souk malé zelené sračky na zemi. Po sešlápnutí z nich letí Living Venom zpět k bossovi.</li>
-    <li><strong>Venom Coagulation</strong> — velký add — tiká do celého raidu každé 2s, dokud žije. VŠICHNI ZELENÍ INSTA SWITCH ADDA. KDO POJEDE BOSSE DOSTANE POJEB</li>
-    <li><strong>Blighted Blood</strong> — dispelovatelný debuff; když vyprší sám, nechá kaluž — healeri dispelovat brzy a často (hráč u kraje) - nechceme sračky na zemi.</li>
-    <li><strong>Unstable Miasma</strong> — soak celé červené skupiny (sólo = smrt). Soakeři dostanou Clinging Murk → malé kaluže po vypršení — soak si předpozicuj tam, kam chceš kaluže položit - kraj. Ideálně kolem 5 lidí na soak, aby byla co nejmenší sračka.</li>
-    <li><strong>Vitriolic Stasis</strong> — intermission na 100 energie: bossové do středu, 99% DR na 30s, slabší se dohealuje. Pak výměna stran skupin i tanků.</li>
-    <li><strong>Helical Toxins</strong> — 4 orby nad hlavou (část zelených) — spáruj se s přesně jedním hráčem na součet přesně 4 zelených. Na HC tě kolize přes 4 stacky rovnou zabije. Pokud te nezabije tak to udelam ja.</li>
-    <li><strong>Cultivated Burst</strong> — trest za špatný pár: letální výbuch + velká kaluž — odnést do punishment rohu (immunita přežije).</li>
-  </ul>
-</div>
-  <div class="hc"><span class="hc-label">Nové v Heroicu</span><ul>
-      <li>Breath of Ula'tek: každá jedová mechanika po spawnu vystřelí zpět k bossovi a poškodí hráče v dráze (Living Venom).</li>
-      <li>Blood of Ula'tek: blood debuff při aplikaci nechává krvavou kaluž — čím víc stacků, tím větší.</li>
-      <li>Intermission: kolize, po které bys měl víc než 4 stacky, tě rovnou zabije (na Normalu jen knockback).</li>
-    </ul></div>
-  <div class="roles">
-    <div class="role tank"><h4>Tank</h4><ul>
-      <li>Empowering Slam (green) - Každej tank buster si boss stackuje buff na zvyšení phys dmg, takže tě bude jebat doprdele celou dobu, buď na to rdy.</li>
-      <li>Bloodvenom Injection (red) rampují ~15 % za slam a resetují se jen novým targetem — na vlastní straně není s kým swapovat, proto se tanky mění výměnou stran při intermission.</li>
-      <li>Bloodvenom Injection (red) TI SPADNE AŽ BUDEŠ TANKOVAT DRUHÉHO BOSSE. JAKMILE DEBUFF SPADNE TAK VYSERE OBŘÍ SRAČKU. BĚŽ S TÍM DOPIČE, VYCHÁZÍ TO HNED PO MEZIFÁZI KDYŽ BĚŽÍŽ NA POZICI. 
-        Dávej bacha na to že pokud tu sračku dropneš na existující červenou sračku, tak ona se pohne z ní. Takže ideálně chceš najít místo někde mezi existujícími sračky a jebnout to tam, aby se nepohlad pryč do středu.</li>
-      <li>Spawne se zelená addka => jdeš na ní s bossem (není tankovatelná). Zároveň zkus posoukovat co nejvíc zelenejch sraček na zemi.</li>
-      <li>Jsi tank, odnášej sračky co nejblíž k ostatním sračkám a soukuj zelené sračky když budou overlap v těch červených sračkách.</li>
-    </ul></div>
-    <div class="role heal"><h4>Healeři</h4><ul>
-      <li>Unstable Miasma samotného hráče zabije — celá červená skupina (ideálně jenom 5 lidí) ho stackem splituje a pak společně odejde na určený drop spot pro následné kaluže.</li>
-      <li>Blood Venom po vypršení či dispelu pokládá kaluž — dispelovat, až je hráč u zdi; červená strana proto startuje v rohu.</li>
-      <li>Toxic Droplets dávají malý DoT za orb — počítat s tím v healu zelené strany.</li>
-    </ul></div>
-    <div class="role dps"><h4>DPS</h4><ul>
-      <li>Zelená: Toxic Droplets vybuchují po 16 s — sešlapat, jeden orb na jednoho hráče (žádné hrdinské soaky tří orbů). Venom Coagulation (zelený blob pulzující do raidu) je okamžitá priorita celé skupiny.</li>
-      <li>Zelená: Living Venom — zelené linky letí ven a po chvíli se <em>vracejí k bossovi</em>; BACHA na zpáteční cestu.</li>
-      <li>Intermission: Helical Toxins — 4 orby nad hlavou, část zelených. Spáruj se s přesně jedním hráčem tak, aby součet zelených byl přesně 4 (1+3, 2+2). Času je DOST a bossové jsou immune. HLAVNĚ PRE-SPREAD před mezifází.</li>
-      <li>Chybný pár = Cultivated Burst (letální výbuch + velká kaluž) — odnést do punishment rohu; silný personál nebo immunita to přežije.</li>
-    </ul></div>
+  <div class="boss-head"><span class="boss-num">II</span>
+    <h3>Entombed Sentinels</h3><a class="rplink" href="https://raidplan.io/plan/xtxvjvkrhxhh2bfs" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank"
+      rel="noopener">Sestava ↗</a><span class="tag">Dva golemy · rotace stran · tier: hands</span>
   </div>
-  <p class="posn"><strong>Pozicování:</strong> green skupina u trojúhelníku na západním okraji, red skupina startuje v SV rohu (kaluže ke zdi) a po intermission tankuje na X na východě; punishment roh pro Cultivated Burst je SZ. Pozice v RaidPlanu jsou přenesené z Method diagramů.</p>
-</section>
-
-<section class="boss">
+  <p class="callout">Raid se dělí dvě grupy - na zelenou (Breath of Ula'tek) a červenou (Blood of Ula'tek) skupinu.
+    Bossové jsou min 40y od sebe jinak mají 99% reduction. Na 100 energie přijde Vitriolic Stasis: bossové jdou do
+    středu, na 30 s mají 99% DR a slabší se dohealuje na úroveň silnějšího — HP se tedy dorovnává samo. V mezifázi je
+    minihra spojování hráčů (viz. obrazek). Každej hráč nad sebe dostane marku se zelenými kuličky, které jsou spojené.
+    Může jich být 1 až 3. Hledáš hráče tak, aby zelené kuličky byly dohromady 4 (tzn. pokud máš nad hlavou 3 zelené
+    kuličky tak hledáš někoho kdo má jednu zelenou kuličky etc.). Pokud to někomu nedošlo tak boss je imunní na dmg v
+    mezifázi protože je u sebe. TAKŽE SI DEJ PRE-SPREAD A MÁŠ 30s ČASU NA TO TO ZAHRÁT. NA HC ŠPATNÉ SPOJENÍ JEBNE MEGA
+    SRAČKU POD VÁS, POKUD NĚJAKOU UVIDÍM (RENDLIKU) TAK VAS POJEBU. Po každé Stasis si <strong>obě skupiny i tanky
+      vymění strany</strong> a cyklus se opakuje do killu. LUST na pull.</p>
+  <figure class="shot"><a href="boss_2_marks.png" target="_blank" rel="noopener"><img src="boss_2_marks.png"
+        alt="Helical Toxins - marky se zelenymi kulickami nad hraci" loading="lazy"></a>
+    <figcaption>Helical Toxins během Vitriolic Stasis: počet zelených kuliček nad hlavou (1–3) — spojuj se s hráčem tak,
+      aby součet byl přesně 4. Klikni pro plnou velikost.</figcaption>
+  </figure>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Ula'tek's Dominance</strong> — bossové blízko sebe = 99% damage reduction — držet ≥40 yd od sebe.</li>
+      <li><strong>Empowering Slam</strong> — tank buster od Breath (green). Hit jako kráva, stackuje — resetne se až
+        výměnou bossů při mezifázi.</li>
+      <li><strong>Bloodvenom Injection</strong> — tank buster od Blood (red). Hit jako kráva + shadow DoT; po vypršení
+        debuffu spadne velká kaluž (dle stacků z dotky a dle souknutých lidí, ideálně kolem 5 lidí soak a healeri
+        dispelovat hrace aby sračka na zemi byla co nejmenší) — před vypršením dojdi co nejvíc na stranu.</li>
+      <li><strong>Living Venom</strong> — na HC každá jedová mechanika od Breath vystřelí zpátky k bossovi — nestůj v
+        lajně mezi zelenou malou sračkou na zemi a bossem. Může to bejt až v africe, bacha na to.</li>
+      <li><strong>Toxic Droplets</strong> — malé blob addy, umírají sešlápnutím (1 hráč = 1 orb + malý DoT) - prostě
+        souk malé zelené sračky na zemi. Po sešlápnutí z nich letí Living Venom zpět k bossovi.</li>
+      <li><strong>Venom Coagulation</strong> — velký add — tiká do celého raidu každé 2s, dokud žije. VŠICHNI ZELENÍ
+        INSTA SWITCH ADDA. KDO POJEDE BOSSE DOSTANE POJEB</li>
+      <li><strong>Blighted Blood</strong> — dispelovatelný debuff; když vyprší sám, nechá kaluž — healeri dispelovat
+        brzy a často (hráč u kraje) - nechceme sračky na zemi.</li>
+      <li><strong>Unstable Miasma</strong> — soak celé červené skupiny (sólo = smrt). Soakeři dostanou Clinging Murk →
+        malé kaluže po vypršení — soak si předpozicuj tam, kam chceš kaluže položit - kraj. Ideálně kolem 5 lidí na
+        soak, aby byla co nejmenší sračka.</li>
+      <li><strong>Vitriolic Stasis</strong> — intermission na 100 energie: bossové do středu, 99% DR na 30s, slabší se
+        dohealuje. Pak výměna stran skupin i tanků.</li>
+      <li><strong>Helical Toxins</strong> — 4 orby nad hlavou (část zelených) — spáruj se s přesně jedním hráčem na
+        součet přesně 4 zelených. Na HC tě kolize přes 4 stacky rovnou zabije. Pokud te nezabije tak to udelam ja.</li>
+      <li><strong>Cultivated Burst</strong> — trest za špatný pár: letální výbuch + velká kaluž — odnést do punishment
+        rohu (immunita přežije).</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li><strong>Breath of Ula'tek</strong>: každá jedová mechanika po spawnu vystřelí zpět k bossovi a poškodí hráče v dráze (Living
+        Venom).</li>
+      <li><strong>Blood of Ula'tek</strong>: blood debuff při aplikaci nechává krvavou kaluž — čím víc stacků, tím větší.</li>
+      <li><strong>Intermission</strong>: kolize, po které bys měl víc než 4 stacky, tě rovnou zabije (na Normalu jen knockback).</li>
+    </ul>
+  </div>
+  <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Shifting Protovenom</strong> - Vashnik se spawne a dá debuffy na 8 hráčů - vypadá to že preferuje strany (debuffy na
+        hráčích z bossů). Jsou to takové červené kolečka kolem sebe. Musíš se spojit s dalším červeným kolečkem. NESMÍŠ
+        HITNOUT NIKOHO JINÉHO JINAK BUMBÁC. Tzn. všichni uhnou lidem s debuffem aby se mohli spojit.</li>
+      <li>Pokud dostaneš dvacet stacků debuffy z bosse (Mark of Acid / Blood) => insta nebíčko.</li>
+      <li><strong>Mezifáze</strong> - zelené marky nad hlavou po pár vteřinách zmizí a nevidíš je u ostatních.
+        <ul>
+          <li>2: běžíš pod bosse.</li>
+          <li>1: skáčeš na místě a pinguješ se. Macro:
+            <code>/ping [@player] On my way
+              /say [square] 1 [square]</code>
+          </li>
+          <li>3: běžíš na lidi co mají ping nad hlavou a SKÁČOU.</li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Empowering Slam (green) - Každej tank buster si boss stackuje buff na zvyšení phys dmg, takže tě bude jebat
+          doprdele celou dobu, buď na to rdy.</li>
+        <li>Bloodvenom Injection (red) rampují ~15 % za slam a resetují se jen novým targetem — na vlastní straně není s
+          kým swapovat, proto se tanky mění výměnou stran při intermission.</li>
+        <li>Bloodvenom Injection (red) TI SPADNE AŽ BUDEŠ TANKOVAT DRUHÉHO BOSSE. JAKMILE DEBUFF SPADNE TAK VYSERE OBŘÍ
+          SRAČKU. BĚŽ S TÍM DOPIČE, VYCHÁZÍ TO HNED PO MEZIFÁZI KDYŽ BĚŽÍŽ NA POZICI.
+          Dávej bacha na to že pokud tu sračku dropneš na existující červenou sračku, tak ona se pohne z ní. Takže
+          ideálně chceš najít místo někde mezi existujícími sračky a jebnout to tam, aby se nepohlad pryč do středu.
+        </li>
+        <li>Spawne se zelená addka => jdeš na ní s bossem (není tankovatelná). Zároveň zkus posoukovat co nejvíc
+          zelenejch sraček na zemi.</li>
+        <li>Jsi tank, odnášej sračky co nejblíž k ostatním sračkám a soukuj zelené sračky když budou overlap v těch
+          červených sračkách.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Unstable Miasma samotného hráče zabije — celá červená skupina (ideálně jenom 5 lidí) ho stackem splituje a
+          pak společně odejde na určený drop spot pro následné kaluže.</li>
+        <li>Blood Venom po vypršení či dispelu pokládá kaluž — dispelovat, až je hráč u zdi; červená strana proto
+          startuje v rohu.</li>
+        <li>Toxic Droplets dávají malý DoT za orb — počítat s tím v healu zelené strany.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Zelená: Toxic Droplets vybuchují po 16 s — sešlapat, jeden orb na jednoho hráče (žádné hrdinské soaky tří
+          orbů). Venom Coagulation (zelený blob pulzující do raidu) je okamžitá priorita celé skupiny.</li>
+        <li>Zelená: Living Venom — zelené linky letí ven a po chvíli se <em>vracejí k bossovi</em>; BACHA na zpáteční
+          cestu.</li>
+        <li>Intermission: Helical Toxins — 4 orby nad hlavou, část zelených. Spáruj se s přesně jedním hráčem tak, aby
+          součet zelených byl přesně 4 (1+3, 2+2). Času je DOST a bossové jsou immune. HLAVNĚ PRE-SPREAD před mezifází.
+        </li>
+        <li>Chybný pár = Cultivated Burst (letální výbuch + velká kaluž) — odnést do punishment rohu; silný personál
+          nebo immunita to přežije.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="posn"><strong>Pozicování:</strong> green skupina u trojúhelníku na západním okraji, red skupina startuje v
+    SV rohu (kaluže ke zdi) a po intermission tankuje na X na východě; punishment roh pro Cultivated Burst je SZ. Pozice
+    v RaidPlanu jsou přenesené z Method diagramů.</p>
+</section><section class="boss">
   <div class="boss-head"><span class="boss-num">III</span>
     <h3>Vashnik the Malignant</h3><a class="rplink" href="https://raidplan.io/plan/q8pqzrw3vf5p3q6c" target="_blank"
-      rel="noopener">RaidPlan ↗</a><span class="tag">Jedna fáze · rotace fontán · tier: chest</span>
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Jedna fáze · rotace fontán · tier: chest</span>
   </div>
   <div class="callout"><strong>Overview:</strong> Tři fontány (Blood, Shadow, Fire) + boss energy bar. Při 100 energy -
     Imbibe - pije ze
@@ -524,7 +624,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </section><section class="boss">
   <div class="boss-head"><span class="boss-num">IV</span>
     <h3>The Lost Explorers</h3><a class="rplink" href="https://raidplan.io/plan/w22burzhsdzwbhf4" target="_blank"
-      rel="noopener">RaidPlan ↗</a><span class="tag">Tři želvy · fish enrage clock · tier: shoulders</span>
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Tři želvy · fish enrage clock · tier: shoulders</span>
   </div>
   <p class="callout"><strong>Joby: </strong>Otvírat bedny kvůli rybám (otevřeš přechodem přes bednu - bacha dá ti stack
     bleedu), zahrát aktivní ultimátu, hlídat United Defense (na HC nesmí bejt 3 želvy u sebe) a zabít všechny tři želvy
@@ -638,7 +738,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </section><section class="boss">
   <div class="boss-head"><span class="boss-num">V</span>
     <h3>Sszorak</h3><a class="rplink" href="https://raidplan.io/plan/uaqafdx6g3bp6g79" target="_blank"
-      rel="noopener">RaidPlan ↗</a><span class="tag">Vítr boss · tier: legs</span>
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Vítr boss · tier: legs</span>
   </div>
   <p class="callout"><strong>Overview:</strong>Jedna fáze dokola: Apex Predator → Venomous Surge → Raging Crosswinds,
     dvakrát,
@@ -733,7 +833,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </section><section class="boss">
   <div class="boss-head"><span class="boss-num">VI</span>
     <h3>The Twin Fangs — Vexhul &amp; Ithraz</h3><a class="rplink" href="https://raidplan.io/plan/u7tdr98jetxpk3sd"
-      target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Správa debuffů · tier: head</span>
+      target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Správa debuffů · tier: head</span>
   </div>
   <p class="callout"><strong>Overview:</strong>Fixní rotace, 2× za cyklus: Caustic Deluge → Stone Breaker → Venomous
     Emergence →
@@ -834,7 +934,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </section><section class="boss">
   <div class="boss-head"><span class="boss-num">VII</span>
     <h3>The Coiled Altar</h3><a class="rplink" href="https://raidplan.io/plan/v2p7xuwgtbauzh3k" target="_blank"
-      rel="noopener">RaidPlan ↗</a><span class="tag">Tři fáze · Zul'jan &amp; Malacrass</span>
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Tři fáze · Zul'jan &amp; Malacrass</span>
   </div>
   <p class="callout">Tři fáze — Zul'jan => Malacrass => (mezifaze BL) => oba společně.</p>
   <p class="callout">P1: Zul'jan: na zemi jsou zelené orby - mobilní classy je sbírají a dávají na určené místo
@@ -932,7 +1032,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </section><section class="boss">
   <div class="boss-head"><span class="boss-num">VIII</span>
     <h3>Ula'tek, the Serpent Goddess</h3><a class="rplink" href="https://raidplan.io/plan/v3u4qp9jugsdyzys"
-      target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Finální boss · tři fáze · Slumbering Coil
+      target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Finální boss · tři fáze · Slumbering Coil
       Curio</span>
   </div>
   <p class="callout"><strong>Overview: </strong>Boss obsahuje vajíčka na zemi => 3 hráči na pull bosse musí vzít, jinak
@@ -999,7 +1099,7 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
     </div>
   </div>
 </section><section class="boss">
-  <div class="boss-head"><span class="boss-num">Lair</span><h3>Nymrissa Wavecaller</h3><a class="rplink" href="https://raidplan.io/plan/g4skqtr53vrsx467" target="_blank" rel="noopener">RaidPlan ↗</a><span class="tag">Tidebound Grotto · jedna fáze dokola · Mythic flex do 25</span></div>
+  <div class="boss-head"><span class="boss-num">Lair</span><h3>Nymrissa Wavecaller</h3><a class="rplink" href="https://raidplan.io/plan/g4skqtr53vrsx467" target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Tidebound Grotto · jedna fáze dokola · Mythic flex do 25</span></div>
   <p class="callout"><strong>Lair boss mimo raid</strong> — Tidebound Grotto, podvodní vchod na Coiled Isle v Atal'Uteku (/way 59.9 66.3, LEADER JDE DOVNITŘ PRVNÍ A NASTAVUJE OBTÍŽNOST). Mythic je flex do 25 lidí.</p>
   <p class="callout">3 Hráči dostávaj debuff kterej spawnuje bubliny na zem. Měl by to dostávat healer, ranged a melee. Budou se odnášen na marky za raid. Naspawnuješ vedle sebe orbíky, které dělají dmg když je soakneš - dávaj ti stacky a aoe do raidu. Chceš je sebrat všechny - tanci / immunity. Když sebereš orb, jebne to sračku na zem. Sračky na zemi čistí tank frontal (také foukání jak v MOTHERLODE dungu). Pak se spawne velká koule uprostřed a addky na okrajích. Boss se natáhne na nejvíc addek a splošní se. Rangedka jdou ostatní addky. Pokud jedna dvě projdou neřešil bych to. Focus dps jenom na skupinky addek. Na mythic je tam navíc addka Bubblefin Frostscale, která dává 99% redukci všem addám okolo ní - ST addku pak AOE zbytek přes bosse. Po fázi je dodge swirlíků - vždy jen jedno místo na mapě je volné. Celé se to opakuje - 6 minuta je enrage.</p>
   <p class="callout"><strong>Wipe mechanika:</strong> uprostřed se spawne Alluring Bubble a k ní běží murloci (Bubblefin Shorerunner). Každej murloc, kterej doběhne do bubliny, se transformuje na <strong>Bubblefin Berserker</strong> — ten pulzuje frost AOE do celého raidu každé 3s dokud žije. Pár jich může projít ale musí se switchnout po transformaci. Jedna fáze pořád dokola, žádná mezifáze — soft enrage přes stacky z Abyssal Rain, <strong>hard enrage Unending Tides na 6 MINUTE</strong>.</p>
