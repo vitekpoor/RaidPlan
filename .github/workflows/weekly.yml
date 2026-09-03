@@ -55,6 +55,8 @@ jobs:
           SHOW_NOT_CONFIRMED: ${{ vars.SHOW_NOT_CONFIRMED }}
           MENTION_SECTIONS: ${{ vars.MENTION_SECTIONS }}
           REPORT_TITLE: ${{ vars.REPORT_TITLE }}
+          REPORT_LANG: ${{ vars.REPORT_LANG }}
+          LINEUP_GID: ${{ vars.LINEUP_GID }}
         run: |
           ARGS=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi

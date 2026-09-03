@@ -3,7 +3,9 @@
 Every Sunday evening a GitHub Actions job reads the absence matrix in the guild
 Google Sheet ("Absence přehled" tab) and posts to Discord who is unavailable
 and who arrives late on the raid days (Wednesday, Thursday, Sunday) of the
-coming Monday–Sunday week. An empty cell means the player is coming.
+coming Monday–Sunday week, and which boss lineups ("Boss sestavy" tab) those
+players are in. An empty cell means the player is coming. The message is in
+Czech by default (`REPORT_LANG=en` for English).
 
 ```
 Google Sheet (public CSV export) → GitHub Actions (cron) → attendance.py → Discord webhook
@@ -14,23 +16,30 @@ Everything runs on GitHub's free tier; no server, no Google API keys.
 ## What the report looks like
 
 ```
-📋 RAID AVAILABILITY
+📋 DOCHÁZKA NA RAID
 ━━━━━━━━━━━━━━━━━━━━
 
-📅 NEXT WEEK · 7–13 SEP
+📅 PŘÍŠTÍ TÝDEN · 7.–13. 9.
 
-❌ UNAVAILABLE
-• Hase — Wed 9.9. / Thu 10.9. / Sun 13.9.
-• Nesferity — Sun 13.9.
+❌ NEPŘIJDOU
+• Hase — st 9.9. / čt 10.9. / ne 13.9.
+  ↳ v sestavě: 01 Nek'zali (st 2.9.), ⚠️ 02 Sentinels (čt 10.9.), 05 Sszorak, …
+• Nesferity — ne 13.9.
+  ↳ v sestavě: 01 Nek'zali (st 2.9.), 02 Sentinels (čt 10.9.), …
 
-⏰ ARRIVING LATE
-• nobody
+⏰ PŘIJDOU POZDĚ
+• jeeni — ne 13.9.
 
-👥 RAID DAYS
-• Wed 9.9.
-• Thu 10.9.
-• Sun 13.9.
+👥 RAIDOVÉ DNY
+• st 9.9.
+• čt 10.9.
+• ne 13.9.
 ```
+
+Under each absent or late player the bot lists the boss lineups from the
+"Boss sestavy" tab that contain them, with the boss's raid date when one is
+set. A boss whose date falls on a day the player misses is marked ⚠️ in bold,
+so the raid leader sees at a glance which lineup needs a replacement.
 
 ## Setup (one time, ~10 minutes)
 
@@ -102,8 +111,10 @@ A raid day that has no column at all is flagged in the RAID DAYS section.
 | `SHOW_NOT_CONFIRMED` | `false` | `true` adds a ⚠️ NOT CONFIRMED list of players with no entry on any raid day |
 | `MENTION_SECTIONS` | `unavailable,late` | where to @-mention mapped players; `none`, or add `unconfirmed` |
 | `TIMEZONE` | `Europe/Prague` | |
-| `REPORT_TITLE` | `RAID AVAILABILITY` | |
+| `REPORT_LANG` | `cs` | `en` for an English message |
+| `REPORT_TITLE` | `DOCHÁZKA NA RAID` / `RAID AVAILABILITY` | |
 | `SHEET_ID`, `SHEET_GID` | guild sheet | another sheet / tab |
+| `LINEUP_GID` | `731845282` | gid of the "Boss sestavy" tab; `none` disables the lineup lookup |
 
 ## Discord mentions
 
