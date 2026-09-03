@@ -3,7 +3,7 @@
 attendance.py — weekly raid attendance report: Google Sheet -> Discord webhook.
 
 Reads the absence matrix (players x date columns; "X" = unavailable,
-"pozdě" = arriving late, empty = nothing reported) from a Google Sheet,
+"pozdě" = arriving late, empty = coming) from a Google Sheet,
 picks the raid days (Wed/Thu/Sun by default) of the upcoming Monday-Sunday
 week and posts a summary to Discord.
 
@@ -16,8 +16,9 @@ Configuration is via environment variables (GitHub Actions secrets/vars):
   TIMEZONE              default "Europe/Prague"
   WEEK_OFFSET           0 = the week starting on the NEXT Monday (default),
                         -1 = the current week, 1 = the week after next
-  SHOW_NOT_CONFIRMED    "true"/"false" (default true) — list players with
-                        no entry on any raid day
+  SHOW_NOT_CONFIRMED    "true"/"false" (default false) — an empty cell means
+                        the player is coming; set true to also list players
+                        with no entry on any raid day
   DISCORD_MENTIONS      optional JSON {"Hase": "123456789012345678", ...}
                         (sheet name -> Discord user id); mentions.json next
                         to this script is read as a fallback
@@ -455,7 +456,7 @@ def main(argv=None):
             sections = set()
         message = format_message(
             report, monday, sunday, raid_dates, mentions, sections,
-            show_unconfirmed=env_bool("SHOW_NOT_CONFIRMED", True),
+            show_unconfirmed=env_bool("SHOW_NOT_CONFIRMED", False),
             title=env("REPORT_TITLE", "RAID AVAILABILITY"))
         mention_ids = [mentions[norm(n)] for n, _ in report["unavailable"] + report["late"]
                        if norm(n) in mentions]

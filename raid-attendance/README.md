@@ -1,9 +1,9 @@
 # Raid attendance bot
 
 Every Sunday evening a GitHub Actions job reads the absence matrix in the guild
-Google Sheet ("Absence přehled" tab) and posts to Discord who is unavailable,
-who arrives late and who has not entered anything for the raid days
-(Wednesday, Thursday, Sunday) of the coming Monday–Sunday week.
+Google Sheet ("Absence přehled" tab) and posts to Discord who is unavailable
+and who arrives late on the raid days (Wednesday, Thursday, Sunday) of the
+coming Monday–Sunday week. An empty cell means the player is coming.
 
 ```
 Google Sheet (public CSV export) → GitHub Actions (cron) → attendance.py → Discord webhook
@@ -25,10 +25,6 @@ Everything runs on GitHub's free tier; no server, no Google API keys.
 
 ⏰ ARRIVING LATE
 • nobody
-
-⚠️ NOT CONFIRMED (no entry for any raid day)
-• Ahaaferos
-• …
 
 👥 RAID DAYS
 • Wed 9.9.
@@ -90,7 +86,7 @@ starting tomorrow. Set the variable `WEEK_OFFSET=-1` (or the manual-run input
 |---|---|
 | `X` (also `x`, `ne`, `nepřijdu`, `-`) | ❌ unavailable |
 | `pozdě` (anything containing "pozd" or "late") | ⏰ arriving late |
-| empty | nothing reported → the player is listed under ⚠️ NOT CONFIRMED if they have no entry on any raid day |
+| empty | the player is coming (with `SHOW_NOT_CONFIRMED=true` such players are listed under ⚠️ NOT CONFIRMED instead) |
 | anything else | reported under 🔎 CHECK THE SHEET so a typo is never silently dropped |
 
 Column headers are matched as dates in several formats (`čt 10.9.`,
@@ -103,7 +99,7 @@ A raid day that has no column at all is flagged in the RAID DAYS section.
 | Variable | Default | Purpose |
 |---|---|---|
 | `RAID_WEEKDAYS` | `wed,thu,sun` | which weekdays count (English or Czech names) |
-| `SHOW_NOT_CONFIRMED` | `true` | hide the long NOT CONFIRMED list with `false` |
+| `SHOW_NOT_CONFIRMED` | `false` | `true` adds a ⚠️ NOT CONFIRMED list of players with no entry on any raid day |
 | `MENTION_SECTIONS` | `unavailable,late` | where to @-mention mapped players; `none`, or add `unconfirmed` |
 | `TIMEZONE` | `Europe/Prague` | |
 | `REPORT_TITLE` | `RAID AVAILABILITY` | |
