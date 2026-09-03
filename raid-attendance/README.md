@@ -1,6 +1,6 @@
 # Raid attendance bot
 
-Every Sunday evening a GitHub Actions job reads the absence matrix in the guild
+Every Tuesday evening a GitHub Actions job reads the absence matrix in the guild
 Google Sheet ("Absence přehled" tab) and posts to Discord who is unavailable
 and who arrives late on the raid days (Wednesday, Thursday, Sunday) of the
 coming Monday–Sunday week, and which boss lineups ("Boss sestavy" tab) those
@@ -73,21 +73,23 @@ so the raid leader sees at a glance which lineup needs a replacement.
 6. **Test it.** Actions → *Weekly raid attendance report* → *Run workflow*.
    Tick **dry_run** to see the report in the job log without posting, or run
    it for real. The **date** input lets you pretend it is another day, e.g.
-   `2026-09-06` reports on the week 7–13 September.
+   `2026-09-08` reports on the week 7–13 September.
 
 ## Schedule
 
-`weekly.yml` runs `0 17 * * 0` = Sunday 17:00 UTC (19:00 Czech summer time,
-18:00 winter time). Change the cron line to move it. GitHub may start
+`weekly.yml` runs `0 17 * * 2` = Tuesday 17:00 UTC (19:00 Czech summer time,
+18:00 winter time), the evening before the Wednesday raid. Change the cron line to move it. GitHub may start
 scheduled jobs a few minutes late; GitHub also disables schedules on
 repositories with no activity for 60 days — a manual run re-enables them.
 
 ## Which week is reported
 
-The script works in `Europe/Prague`. It takes the **next Monday** after
-"today" and reports that Monday–Sunday. On the Sunday run that is the week
-starting tomorrow. Set the variable `WEEK_OFFSET=-1` (or the manual-run input
-`week_offset`) to report on the current week instead.
+The script works in `Europe/Prague`. It finds the **next raid day after
+today** and reports the Monday–Sunday week that contains it. On the Tuesday
+run that is the current week (Wed/Thu/Sun starting tomorrow); run on a
+Sunday — itself a raid day — it would report the coming week. The header
+says TENTO TÝDEN or PŘÍŠTÍ TÝDEN accordingly. `WEEK_OFFSET=1` (or the
+manual-run input `week_offset`) shifts the report a week later, `-1` earlier.
 
 ## How cells are interpreted
 

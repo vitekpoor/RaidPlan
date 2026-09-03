@@ -14,8 +14,10 @@ Configuration is via environment variables (GitHub Actions secrets/vars):
   SHEET_GID             tab gid of the absence matrix (default 521369072)
   RAID_WEEKDAYS         comma list, default "wed,thu,sun" (en or cs names)
   TIMEZONE              default "Europe/Prague"
-  WEEK_OFFSET           0 = the week starting on the NEXT Monday (default),
-                        -1 = the current week, 1 = the week after next
+  WEEK_OFFSET           0 = the week of the next upcoming raid day (default):
+                        a Tuesday run reports Wed/Thu/Sun of the same week,
+                        a Sunday run the coming week. 1 = one week later,
+                        -1 = one week earlier.
   SHOW_NOT_CONFIRMED    "true"/"false" (default false) — an empty cell means
                         the player is coming; set true to also list players
                         with no entry on any raid day
@@ -77,6 +79,7 @@ STRINGS = {
         "weekdays": ["po", "út", "st", "čt", "pá", "so", "ne"],
         "title": "DOCHÁZKA NA RAID",
         "next_week": "PŘÍŠTÍ TÝDEN",
+        "this_week": "TENTO TÝDEN",
         "unavailable": "NEPŘIJDOU",
         "late": "PŘIJDOU POZDĚ",
         "unconfirmed": "NEPOTVRZENO",
@@ -105,6 +108,7 @@ STRINGS = {
         "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
         "title": "RAID AVAILABILITY",
         "next_week": "NEXT WEEK",
+        "this_week": "THIS WEEK",
         "unavailable": "UNAVAILABLE",
         "late": "ARRIVING LATE",
         "unconfirmed": "NOT CONFIRMED",
@@ -202,12 +206,14 @@ def parse_weekdays(spec):
     return sorted(days)
 
 
-def target_week(today, offset=0):
-    """(monday, sunday) of the week starting on the next Monday after
-    `today` (a Sunday run therefore reports on the week starting tomorrow;
-    a Monday run reports on the FOLLOWING week). offset shifts by weeks."""
-    days_ahead = (7 - today.weekday()) % 7 or 7
-    monday = today + dt.timedelta(days=days_ahead + 7 * offset)
+def target_week(today, weekdays, offset=0):
+    """(monday, sunday) of the week that contains the next raid day AFTER
+    `today`. Run on Tuesday -> this week's Wed/Thu/Sun; run on Sunday (a
+    raid day itself) -> the coming week. offset shifts by whole weeks."""
+    d = today + dt.timedelta(days=1)
+    while d.weekday() not in weekdays:
+        d += dt.timedelta(days=1)
+    monday = d - dt.timedelta(days=d.weekday()) + dt.timedelta(days=7 * offset)
     return monday, monday + dt.timedelta(days=6)
 
 
@@ -447,7 +453,7 @@ def load_mentions():
 
 
 def format_message(report, monday, sunday, raid_dates, mentions, mention_sections,
-                   show_unconfirmed, title):
+                   show_unconfirmed, title, today=None):
     def who(name, section):
         uid = mentions.get(norm(name))
         if uid and section in mention_sections:
@@ -468,7 +474,8 @@ def format_message(report, monday, sunday, raid_dates, mentions, mention_section
         return [T("in_lineups", bosses=", ".join(parts))]
 
     lines = [f"📋 **{title or T('title')}**", "━━━━━━━━━━━━━━━━━━━━", "",
-             f"📅 **{T('next_week')} · {week_label(monday, sunday).upper()}**", ""]
+             f"📅 **{T('this_week' if today and monday <= today <= sunday else 'next_week')}"
+             f" · {week_label(monday, sunday).upper()}**", ""]
 
     lines.append(f"❌ **{T('unavailable')}**")
     if report["unavailable"]:
@@ -560,7 +567,8 @@ def main(argv=None):
     ap.add_argument("--csv", help="read this CSV file instead of the Google Sheet")
     ap.add_argument("--lineups-csv", help="read the boss lineups from this CSV file")
     ap.add_argument("--week-offset", type=int, default=None,
-                    help="override WEEK_OFFSET (0 = next week, -1 = this week)")
+                    help="override WEEK_OFFSET (0 = week of the next raid day, "
+                         "1 = a week later, -1 = a week earlier)")
     args = ap.parse_args(argv)
 
     global LANG
@@ -578,7 +586,7 @@ def main(argv=None):
 
     try:
         weekdays = parse_weekdays(env("RAID_WEEKDAYS", DEFAULT_RAID_WEEKDAYS))
-        monday, sunday = target_week(today, offset)
+        monday, sunday = target_week(today, weekdays, offset)
         raid_dates = [monday + dt.timedelta(days=w) for w in weekdays]
         print(f"today={today} ({STRINGS['en']['weekdays'][today.weekday()]}), reporting week "
               f"{monday}..{sunday}, raid days {[str(d) for d in raid_dates]}")
@@ -621,7 +629,7 @@ def main(argv=None):
         message = format_message(
             report, monday, sunday, raid_dates, mentions, sections,
             show_unconfirmed=env_bool("SHOW_NOT_CONFIRMED", False),
-            title=env("REPORT_TITLE"))
+            title=env("REPORT_TITLE"), today=today)
         mention_ids = [mentions[norm(n)] for n, _ in report["unavailable"] + report["late"]
                        if norm(n) in mentions]
         mention_ids += [mentions[norm(n)] for n in report["unconfirmed"] if norm(n) in mentions]

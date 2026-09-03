@@ -2,10 +2,11 @@ name: Weekly raid attendance report
 
 on:
   schedule:
-    # Sunday 17:00 UTC = 19:00 CEST (summer) / 18:00 CET (winter).
-    # GitHub cron is UTC only; the script itself works in Europe/Prague,
-    # so a one-hour drift here never changes WHICH week is reported.
-    - cron: "0 17 * * 0"
+    # Tuesday 17:00 UTC = 19:00 CEST (summer) / 18:00 CET (winter), the
+    # evening before the Wednesday raid. GitHub cron is UTC only; the script
+    # works in Europe/Prague and reports the week of the next raid day, so a
+    # one-hour drift here never changes WHICH week is reported.
+    - cron: "0 17 * * 2"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -13,11 +14,11 @@ on:
         type: boolean
         default: false
       date:
-        description: "Pretend today is this date (YYYY-MM-DD), e.g. 2026-09-06"
+        description: "Pretend today is this date (YYYY-MM-DD), e.g. 2026-09-08"
         type: string
         default: ""
       week_offset:
-        description: "0 = week starting next Monday (default), -1 = current week"
+        description: "0 = week of the next raid day (default), 1 = a week later, -1 = a week earlier"
         type: string
         default: ""
 
