@@ -3,8 +3,8 @@
 Every Tuesday evening a GitHub Actions job reads the absence matrix in the guild
 Google Sheet ("Absence přehled" tab) and posts to Discord who is unavailable
 and who arrives late on the raid days (Wednesday, Thursday, Sunday) of the
-coming Monday–Sunday week, and which boss lineups ("Boss sestavy" tab) those
-players are in. An empty cell means the player is coming. The message is in
+coming raid week (Wednesday to Tuesday, following the WoW weekly reset), and
+whether those players stand in the boss lineups ("Boss sestavy" tab). An empty cell means the player is coming. The message is in
 Czech by default (`REPORT_LANG=en` for English).
 
 ```
@@ -19,13 +19,13 @@ Everything runs on GitHub's free tier; no server, no Google API keys.
 📋 DOCHÁZKA NA RAID
 ━━━━━━━━━━━━━━━━━━━━
 
-📅 PŘÍŠTÍ TÝDEN · 7.–13. 9.
+📅 PŘÍŠTÍ TÝDEN · 9.–15. 9.
 
 ❌ NEPŘIJDOU
 • Hase — st 9.9. / čt 10.9. / ne 13.9.
-  ↳ v sestavě: 01 Nek'zali (st 2.9.), ⚠️ 02 Sentinels (čt 10.9.), 05 Sszorak, …
+  ↳ v sestavě: 01 Nek'zali, 03 Vashnik, 04 Explorers, 05 Sszorak, 06 Twin Fangs, 07 Coiled Altar, 08 Ula'tek, 09 Nymrissa
 • Nesferity — ne 13.9.
-  ↳ v sestavě: 01 Nek'zali (st 2.9.), 02 Sentinels (čt 10.9.), …
+  ↳ v sestavě: všichni bossové
 
 ⏰ PŘIJDOU POZDĚ
 • jeeni — ne 13.9.
@@ -36,10 +36,10 @@ Everything runs on GitHub's free tier; no server, no Google API keys.
 • ne 13.9.
 ```
 
-Under each absent or late player the bot lists the boss lineups from the
-"Boss sestavy" tab that contain them, with the boss's raid date when one is
-set. A boss whose date falls on a day the player misses is marked ⚠️ in bold,
-so the raid leader sees at a glance which lineup needs a replacement.
+Under each absent or late player the bot says where they stand in the
+"Boss sestavy" lineups: *všichni bossové* when they are in every boss's
+lineup, the list of bosses when only in some, *žádný boss* when in none. Dates
+of the boss columns are not shown.
 
 ## Setup (one time, ~10 minutes)
 
@@ -73,7 +73,7 @@ so the raid leader sees at a glance which lineup needs a replacement.
 6. **Test it.** Actions → *Weekly raid attendance report* → *Run workflow*.
    Tick **dry_run** to see the report in the job log without posting, or run
    it for real. The **date** input lets you pretend it is another day, e.g.
-   `2026-09-08` reports on the week 7–13 September.
+   `2026-09-08` reports on the raid week 9–15 September.
 
 ## Schedule
 
@@ -84,12 +84,13 @@ repositories with no activity for 60 days — a manual run re-enables them.
 
 ## Which week is reported
 
-The script works in `Europe/Prague`. It finds the **next raid day after
-today** and reports the Monday–Sunday week that contains it. On the Tuesday
-run that is the current week (Wed/Thu/Sun starting tomorrow); run on a
-Sunday — itself a raid day — it would report the coming week. The header
-says TENTO TÝDEN or PŘÍŠTÍ TÝDEN accordingly. `WEEK_OFFSET=1` (or the
-manual-run input `week_offset`) shifts the report a week later, `-1` earlier.
+The script works in `Europe/Prague`. The raid week runs **Wednesday to
+Tuesday** like the WoW weekly reset (`WEEK_START`, default `wed`). The bot
+finds the **next raid day after today** and reports the raid week that
+contains it: on the Tuesday run that is the reset week starting tomorrow
+(header PŘÍŠTÍ TÝDEN); run on a Thursday it would report the week already in
+progress (TENTO TÝDEN). `WEEK_OFFSET=1` (or the manual-run input
+`week_offset`) shifts the report a week later, `-1` earlier.
 
 ## How cells are interpreted
 
@@ -110,6 +111,7 @@ A raid day that has no column at all is flagged in the RAID DAYS section.
 | Variable | Default | Purpose |
 |---|---|---|
 | `RAID_WEEKDAYS` | `wed,thu,sun` | which weekdays count (English or Czech names) |
+| `WEEK_START` | `wed` | first day of the raid week (WoW reset) |
 | `SHOW_NOT_CONFIRMED` | `false` | `true` adds a ⚠️ NOT CONFIRMED list of players with no entry on any raid day |
 | `MENTION_SECTIONS` | `unavailable,late` | where to @-mention mapped players; `none`, or add `unconfirmed` |
 | `TIMEZONE` | `Europe/Prague` | |

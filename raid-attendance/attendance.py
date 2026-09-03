@@ -13,11 +13,12 @@ Configuration is via environment variables (GitHub Actions secrets/vars):
   SHEET_ID              Google Sheet id (default: the guild wishlist sheet)
   SHEET_GID             tab gid of the absence matrix (default 521369072)
   RAID_WEEKDAYS         comma list, default "wed,thu,sun" (en or cs names)
+  WEEK_START            first day of the raid week, default "wed" (WoW EU
+                        weekly reset) — the report covers Wed..Tue
   TIMEZONE              default "Europe/Prague"
-  WEEK_OFFSET           0 = the week of the next upcoming raid day (default):
-                        a Tuesday run reports Wed/Thu/Sun of the same week,
-                        a Sunday run the coming week. 1 = one week later,
-                        -1 = one week earlier.
+  WEEK_OFFSET           0 = the raid week containing the next upcoming raid
+                        day (default): a Tuesday run reports the reset week
+                        starting tomorrow. 1 = one week later, -1 = earlier.
   SHOW_NOT_CONFIRMED    "true"/"false" (default false) — an empty cell means
                         the player is coming; set true to also list players
                         with no entry on any raid day
@@ -30,9 +31,9 @@ Configuration is via environment variables (GitHub Actions secrets/vars):
   REPORT_LANG           "cs" (default) or "en" — language of the Discord message
   LINEUP_GID            tab gid of the "Boss sestavy" lineups (default
                         731845282); "none" disables the lineup lookup.
-                        Unavailable/late players get a line listing the boss
-                        lineups they are in; a boss whose date falls on a day
-                        they miss is flagged with ⚠️.
+                        Unavailable/late players get a line saying whether
+                        they are in every boss lineup, in some (listed), or
+                        in none.
 
 Command line (for testing):
   python attendance.py --dry-run            print the message, send nothing
@@ -59,6 +60,7 @@ DEFAULT_SHEET_GID = "521369072"
 DEFAULT_LINEUP_GID = "731845282"
 DEFAULT_TIMEZONE = "Europe/Prague"
 DEFAULT_RAID_WEEKDAYS = "wed,thu,sun"
+DEFAULT_WEEK_START = "wed"   # WoW EU weekly reset
 DISCORD_LIMIT = 2000  # characters per webhook message
 
 WEEKDAY_NAMES = {  # accepted spellings -> Monday=0 .. Sunday=6
@@ -90,6 +92,8 @@ STRINGS = {
         "raid_days": "RAIDOVÉ DNY",
         "no_column": "  ⚠️ sloupec v tabulce ještě neexistuje",
         "in_lineups": "  ↳ v sestavě: {bosses}",
+        "in_all_lineups": "  ↳ v sestavě: všichni bossové",
+        "in_no_lineups": "  ↳ v sestavě: žádný boss",
         "check_sheet": "ZKONTROLUJ TABULKU",
         "unknown_value": "nerozpoznaná hodnota: {what}",
         "and_more": "• … a dalších {n}",
@@ -119,6 +123,8 @@ STRINGS = {
         "raid_days": "RAID DAYS",
         "no_column": "  ⚠️ no column in the sheet yet",
         "in_lineups": "  ↳ in lineups: {bosses}",
+        "in_all_lineups": "  ↳ in lineups: all bosses",
+        "in_no_lineups": "  ↳ in lineups: none",
         "check_sheet": "CHECK THE SHEET",
         "unknown_value": "unrecognized value: {what}",
         "and_more": "• … and {n} more",
@@ -175,16 +181,16 @@ def day_label(d):
     return f"{T('weekdays')[d.weekday()]} {d.day}.{d.month}."
 
 
-def week_label(monday, sunday):
-    """cs: '7.–13. 9.' or '28. 9. – 4. 10.'; en: '7–13 Sep' or '28 Sep – 4 Oct'."""
+def week_label(start, end):
+    """cs: '9.–15. 9.' or '30. 9. – 6. 10.'; en: '9–15 Sep' or '30 Sep – 6 Oct'."""
     if LANG == "cs":
-        if monday.month == sunday.month:
-            return f"{monday.day}.–{sunday.day}. {monday.month}."
-        return f"{monday.day}. {monday.month}. – {sunday.day}. {sunday.month}."
-    if monday.month == sunday.month:
-        return f"{monday.day}–{sunday.day} {MONTH_SHORT[monday.month - 1]}"
-    return (f"{monday.day} {MONTH_SHORT[monday.month - 1]} – "
-            f"{sunday.day} {MONTH_SHORT[sunday.month - 1]}")
+        if start.month == end.month:
+            return f"{start.day}.–{end.day}. {start.month}."
+        return f"{start.day}. {start.month}. – {end.day}. {end.month}."
+    if start.month == end.month:
+        return f"{start.day}–{end.day} {MONTH_SHORT[start.month - 1]}"
+    return (f"{start.day} {MONTH_SHORT[start.month - 1]} – "
+            f"{end.day} {MONTH_SHORT[end.month - 1]}")
 
 
 # --------------------------------------------------------------------------
@@ -206,15 +212,22 @@ def parse_weekdays(spec):
     return sorted(days)
 
 
-def target_week(today, weekdays, offset=0):
-    """(monday, sunday) of the week that contains the next raid day AFTER
-    `today`. Run on Tuesday -> this week's Wed/Thu/Sun; run on Sunday (a
-    raid day itself) -> the coming week. offset shifts by whole weeks."""
+def target_week(today, weekdays, offset=0, week_start=2):
+    """(first_day, last_day) of the raid week — starting on `week_start`
+    (Monday=0 .. Sunday=6; 2 = Wednesday, the WoW reset) — that contains the
+    next raid day AFTER `today`. Run on Tuesday -> the reset week starting
+    tomorrow. offset shifts by whole weeks."""
     d = today + dt.timedelta(days=1)
     while d.weekday() not in weekdays:
         d += dt.timedelta(days=1)
-    monday = d - dt.timedelta(days=d.weekday()) + dt.timedelta(days=7 * offset)
-    return monday, monday + dt.timedelta(days=6)
+    start = d - dt.timedelta(days=(d.weekday() - week_start) % 7)
+    start += dt.timedelta(days=7 * offset)
+    return start, start + dt.timedelta(days=6)
+
+
+def raid_dates_in(start, weekdays):
+    """Dates of the raid weekdays inside the week beginning at `start`."""
+    return sorted(start + dt.timedelta(days=(w - start.weekday()) % 7) for w in weekdays)
 
 
 DATE_PATTERNS = [
@@ -392,10 +405,12 @@ def lineups_by_player(lineups):
 # report
 # --------------------------------------------------------------------------
 
-def build_report(dates, players, raid_dates, warnings, lineups=None):
-    """-> dict with lists for the message. lineups: {norm(name): [(boss, date)]}
-    -> report["lineups"][(section, name)] = [(boss, date, clashes)] for absent/late players."""
+def build_report(dates, players, raid_dates, warnings, lineups=None, bosses=None):
+    """-> dict with lists for the message. lineups: {norm(name): [(boss, date)]},
+    bosses: all boss headers (empty/None = lineups were not checked).
+    report["lineups"][(section, name)] = list of boss headers the player is in."""
     lineups = lineups or {}
+    bosses = bosses or []
     col_of = {d: i for i, d in dates.items()}
     missing_days = [d for d in raid_dates if d not in col_of]
     present_days = [d for d in raid_dates if d in col_of]
@@ -417,14 +432,14 @@ def build_report(dates, players, raid_dates, warnings, lineups=None):
             late.append((name, days_late))
         if not days_x and not days_late:
             unconfirmed.append(name)
-    in_lineups = {}  # (section, name) -> [(boss, date, clashes_with_that_players_days)]
-    for section, entries in (("unavailable", unavailable), ("late", late)):
-        for name, ds in entries:
-            hits = lineups.get(norm(name))
-            if hits:
-                in_lineups[(section, name)] = [(boss, date, date in ds) for boss, date in hits]
+    in_lineups = {}  # (section, name) -> [boss headers the player is in]
+    if bosses:
+        for section, entries in (("unavailable", unavailable), ("late", late)):
+            for name, _ds in entries:
+                in_lineups[(section, name)] = [boss for boss, _date in lineups.get(norm(name), [])]
     return {
         "lineups": in_lineups,
+        "bosses": bosses,
         "unavailable": unavailable,
         "late": late,
         "unconfirmed": unconfirmed,
@@ -452,7 +467,7 @@ def load_mentions():
             if str(v).strip() and not str(k).startswith("_")}
 
 
-def format_message(report, monday, sunday, raid_dates, mentions, mention_sections,
+def format_message(report, start, end, raid_dates, mentions, mention_sections,
                    show_unconfirmed, title, today=None):
     def who(name, section):
         uid = mentions.get(norm(name))
@@ -464,18 +479,18 @@ def format_message(report, monday, sunday, raid_dates, mentions, mention_section
         return " / ".join(day_label(d) for d in ds)
 
     def lineup_lines(name, section):
-        hits = report["lineups"].get((section, name))
+        if not report["bosses"]:
+            return []          # lineup tab not checked
+        hits = report["lineups"].get((section, name), [])
         if not hits:
-            return []
-        parts = []
-        for boss, date, clash in hits:
-            when = f" ({day_label(date)})" if date else ""
-            parts.append(f"⚠️ **{boss}{when}**" if clash else f"{boss}{when}")
-        return [T("in_lineups", bosses=", ".join(parts))]
+            return [T("in_no_lineups")]
+        if len(hits) >= len(report["bosses"]):
+            return [T("in_all_lineups")]
+        return [T("in_lineups", bosses=", ".join(hits))]
 
     lines = [f"📋 **{title or T('title')}**", "━━━━━━━━━━━━━━━━━━━━", "",
-             f"📅 **{T('this_week' if today and monday <= today <= sunday else 'next_week')}"
-             f" · {week_label(monday, sunday).upper()}**", ""]
+             f"📅 **{T('this_week' if today and start <= today <= end else 'next_week')}"
+             f" · {week_label(start, end).upper()}**", ""]
 
     lines.append(f"❌ **{T('unavailable')}**")
     if report["unavailable"]:
@@ -586,10 +601,11 @@ def main(argv=None):
 
     try:
         weekdays = parse_weekdays(env("RAID_WEEKDAYS", DEFAULT_RAID_WEEKDAYS))
-        monday, sunday = target_week(today, weekdays, offset)
-        raid_dates = [monday + dt.timedelta(days=w) for w in weekdays]
+        week_start = parse_weekdays(env("WEEK_START", DEFAULT_WEEK_START))[0]
+        start, end = target_week(today, weekdays, offset, week_start)
+        raid_dates = raid_dates_in(start, weekdays)
         print(f"today={today} ({STRINGS['en']['weekdays'][today.weekday()]}), reporting week "
-              f"{monday}..{sunday}, raid days {[str(d) for d in raid_dates]}")
+              f"{start}..{end}, raid days {[str(d) for d in raid_dates]}")
 
         if args.csv:
             with open(args.csv, encoding="utf-8-sig") as f:
@@ -597,12 +613,12 @@ def main(argv=None):
         else:
             csv_text = fetch_csv(env("SHEET_ID", DEFAULT_SHEET_ID),
                                  env("SHEET_GID", DEFAULT_SHEET_GID))
-        dates, players, warnings = parse_matrix(csv_text, reference=monday)
+        dates, players, warnings = parse_matrix(csv_text, reference=start)
         print(f"{len(players)} players, {len(dates)} date columns "
               f"({min(dates.values())} .. {max(dates.values())})")
 
         lineup_gid = env("LINEUP_GID", DEFAULT_LINEUP_GID)
-        lineups = {}
+        lineups, bosses = {}, []
         if args.lineups_csv or norm(lineup_gid) not in ("none", "off", "0", "false"):
             try:
                 if args.lineups_csv:
@@ -610,15 +626,16 @@ def main(argv=None):
                         lu_text = f.read()
                 else:
                     lu_text = fetch_csv(env("SHEET_ID", DEFAULT_SHEET_ID), lineup_gid)
-                lu, lu_warn = parse_lineups(lu_text, reference=monday)
+                lu, lu_warn = parse_lineups(lu_text, reference=start)
                 warnings += lu_warn
                 lineups = lineups_by_player(lu)
+                bosses = [b for b, _d, _p in lu]
                 print(f"{len(lu)} boss lineups: " + ", ".join(
                     f"{b} ({d or 'no date'})" for b, d, _ in lu))
             except ReportError as e:
                 warnings.append(T("lineups_failed", err=e))
 
-        report = build_report(dates, players, raid_dates, warnings, lineups)
+        report = build_report(dates, players, raid_dates, warnings, lineups, bosses)
         if len(report["missing_days"]) == len(raid_dates):
             report["warnings"].append(T("no_raid_columns"))
 
@@ -627,7 +644,7 @@ def main(argv=None):
         if "none" in sections:
             sections = set()
         message = format_message(
-            report, monday, sunday, raid_dates, mentions, sections,
+            report, start, end, raid_dates, mentions, sections,
             show_unconfirmed=env_bool("SHOW_NOT_CONFIRMED", False),
             title=env("REPORT_TITLE"), today=today)
         mention_ids = [mentions[norm(n)] for n, _ in report["unavailable"] + report["late"]

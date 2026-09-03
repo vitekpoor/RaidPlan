@@ -3,9 +3,9 @@ name: Weekly raid attendance report
 on:
   schedule:
     # Tuesday 17:00 UTC = 19:00 CEST (summer) / 18:00 CET (winter), the
-    # evening before the Wednesday raid. GitHub cron is UTC only; the script
-    # works in Europe/Prague and reports the week of the next raid day, so a
-    # one-hour drift here never changes WHICH week is reported.
+    # last evening of the WoW reset week (Wed..Tue). GitHub cron is UTC only;
+    # the script works in Europe/Prague and reports the reset week of the next
+    # raid day, so a one-hour drift here never changes WHICH week is reported.
     - cron: "0 17 * * 2"
   workflow_dispatch:
     inputs:
@@ -52,6 +52,7 @@ jobs:
           SHEET_ID: ${{ vars.SHEET_ID }}
           SHEET_GID: ${{ vars.SHEET_GID }}
           RAID_WEEKDAYS: ${{ vars.RAID_WEEKDAYS }}
+          WEEK_START: ${{ vars.WEEK_START }}
           TIMEZONE: ${{ vars.TIMEZONE }}
           SHOW_NOT_CONFIRMED: ${{ vars.SHOW_NOT_CONFIRMED }}
           MENTION_SECTIONS: ${{ vars.MENTION_SECTIONS }}
