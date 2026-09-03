@@ -1,0 +1,5 @@
+# real Discord ids — keep them out of the repo unless you prefer this over the secret
+mentions.json
+__pycache__/
+*.pyc
+.env

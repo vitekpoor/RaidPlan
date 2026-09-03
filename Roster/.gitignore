@@ -1,0 +1,5 @@
+# Player data lives in the online Google Sheet (single source of truth).
+# Generated split proposals are throwaway outputs - never commit.
+splits_proposal.*
+*.xlsx
+__pycache__/

@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to mentions.json (or paste as the DISCORD_MENTIONS secret). Key = player name exactly as in the sheet (case/diacritics do not matter), value = Discord user id (Discord: User Settings -> Advanced -> Developer Mode, then right-click a user -> Copy User ID).",
+  "Hase": "123456789012345678",
+  "Nesferity": "234567890123456789"
+}
