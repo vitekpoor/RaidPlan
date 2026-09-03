@@ -1,45 +1,58 @@
 #!/usr/bin/env python3
 """
-raidplan.py — sync player names in RaidPlan.io plans.
+raidplan.py — keep RaidPlan.io plans in sync with the guild roster sheet.
 
-Two modes:
+Two modes (full help: python raidplan.py --help):
 
-1) Manual renames (original mode): takes a plan URL and a set of renames
-   (Old=New), replaces the names in every marker and text label on every
-   slide, syncs class icons/colors from the guild roster Google Sheet
-   (cell fill color = WoW class color), and saves a clone (or the same
-   plan in place when an edit link / --in-place is used).
+1) Boss lineup sync (--boss, what update_plans.bat runs): reads the
+   "Boss sestavy" tab of the wishlist spreadsheet (built by buildBossLineups
+   in Roster/class_loot_dropdowns.gs; column headers "NN Boss"), compares the
+   lineup with the player names in the plan (edit keys come from
+   venomabyss_plans.txt next to this script), and renames players who dropped
+   out of the lineup to their replacements (paired by roster role
+   tank/heal/dps). Name spelling, class icons, SPEC icons and border colors
+   are synced to the Roster tab for every marker. Saves the plan IN PLACE.
+   Players it cannot pair are listed for manual placement/removal.
+
+     python raidplan.py --boss 02                    # one boss
+     python raidplan.py --boss 02 05                 # several
+     python raidplan.py --boss all                   # every plan
+     python raidplan.py --boss 02 --dry-run          # preview only
+     python raidplan.py --boss 02 Gina-Houdy         # + swap two players'
+                                                     #   places/assignments
+     python raidplan.py --boss 02 Miky=Hase          # + explicit rename
+
+2) Manual renames: takes a plan URL and a set of renames (Old=New),
+   replaces the names in every marker and text label on every slide, syncs
+   class icons/colors from the guild roster Google Sheet (cell fill color =
+   WoW class color), and saves a clone (or the same plan in place when an
+   edit link / --in-place is used).
 
      python raidplan.py <plan-url-or-code> "Old=New" ["Old2=New2" ...]
          [--sheet URL] [--gid N] [--name "Plan name"] [--dry-run] [--check]
 
-2) Boss lineup sync (--boss): reads the "Boss sestavy" tab of the wishlist
-   spreadsheet (built by buildBossLineups in Roster/class_loot_dropdowns.gs;
-   column headers "NN Boss"), compares the lineup with the player names in
-   the plan (edit keys come from venomabyss_plans.txt next to this script),
-   and renames players who dropped out of the lineup to their replacements
-   (paired by roster role: tank/heal/dps). Class icons, border colors and
-   name spelling come from the Roster tab. Saves the plan IN PLACE.
-   Players it cannot pair are listed for manual placement/removal.
+Swap separators:   A-B, A~B, A+B, A:B, "A x B", "A<->B"   (both directions)
+Rename separators: Old=New, Old->New
+Swaps/renames touch markers (incl. names inside assignment markers like
+"T1 Gina"), text labels and all notes. Quote arguments with spaces or <>.
 
-     python raidplan.py --boss 02              # one boss
-     python raidplan.py --boss 02 05           # several
-     python raidplan.py --boss all             # every plan
-     python raidplan.py --boss 02 --dry-run    # preview only
-   One-click: update_plans.bat [NN ...]
-
-Rename separators accepted: "Old=New", "Old->New", "Old - New".
+Spec icons: tank/heal roles map to their spec; "dps" maps to the class's DPS
+spec (SPEC_BY_ROLE — guild default where a class has several, overridable per
+player via an optional "Main spec" column in the Roster tab). Spec icons the
+plan already uses for a player are kept/reused.
 Mode 1 requires: openpyxl (pip install openpyxl); mode 2 has no extra deps.
 """
 
 import argparse
 import copy
 import csv
+import difflib
 import io
 import json
 import os
 import re
 import sys
+import textwrap
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -53,9 +66,9 @@ WISHLIST_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI"
 ROSTER_TAB = "Roster"
 LINEUP_TAB = "Boss sestavy"
 LINEUP_SIZE = 20
-# Boss sestavy layout (must match class_loot_dropdowns.gs): row 1 header
-# "NN Boss", row 2 links, row 3 date, row 4 count, row 5 spacer, rows 6-25 slots.
-LINEUP_FIRST_SLOT_ROW = 6
+# Boss sestavy layout (must match class_loot_dropdowns.gs): headers "NN Boss"
+# in row 1, slot rows labeled 1..20 in column A (rows are located by those
+# labels — gviz drops empty rows, so absolute row numbers can't be trusted).
 DEFAULT_PLANS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                   "venomabyss_plans.txt")
 
@@ -78,31 +91,70 @@ CLASS_COLORS = {
 # Hex border colors RaidPlan puts on class markers (same palette).
 CLASS_HEX = {cls: "#%02X%02X%02X" % rgb for cls, rgb in CLASS_COLORS.items()}
 
-# Spec implied by (class, roster role) — only where the role pins it down.
-# Ambiguous combos (Melee warrior, Ranged mage, ...) keep the base class icon.
+# Spec icon implied by (class, roster role). Roles are tank / heal / dps
+# (the Roster tab), plus ranged / melee for the older roster sheet. Where a
+# class has several DPS specs the "dps" entry is the guild's usual one —
+# edit it here, or put the exact spec into the Roster tab's optional
+# "Main spec" column (e.g. "fury", "frost") to override per player.
+# Asset names are RaidPlan's (note their "marksmenship" spelling).
 SPEC_BY_ROLE = {
-    "deathknight": {"tank": "blood"},
-    "demonhunter": {"tank": "vengeance", "melee": "havoc"},
+    "deathknight": {"tank": "blood", "dps": "unholy"},
+    "demonhunter": {"tank": "vengeance", "dps": "havoc"},
     "druid":       {"tank": "guardian", "heal": "restoration",
-                    "ranged": "balance", "melee": "feral"},
-    "evoker":      {"heal": "preservation", "ranged": "devastation"},
-    "hunter":      {"melee": "survival"},
-    "monk":        {"tank": "brewmaster", "heal": "mistweaver", "melee": "windwalker"},
-    "paladin":     {"tank": "protection", "heal": "holy", "melee": "retribution"},
-    "priest":      {"heal": "holy", "ranged": "shadow"},
-    "shaman":      {"heal": "restoration", "ranged": "elemental", "melee": "enhancement"},
-    "warrior":     {"tank": "protection"},
+                    "dps": "balance", "ranged": "balance", "melee": "feral"},
+    "evoker":      {"heal": "preservation", "dps": "devastation"},
+    "hunter":      {"dps": "marksmenship", "melee": "survival"},
+    "mage":        {"dps": "fire"},
+    "monk":        {"tank": "brewmaster", "heal": "mistweaver", "dps": "windwalker"},
+    "paladin":     {"tank": "protection", "heal": "holy", "dps": "retribution"},
+    "priest":      {"heal": "holy", "dps": "shadow"},
+    "rogue":       {"dps": "subtlety"},
+    "shaman":      {"heal": "restoration", "dps": "elemental",
+                    "ranged": "elemental", "melee": "enhancement"},
+    "warlock":     {"dps": "destruction"},
+    "warrior":     {"tank": "protection", "dps": "arms"},
 }
+# Every spec icon RaidPlan hosts (game/wow/class/<class>_<spec>.png).
+KNOWN_SPECS = {
+    "deathknight": {"blood", "frost", "unholy"},
+    "demonhunter": {"devourer", "havoc", "vengeance"},
+    "druid":       {"balance", "feral", "guardian", "restoration"},
+    "evoker":      {"augmentation", "devastation", "preservation"},
+    "hunter":      {"beastmastery", "marksmenship", "survival"},
+    "mage":        {"arcane", "fire", "frost"},
+    "monk":        {"brewmaster", "mistweaver", "windwalker"},
+    "paladin":     {"holy", "protection", "retribution"},
+    "priest":      {"discipline", "holy", "shadow"},
+    "rogue":       {"assassination", "outlaw", "subtlety"},
+    "shaman":      {"elemental", "enhancement", "restoration"},
+    "warlock":     {"affliction", "demonology", "destruction"},
+    "warrior":     {"arms", "fury", "protection"},
+}
+SPEC_ALIASES = {"marksmanship": "marksmenship", "mm": "marksmenship",
+                "bm": "beastmastery", "beast": "beastmastery", "ww": "windwalker",
+                "mw": "mistweaver", "bdk": "blood", "disc": "discipline",
+                "resto": "restoration", "ret": "retribution", "prot": "protection",
+                "veng": "vengeance", "aug": "augmentation", "dev": "devastation",
+                "pres": "preservation", "destro": "destruction", "demo": "demonology",
+                "aff": "affliction", "sub": "subtlety", "sin": "assassination",
+                "enh": "enhancement", "ele": "elemental", "guard": "guardian"}
+
+# (class, role) pairs where the role alone pins the DPS spec — everything
+# else with a DPS role is a guild-default guess (reported after the run).
+UNAMBIGUOUS_DPS = {("monk", "dps"), ("paladin", "dps"), ("priest", "dps"),
+                   ("druid", "ranged"), ("druid", "melee"), ("shaman", "ranged"),
+                   ("shaman", "melee"), ("hunter", "melee")}
+ASSET_RE = re.compile(r"game/wow/class/([a-z]+)(?:_([a-z]+))?\.png")
 
 ASSUMED_TANK_ROLES = set()
+ASSUMED_DPS_SPECS = {}   # player -> "warrior_arms" where the DPS spec was guessed
 
 
 def role_key(role):
-    """Map a roster role label to tank/heal/ranged/melee. 'dps' (Roster tab)
-    is ambiguous — no spec is implied. Unrecognized non-empty labels
-    (guild slang like 'Firer', 'Kúň') are assumed tanks."""
+    """Map a roster role label to tank/heal/dps/ranged/melee. Unrecognized
+    non-empty labels (guild slang like 'Firer', 'Kúň') are assumed tanks."""
     r = norm(role)
-    if not r or r == "dps":
+    if not r:
         return None
     if "heal" in r:
         return "heal"
@@ -110,16 +162,79 @@ def role_key(role):
         return "ranged"
     if "melee" in r or r == "mdps":
         return "melee"
+    if r in ("dps", "dd", "damage"):
+        return "dps"
     if r != "tank":
         ASSUMED_TANK_ROLES.add(role)
     return "tank"
 
 
-def spec_asset(cls, role):
-    """Asset path with the role-implied spec, or None when ambiguous."""
+def spec_for(cls, role, spec_hint="", player=""):
+    """Spec name for (class, role). spec_hint (Roster 'Main spec' column, or
+    a spec the plan already draws for this player) wins when it is a real
+    spec of that class. Returns None only for unknown classes/roles."""
+    hint = SPEC_ALIASES.get(norm(spec_hint), norm(spec_hint))
+    if hint in KNOWN_SPECS.get(cls, ()):
+        return hint
     rk = role_key(role)
-    spec = SPEC_BY_ROLE.get(cls, {}).get(rk) if rk else None
+    if not rk:
+        return None
+    table = SPEC_BY_ROLE.get(cls, {})
+    spec = table.get(rk)
+    if spec is None and rk in ("ranged", "melee"):
+        spec = table.get("dps")
+    if spec and rk in ("dps", "ranged", "melee") and (cls, rk) not in UNAMBIGUOUS_DPS:
+        ASSUMED_DPS_SPECS[player or cls] = f"{cls}_{spec}"
+    return spec
+
+
+def spec_asset(cls, role, spec_hint="", player=""):
+    """Asset path with the role-implied spec, or None when nothing applies."""
+    spec = spec_for(cls, role, spec_hint, player)
     return f"game/wow/class/{cls}_{spec}.png" if spec else None
+
+
+def class_asset(cls, role, spec_hint="", player=""):
+    """Best asset for a player: spec icon when known, base class icon otherwise."""
+    return spec_asset(cls, role, spec_hint, player) or f"game/wow/class/{cls}.png"
+
+
+def sync_marker_icon(attr, cls, role, sheet_spec, player, plan_specs):
+    """Point a player marker's icon (and border color) at the roster class
+    and spec. Priority: Roster 'Main spec' > spec icon the plan already uses
+    for that player > spec implied by class+role > base class icon.
+    A hand-picked spec icon of the right class is kept unless the sheet
+    names a different spec. Returns (old_asset, new_asset) or None."""
+    old = attr.get("asset") or ""
+    m = ASSET_RE.match(old)
+    hint = sheet_spec or plan_specs.get(norm(player), "")
+    if m and m.group(1) == cls:
+        if m.group(2) and not (sheet_spec and m.group(2) != sheet_spec):
+            return None
+    elif attr.get("border"):
+        attr["border"] = CLASS_HEX[cls]
+    new = class_asset(cls, role, hint, player)
+    if new == old:
+        return None
+    attr["asset"] = new
+    return old, new
+
+
+def plan_spec_hints(doc, roster):
+    """{norm(player): spec} for players the plan already draws with a spec
+    icon of their roster class — reused for their other markers."""
+    hints = {}
+    for node in doc["nodes"]:
+        if node["type"] != "marker":
+            continue
+        txt = (node["attr"].get("text") or "").strip()
+        m = ASSET_RE.match(node["attr"].get("asset") or "")
+        if not (txt and m and m.group(2)):
+            continue
+        hit = roster_lookup(roster, txt)
+        if hit and hit[1] == m.group(1):
+            hints.setdefault(norm(hit[0]), m.group(2))
+    return hints
 
 
 def http_json(url, payload=None, headers=None):
@@ -200,7 +315,7 @@ def load_roster(sheet_url, gid):
         if fill and fill.patternType and fill.fgColor and fill.fgColor.type == "rgb":
             rgb = fill.fgColor.rgb
         cls = nearest_class(rgb) if rgb else "priest"  # uncolored/white cell = priest
-        roster[norm(name)] = (name.strip(), cls, str(role_cell.value or "").strip())
+        roster[norm(name)] = (name.strip(), cls, str(role_cell.value or "").strip(), "")
     return roster, ws.title
 
 
@@ -227,30 +342,39 @@ def gviz_rows(doc_id, sheet_name):
 
 
 def load_roster_tab():
-    """Roster tab -> {norm(player): (Player, class_key, role)}.
-    class_key matches CLASS_COLORS keys ('Death Knight' -> 'deathknight')."""
+    """Roster tab -> {norm(player): (Player, class_key, role, spec)}.
+    class_key matches CLASS_COLORS keys ('Death Knight' -> 'deathknight').
+    spec comes from the OPTIONAL 'Main spec' column ('' when absent)."""
     rows = gviz_rows(WISHLIST_ID, ROSTER_TAB)
     if not rows or len(rows) < 2:
         sys.exit(f"Tab '{ROSTER_TAB}' is empty or missing in the wishlist sheet.")
     header = [norm(h) for h in rows[0]]
 
-    def col(name):
+    def col(name, required=True):
         if norm(name) not in header:
+            if not required:
+                return None
             sys.exit(f"Tab '{ROSTER_TAB}' has no column '{name}' "
                      f"(found: {', '.join(rows[0])}).")
         return header.index(norm(name))
 
     ip, ic, ir = col("Hráč"), col("Main classa"), col("Main role")
+    isp = col("Main spec", required=False)
     roster = {}
     for r in rows[1:]:
-        cell = lambda i: r[i].strip() if i < len(r) else ""
-        player, cls, role = cell(ip), cell(ic), cell(ir)
+        cell = lambda i: r[i].strip() if i is not None and i < len(r) else ""
+        player, cls, role, spec = cell(ip), cell(ic), cell(ir), cell(isp)
         if not player or not cls:
             continue
         cls_key = cls.lower().replace(" ", "")
         if cls_key not in CLASS_COLORS:
             print(f"  WARNING: {player} has unknown class '{cls}' in the Roster")
-        roster[norm(player)] = (player, cls_key, role.lower())
+        spec_key = SPEC_ALIASES.get(norm(spec), norm(spec)) if spec else ""
+        if spec_key and spec_key not in KNOWN_SPECS.get(cls_key, ()):
+            print(f"  WARNING: {player}: '{spec}' is not a {cls} spec in RaidPlan "
+                  f"(known: {', '.join(sorted(KNOWN_SPECS.get(cls_key, ())))}) — ignored")
+            spec_key = ""
+        roster[norm(player)] = (player, cls_key, role.lower(), spec_key)
     if not roster:
         sys.exit(f"Tab '{ROSTER_TAB}' contains no players.")
     return roster
@@ -289,19 +413,27 @@ def load_lineups():
         sys.exit(f"Tab '{LINEUP_TAB}' is missing — run buildBossLineups "
                  f"in the wishlist sheet's Apps Script first.")
     lineups = {}
-    # CSV row indexes (headers=1): rows[0]=sheet row 1 (headers), so sheet
-    # row N is rows[N-1]. Slots live on sheet rows 6..25.
-    first, last = LINEUP_FIRST_SLOT_ROW - 1, LINEUP_FIRST_SLOT_ROW - 1 + LINEUP_SIZE
+    # Fixed row offsets are UNRELIABLE here: gviz drops fully-empty rows
+    # (the spacer row vanishes) and coerces the mixed label column A to its
+    # majority type (the text labels come back empty). Anchor on what does
+    # survive instead: slot labels 1..20 in column A mark the player rows,
+    # and the date row is found by its d.M.yyyy pattern above the slots.
+    date_re = re.compile(r"\d{1,2}\.\d{1,2}\.\d{4}")
+
+    def slot_no(r):
+        v = r[0].strip() if r else ""
+        return int(v) if v.isdigit() else 0
+
+    first_slot = next((i for i, r in enumerate(rows)
+                       if i > 0 and 1 <= slot_no(r) <= LINEUP_SIZE), len(rows))
+    slot_rows = [r for r in rows[first_slot:] if 1 <= slot_no(r) <= LINEUP_SIZE]
     for ci, head in enumerate(rows[0]):
         m = re.match(r"^(\d{2})\s", head.strip())
         if not m:
             continue
-        date_str = rows[2][ci].strip() if len(rows) > 2 and ci < len(rows[2]) else ""
-        players = []
-        for r in rows[first:last]:
-            v = r[ci].strip() if ci < len(r) else ""
-            if v:
-                players.append(v)
+        date_str = next((r[ci].strip() for r in rows[1:first_slot]
+                         if ci < len(r) and date_re.search(r[ci])), "")
+        players = [r[ci].strip() for r in slot_rows if ci < len(r) and r[ci].strip()]
         lineups[m.group(1)] = {"header": head.strip(), "date": date_str,
                                "players": players}
     if not lineups:
@@ -406,7 +538,7 @@ def boss_mode(args, cli_renames):
 
         renames, (to_add, to_remove) = lineup_renames(doc, lu, roster, cli_renames)
         a = copy.copy(args)
-        a.in_place, a.key = True, info["key"]
+        a.in_place, a.key, a.sync_icons = True, info["key"], True
         process_plan(info["code"], a, doc, plan, renames, roster)
         if to_add:
             print(f"  PLACE MANUALLY (in the lineup, nowhere in the plan): "
@@ -471,55 +603,166 @@ How to get the access key for plan '{code}' (needed for --in-place):
   Treat the key like a password: anyone who has it can edit the plan."""
 
 
+HELP_DESCRIPTION = f"""\
+raidplan.py — keep RaidPlan.io plans in sync with the guild roster sheet.
+
+MODES
+  1) Boss lineup sync  (what update_plans.bat runs)
+       raidplan.py --boss 02 [05 ...] | all  [swaps/renames]  [--dry-run]
+     Reads the "{LINEUP_TAB}" tab of the wishlist sheet (20 players per boss,
+     column header "NN Boss") and the "{ROSTER_TAB}" tab (class, role, optional
+     spec). Players in the plan who are not in that boss's lineup are renamed
+     to lineup players missing from the plan (paired tank/heal/dps, then
+     anyone free). Names, class icons, spec icons and border colors are
+     synced to the Roster tab. Plans are saved IN PLACE with the edit keys
+     from venomabyss_plans.txt; the original document is kept as
+     backup_<code>_rev<N>.json. Whoever cannot be paired is listed as
+     PLACE MANUALLY / REMOVE MANUALLY.
+
+  2) Manual renames on any plan
+       raidplan.py <plan-url-or-code> "Old=New" ["Old2=New2" ...]
+     Pasting the EDIT link (…/plan/<code>/<key>) saves in place; a view
+     link or bare code creates a clone "<name> v2" instead. Class colors
+     come from the roster Google Sheet (--sheet/--gid, needs openpyxl).
+
+SWAPS AND RENAMES (positional; quote anything containing spaces or < >)
+  A-B   A~B   A+B   A:B   "A x B"   "A<->B"
+        swap two players: their positions, every assignment text ("T1 A",
+        "Soak: A + B") and all notes are exchanged in one pass.
+  Old=New   Old->New
+        rename one player (New takes Old's icon slot; the class/spec icon
+        and border color switch to New's roster entry).
+  Names are matched case- and diacritics-insensitively ("Zirael" finds
+  "Zîreael"); an unambiguous prefix works too ("Nesfe" -> "Nesferity").
+
+CLASS AND SPEC ICONS
+  Icon = Roster "Main classa" + "Main role":  tank/heal -> that spec,
+  dps -> the class's DPS spec (monk -> windwalker, paladin -> retribution,
+  priest -> shadow; classes with several DPS specs use the guild default:
+{textwrap.fill(', '.join(f"{c} {t['dps']}" for c, t in sorted(SPEC_BY_ROLE.items())
+               if 'dps' in t and (c, 'dps') not in UNAMBIGUOUS_DPS),
+               width=72, initial_indent='  ', subsequent_indent='  ')}).
+  Overrides, strongest first: the optional Roster column "Main spec"
+  (e.g. fury, frost, bm, aff), then a spec icon the plan already uses for
+  that player, then the default. A hand-picked spec icon of the right class
+  is never touched unless "Main spec" says otherwise. Guessed DPS specs are
+  listed at the end of every run.
+
+EXAMPLES
+  raidplan.py --boss all                     sync every plan with the sheet
+  raidplan.py --boss 02 05 --dry-run         preview two plans, save nothing
+  raidplan.py --boss 02 Gina-Houdy           sync + swap Gina and Houdy
+  raidplan.py --boss 02 Miky=Hase            sync + explicit rename
+  raidplan.py --boss all --check             also list roster/plan mismatches
+  raidplan.py https://raidplan.io/plan/<code>/<key> "Miky=Hase" --sync-names
+  raidplan.py <code> --check                 report only (no roster changes)
+"""
+
+
+SWAP_RE = re.compile(r"\s*(?:<->|<>|~|\+|:|(?<=\S)\s+[xX]\s+(?=\S)|-)\s*")
+RENAME_RE = re.compile(r"\s*(?:=>|->|=|—)\s*")
+
+
+def parse_pair(pair):
+    """'A<->B' / 'A-B' / 'A~B' / 'A x B' -> (a, b, True) swap;
+    'Old=New' / 'Old->New' -> (old, new, False) rename."""
+    pair = pair.strip().strip("[](){}\"'")
+    if re.search(r"<->|<>", pair):
+        parts, swap = re.split(r"\s*(?:<->|<>)\s*", pair, maxsplit=1), True
+    elif RENAME_RE.search(pair):
+        parts, swap = RENAME_RE.split(pair, maxsplit=1), False
+    else:
+        parts, swap = SWAP_RE.split(pair, maxsplit=1), True
+    parts = [p.strip().strip("[](){}\"'") for p in parts]
+    if len(parts) != 2 or not all(parts):
+        sys.exit(f"Cannot parse {pair!r} — use A-B (swap) or Old=New (rename). "
+                 f"See --help.")
+    return parts[0], parts[1], swap
+
+
 def main():
     ap = argparse.ArgumentParser(
-        description="Rename players in a RaidPlan.io plan.",
+        description=HELP_DESCRIPTION,
         epilog=key_help("<plan-code>"),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("plan", nargs="?", default=None,
-                    help="plan URL or code (omit when using --boss)")
+                    help="plan URL, edit link or code (omit when using --boss)")
     ap.add_argument("renames", nargs="*",
-                    help='renames like "Old=New" / "Old->New" / "Old - New", '
-                         'or position swaps like "PlayerA<->PlayerB"')
-    ap.add_argument("--boss", nargs="+", metavar="NN",
-                    help="sync plan(s) with the '" + LINEUP_TAB + "' sheet tab: "
-                         "plan numbers like 02, or 'all'. Edit keys are read "
-                         "from the plans file; saves IN PLACE. Extra Old=New "
-                         "renames are applied on top.")
-    ap.add_argument("--plans-file", default=DEFAULT_PLANS_FILE,
-                    help="boss list with view/edit links (default: "
-                         "venomabyss_plans.txt next to this script)")
-    ap.add_argument("--sheet", default=DEFAULT_SHEET, help="roster Google Sheet URL")
-    ap.add_argument("--gid", default=DEFAULT_GID, help="roster tab gid")
-    ap.add_argument("--name", default=None, help="name for the new plan (default: '<old> v2')")
-    ap.add_argument("--dry-run", action="store_true", help="show changes, don't create a plan")
-    ap.add_argument("--check", action="store_true", help="also report roster/class mismatches for all markers")
-    ap.add_argument("--file", default=None,
-                    help="read renames from a text file, one 'Old=New' (or 'Old -> New' / "
-                         "'Old - New') per line; blank lines and lines starting with # are ignored")
-    ap.add_argument("--sync-names", action="store_true",
-                    help="rename all plan markers to the exact roster spelling from the sheet "
-                         "(matching is case/diacritics-insensitive with prefix fallback)")
-    ap.add_argument("--normalize", action="store_true",
-                    help="make all player-name markers uniform: icon scale 0.28, name font 12, "
-                         "most common label background (override with --marker-scale/--marker-font)")
-    ap.add_argument("--marker-scale", type=float, default=None,
-                    help="with --normalize: icon scale for player markers (default 0.28)")
-    ap.add_argument("--marker-font", type=int, default=None,
-                    help="with --normalize: name font size for player markers (default 12)")
-    ap.add_argument("--in-place", action="store_true",
-                    help="save back to the SAME plan instead of cloning (needs --key or --cookie)")
-    ap.add_argument("--key", default="",
-                    help="plan access key (browser DevTools -> Application -> Local Storage -> "
-                         "raidplan.io -> rp:planKeys, or the tail of a /plan/<code>/<key> edit link)")
-    ap.add_argument("--cookie", default="",
-                    help="raidplan.io Cookie header value, for plans owned by a logged-in account")
-    args = ap.parse_args()
+                    help='swaps like "A-B" / "A~B" / "A<->B", renames like "Old=New" / "Old->New"')
 
-    # in --boss mode a rename may have landed in the positional plan slot
-    if args.boss and args.plan and re.search(r"=|->|<->|<>", args.plan):
-        args.renames = [args.plan] + args.renames
-        args.plan = None
+    g = ap.add_argument_group("boss lineup sync")
+    g.add_argument("--boss", nargs="+", metavar="NN", action="extend",
+                   help="sync plan(s) with the '" + LINEUP_TAB + "' sheet tab: plan numbers "
+                        "like 02 (several allowed), or 'all'. Edit keys come from the plans "
+                        "file; saves IN PLACE. Swaps/renames typed after it are applied on top.")
+    g.add_argument("--plans-file", default=DEFAULT_PLANS_FILE,
+                   help="boss list with view/edit links (default: venomabyss_plans.txt "
+                        "next to this script)")
+
+    g = ap.add_argument_group("what to change")
+    g.add_argument("--dry-run", action="store_true",
+                   help="show every change but save nothing (no clone, no in-place write)")
+    g.add_argument("--check", action="store_true",
+                   help="report markers not in the roster, spelling/class mismatches and "
+                        "roster players missing from the plan (changes nothing by itself)")
+    g.add_argument("--sync-names", action="store_true",
+                   help="rename every marker to the exact roster spelling and sync all "
+                        "class/spec icons + border colors (implies --sync-icons)")
+    g.add_argument("--sync-icons", action="store_true",
+                   help="sync class/spec icons + border colors of all markers to the roster "
+                        "without touching spellings (always on in --boss mode)")
+    g.add_argument("--normalize", action="store_true",
+                   help="make all player-name markers uniform: icon scale 0.28, name font 12, "
+                        "most common label background (see --marker-scale/--marker-font)")
+    g.add_argument("--marker-scale", type=float, default=None, metavar="S",
+                   help="with --normalize: icon scale for player markers (default 0.28)")
+    g.add_argument("--marker-font", type=int, default=None, metavar="PX",
+                   help="with --normalize: name font size for player markers (default 12)")
+    g.add_argument("--file", default=None, metavar="TXT",
+                   help="read swaps/renames from a text file, one per line (same syntax as "
+                        "on the command line); blank lines and # comments are ignored")
+
+    g = ap.add_argument_group("manual mode: roster source and saving")
+    g.add_argument("--sheet", default=DEFAULT_SHEET, metavar="URL",
+                   help="roster Google Sheet URL (class = cell fill color; needs openpyxl)")
+    g.add_argument("--gid", default=DEFAULT_GID, help="roster tab gid in that sheet")
+    g.add_argument("--name", default=None,
+                   help="name for the cloned plan (default: '<old name> v2')")
+    g.add_argument("--in-place", action="store_true",
+                   help="save back to the SAME plan instead of cloning (needs --key or "
+                        "--cookie; automatic when an edit link is pasted)")
+    g.add_argument("--key", default="",
+                   help="plan access key (tail of the /plan/<code>/<key> edit link, or "
+                        "browser DevTools -> Local Storage -> raidplan.io -> rp:planKeys)")
+    g.add_argument("--cookie", default="",
+                   help="raidplan.io Cookie header value, for plans owned by a logged-in account")
+
+    # A doubled "--boss --boss 02" (update_plans.bat used to prepend --boss
+    # even when the user typed it) would make argparse abort; collapse it.
+    argv = sys.argv[1:]
+    while any(argv[i] == "--boss" and argv[i + 1] == "--boss"
+              for i in range(len(argv) - 1)):
+        i = next(i for i in range(len(argv) - 1)
+                 if argv[i] == "--boss" and argv[i + 1] == "--boss")
+        del argv[i]
+    args = ap.parse_args(argv)
+
+    # --boss is greedy (nargs=+), so swaps/renames typed after it land in its
+    # list ("--boss 02 Miky-Hase"); ones typed before it land in the plan
+    # slot. In boss mode anything that isn't a plan number (or 'all') is a
+    # swap/rename.
+    if args.boss:
+        keep = []
+        for b in args.boss:
+            (keep if re.fullmatch(r"(?i)all|\d{1,2}", b.strip())
+             else args.renames).append(b)
+        if not keep:
+            sys.exit("--boss needs plan numbers (or 'all'), e.g. --boss 02 "
+                     "Miky-Hase — got only swaps/renames.")
+        args.boss = keep
+        if args.plan:
+            args.renames = [args.plan] + args.renames
+            args.plan = None
 
     pairs = list(args.renames)
     if args.file:
@@ -529,20 +772,10 @@ def main():
 
     renames = {}
     for pair in pairs:
-        pair = pair.strip().strip("[](){}\"'")
-        sw = re.split(r"\s*(?:<->|<>)\s*", pair, maxsplit=1)
-        if len(sw) == 2 and sw[0].strip() and sw[1].strip():
-            a, b = (s.strip().strip("[](){}\"'") for s in sw)
-            renames[a] = b
+        a, b, swap = parse_pair(pair)
+        renames[a] = b
+        if swap:
             renames[b] = a
-            continue
-        m = re.split(r"\s*(?:=|->|—|(?<=\S)\s+-\s+(?=\S))\s*", pair, maxsplit=1)
-        if len(m) != 2 or not m[0].strip() or not m[1].strip():
-            sys.exit(f"Cannot parse rename {pair!r} — use Old=New")
-        old, new = (s.strip().strip("[](){}\"'") for s in m)
-        if not old or not new:
-            sys.exit(f"Cannot parse rename {pair!r} — use Old=New")
-        renames[old] = new
 
     if args.boss:
         boss_mode(args, renames)
@@ -578,13 +811,19 @@ def process_plan(code, args, doc, plan, renames, roster):
 
     # Warn early about unknown replacement names, and resolve their classes.
     new_class = {}
+    sync_icons = args.sync_names or getattr(args, "sync_icons", False)
+    plan_specs = plan_spec_hints(doc, roster)
     for old, new in renames.items():
         hit = roster_lookup(roster, new)
         if hit:
-            new_class[old] = (hit[1], hit[2])
-            print(f"  {old} -> {new}: {new} is {hit[1]} ({hit[2]}) in the roster")
+            new_class[old] = hit
+            print(f"  {old} -> {new}: {new} is {hit[1]} ({hit[2]}"
+                  f"{', spec ' + hit[3] if hit[3] else ''}) in the roster")
         else:
-            print(f"  WARNING: '{new}' not found in roster — icon/color will be kept from '{old}'")
+            close = difflib.get_close_matches(new, list(roster), n=1, cutoff=0.6)
+            hint = f" — did you mean '{roster[close[0]][0]}'?" if close else ""
+            print(f"  WARNING: '{new}' not found in roster — icon/color will be "
+                  f"kept from '{old}'{hint}")
 
     if args.sync_names:
         plan_names = {}
@@ -605,7 +844,7 @@ def process_plan(code, args, doc, plan, renames, roster):
             wrong = sorted(v for v in variants if v != hit[0])
             if wrong:
                 renames[wrong[0]] = hit[0]
-                new_class.setdefault(wrong[0], (hit[1], hit[2]))
+                new_class.setdefault(wrong[0], hit)
                 print(f"  ~  {' / '.join(wrong)} -> {hit[0]}  ({hit[1]}, {hit[2]})")
                 n_sync += 1
         if not n_sync:
@@ -630,44 +869,36 @@ def process_plan(code, args, doc, plan, renames, roster):
                     hits[hit_key] = hits.get(hit_key, 0) + 1
                     info = new_class.get(hit_key)
                     if info:
-                        cls, role = info
-                        old_asset = attr.get("asset") or ""
-                        m = re.match(r"game/wow/class/([a-z]+)(?:_([a-z]+))?\.png", old_asset)
-                        if not m or m.group(1) != cls:
-                            attr["asset"] = spec_asset(cls, role) or f"game/wow/class/{cls}.png"
-                            if attr.get("border"):
-                                attr["border"] = CLASS_HEX[cls]
+                        disp, cls, role, sheet_spec = info
+                        if sync_marker_icon(attr, cls, role, sheet_spec, disp, plan_specs):
                             icon_hits += 1
-                        elif not m.group(2) and spec_asset(cls, role):
-                            attr["asset"] = spec_asset(cls, role)
-                            icon_hits += 1
-                elif args.check or args.sync_names:
+                else:
+                    # assignment markers can hold a name inside longer text
+                    # ("T1 Ahaaferos", "Soak: Gina + Houdy") — rename/swap
+                    # those too (text only; the icon stays as authored)
+                    new_txt, n = replace_in_text(txt, renames, hits)
+                    if n:
+                        attr["text"] = txt = new_txt
+                        text_hits += n
+                if not hit_key and (args.check or sync_icons):
                     hit = roster_lookup(roster, txt)
                     if not hit:
                         unknown.add(txt)
                     else:
                         if hit[0] != txt:
                             mismatch.add((txt, hit[0]))
-                        cls, role = hit[1], hit[2]
-                        m = re.match(r"game/wow/class/([a-z]+)(?:_([a-z]+))?\.png",
-                                     attr.get("asset") or "")
-                        if m and m.group(1) != cls:
-                            if args.sync_names:
-                                attr["asset"] = spec_asset(cls, role) or f"game/wow/class/{cls}.png"
-                                if attr.get("border"):
-                                    attr["border"] = CLASS_HEX[cls]
+                        disp, cls, role, sheet_spec = hit
+                        m = ASSET_RE.match(attr.get("asset") or "")
+                        if not m:
+                            pass  # not a class icon (raid mark etc.) — leave it
+                        elif sync_icons:
+                            res = sync_marker_icon(attr, cls, role, sheet_spec, disp, plan_specs)
+                            if res:
                                 icon_hits += 1
-                                class_fixed.add((txt, m.group(1),
-                                                 attr["asset"].rsplit("/", 1)[-1][:-4]))
-                            else:
-                                class_wrong.add((txt, m.group(1), cls))
-                        elif m and not m.group(2) and args.sync_names:
-                            new_asset = spec_asset(cls, role)
-                            if new_asset:
-                                attr["asset"] = new_asset
-                                icon_hits += 1
-                                class_fixed.add((txt, m.group(1),
-                                                 new_asset.rsplit("/", 1)[-1][:-4]))
+                                short = lambda a: a.rsplit("/", 1)[-1][:-4]
+                                class_fixed.add((txt, short(res[0]), short(res[1])))
+                        elif m.group(1) != cls:
+                            class_wrong.add((txt, m.group(1), cls))
         elif node["type"] == "itext":
             attr["text"], n = replace_in_text(attr.get("text"), renames, hits)
             text_hits += n
@@ -725,6 +956,12 @@ def process_plan(code, args, doc, plan, renames, roster):
     if ASSUMED_TANK_ROLES:
         print(f"  (roles {', '.join(repr(r) for r in sorted(ASSUMED_TANK_ROLES))} "
               f"were treated as tank)")
+    if ASSUMED_DPS_SPECS:
+        print("  DPS spec guessed (class has several): " +
+              ", ".join(f"{p} -> {s}" for p, s in sorted(ASSUMED_DPS_SPECS.items())))
+        print("  -> to change: fill 'Main spec' in the Roster tab (e.g. fury, frost, "
+              "affliction), or edit SPEC_BY_ROLE in raidplan.py")
+        ASSUMED_DPS_SPECS.clear()
     if args.check and class_wrong:
         print("Markers whose class differs from the roster sheet (fix with --sync-names):")
         for t, old_cls, cls in sorted(class_wrong):
@@ -742,7 +979,7 @@ def process_plan(code, args, doc, plan, renames, roster):
         missing = [v for _, v in sorted(roster.items()) if v[0] not in matched]
         if missing:
             print("Roster raiders not present in the plan:")
-            for disp, cls, role in missing:
+            for disp, cls, role, *_ in missing:
                 print(f"  - {disp} ({cls}, {role})")
 
     if args.dry_run:
