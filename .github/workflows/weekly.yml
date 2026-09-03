@@ -40,7 +40,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r raid-attendance/requirements.txt
 
       - name: Build and send the report
         env:
@@ -60,4 +60,4 @@ jobs:
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
           if [ -n "${{ inputs.date }}" ]; then ARGS="$ARGS --date ${{ inputs.date }}"; fi
           if [ -n "${{ inputs.week_offset }}" ]; then ARGS="$ARGS --week-offset ${{ inputs.week_offset }}"; fi
-          python attendance.py $ARGS
+          python raid-attendance/attendance.py $ARGS

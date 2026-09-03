@@ -49,17 +49,9 @@ Everything runs on GitHub's free tier; no server, no Google API keys.
 2. **Discord webhook.** In Discord: channel → Edit channel → Integrations →
    Webhooks → New Webhook → Copy Webhook URL.
 
-3. **GitHub repository.** Create a new repository (private is fine) and upload
-   these files:
-
-   ```
-   .github/workflows/weekly.yml
-   attendance.py
-   requirements.txt
-   README.md
-   mentions.example.json
-   .gitignore
-   ```
+3. **GitHub repository.** The files are in the RaidPlan repository already
+   (see *Where it runs* below). For a separate repository, upload this folder
+   plus `.github/workflows/weekly.yml`.
 
 4. **Secrets.** Repository → Settings → Secrets and variables → Actions →
    *New repository secret*:
@@ -145,10 +137,12 @@ message, the job fails (red in Actions) and, when the webhook works, a short
 Unrecognized cell values and duplicate player rows do not stop the report;
 they are listed at the bottom under 🔎 CHECK THE SHEET.
 
-## Alternative: keep it inside an existing repository
+## Where it runs
 
-The workflow only needs to live in `.github/workflows/` of the repository's
-default branch. To run it from the RaidPlan repository instead of a new one,
-copy `weekly.yml` to `RaidPlan/.github/workflows/weekly.yml` and change the
-last line to `python raid-attendance/attendance.py $ARGS` (and the
-`pip install` line to `-r raid-attendance/requirements.txt`).
+This folder is deployed from the **RaidPlan** repository: the workflow file
+lives at `RaidPlan/.github/workflows/weekly.yml` (GitHub only runs workflows
+from that path on the default branch) and calls
+`python raid-attendance/attendance.py`. The secret `DISCORD_WEBHOOK_URL` is
+set on that repository. To move the bot to a repository of its own, copy this
+folder there, put `weekly.yml` under `.github/workflows/`, and drop the
+`raid-attendance/` prefix from the two paths in it.
