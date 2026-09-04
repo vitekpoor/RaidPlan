@@ -207,6 +207,11 @@ code {
 .role ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
 .role li { margin-bottom: .35rem; }
 .posn { font-size: .88rem; color: var(--muted); margin: 1.1rem 0 0; }
+.guides { margin-top: 1.4rem; }
+.guides .guides-note { margin: 0 0 .6rem; font-size: .88rem; color: var(--muted); }
+.guides td { white-space: nowrap; }
+.guides .rplink { font-size: .68rem; }
+.guides .muted { color: var(--muted); font-size: .82rem; white-space: normal; }
 .posn strong { color: var(--ink); font-weight: 600; }
 
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
@@ -924,7 +929,30 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
       </ul>
     </div>
   </div>
-</section><section class="boss">
+  <div class="role dps guides">
+    <h4>DPS guidy podle specu</h4>
+    <p class="guides-note">Video s kompletním pullem, log top parse na Sszorakovi a Lorrgs ranking (kdy kdo popuje
+      cooldowny). Koukni na svůj spec před progresem.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Class</th><th>Spec</th><th>Video</th><th>Logy</th><th>Lorrgs</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Warlock</strong></td><td>Demonology</td><td><a class="rplink" href="https://www.youtube.com/watch?v=VaKF449tF14" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/CdHq87TfwyWgYjxr?fight=38&amp;type=damage-done&amp;source=17" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/warlock-demonology/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Mage</strong></td><td>Arcane</td><td><a class="rplink" href="https://www.youtube.com/watch?v=tiZ2U6AECWg&amp;list=RDtiZ2U6AECWg&amp;start_radio=1" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/CdHq87TfwyWgYjxr?fight=38&amp;type=damage-done&amp;source=18" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/mage-arcane/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Warrior</strong></td><td>Arms</td><td><a class="rplink" href="https://www.youtube.com/watch?v=0usFKcKDnlo" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/xptPwvXKLGNmkDyJ?fight=23&amp;type=damage-done&amp;source=157" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/warrior-arms/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Hunter</strong></td><td>Beast Mastery</td><td><a class="rplink" href="https://www.youtube.com/watch?v=JPlrvHJ5dUM" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/xptPwvXKLGNmkDyJ?fight=23&amp;type=damage-done&amp;source=15" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/hunter-beastmastery/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Hunter</strong></td><td>Marksmanship</td><td><a class="rplink" href="https://www.youtube.com/watch?v=Kf1kOLr6PRc" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/TdFyZxQ7ArN28KvH?fight=47&amp;type=damage-done" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/hunter-marksmanship/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Rogue</strong></td><td>Subtlety</td><td><a class="rplink" href="https://www.youtube.com/watch?v=FHSSeDz4YfY" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/CdHq87TfwyWgYjxr?fight=38&amp;type=damage-done&amp;source=23" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/rogue-subtlety/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Monk</strong></td><td>Windwalker</td><td><a class="rplink" href="https://www.youtube.com/watch?v=p_BGW8hKkPA" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/T7d4zYaAwbCHGJrg?fight=150&amp;type=damage-done&amp;source=310" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/monk-windwalker/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Paladin</strong></td><td>Retribution</td><td><span class="muted">Kazuálové ještě nedošli na Sszoraka — video zatím není</span></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/QJCpt1nLvYqKG7wF?fight=34&amp;type=damage-done&amp;source=380" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/paladin-retribution/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Shaman</strong></td><td>Elemental</td><td><a class="rplink" href="https://www.youtube.com/watch?v=Ia5fEZkGg5U" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/TdFyZxQ7ArN28KvH?fight=47&amp;type=damage-done&amp;source=395" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/shaman-elemental/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Druid</strong></td><td>Balance</td><td><a class="rplink" href="https://www.youtube.com/watch?v=ckNmY_0aU2s" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/JaDnAZk1fvPN8FRm?fight=41&amp;type=damage-done&amp;source=5" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/druid-balance/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<section class="boss">
   <div class="boss-head"><span class="boss-num">VI</span>
     <h3>The Twin Fangs — Vexhul &amp; Ithraz</h3><a class="rplink" href="https://raidplan.io/plan/u7tdr98jetxpk3sd"
       target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Správa debuffů · tier: head</span>
