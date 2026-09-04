@@ -752,20 +752,58 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 </section><section class="boss">
   <div class="boss-head"><span class="boss-num">V</span>
     <h3>Sszorak</h3><a class="rplink" href="https://raidplan.io/plan/uaqafdx6g3bp6g79" target="_blank"
-      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Vítr boss · tier: legs</span>
+      rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282"
+      target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Vítr boss · tier: legs</span>
   </div>
-  <p class="callout"><strong>Overview:</strong>Jedna fáze dokola: Apex Predator → Venomous Surge → Raging Crosswinds,
-    dvakrát,
-    pak intermission na 100 energie. Dvě soak skupiny po ≥5 (melee/ranged). Ula'tek's Presence tiká do raidu celý fight.
-    LUST na pull (v intermission je dmg amp - 2 minuty).
+  <div class="hc"><span class="hc-label">Addon setup — prerekvizita (Northern Sky Raid Tools)</span>
+    <ul>
+      <li>Před pullem si v <strong>NSRT → Encounter Alerts</strong> vyber bosse <strong>Sszorak</strong> a zapni si
+        <strong>Winds Helper</strong>, <strong>Debuff Targets</strong>, <strong>Marker Map</strong> a <strong>Serpent's
+          Fury</strong>. Pokud je pod Sszorakem nenajdeš, napiš název do vyhledávače.
+      </li>
+      <li>Winds Helper ukazuje pořadí marek pro větry (1–4), Debuff Targets kdo má Venomous Surge a na kterou marku jde,
+        Marker Map je mapka marek na platformě a Serpent's Fury hlásí „Stack Up“. Debuff Targets si posuneš přes
+        kotvu (ikona vpravo nahoře v NSRT okně).</li>
+    </ul>
+    <figure class="shot"><a href="raidplan/sszorak_addon_01.png" target="_blank" rel="noopener"><img src="raidplan/sszorak_addon_01.png"
+          alt="NSRT Encounter Alerts - Sszorak: zapnute Winds Helper, Debuff Targets, Marker Map, Serpent's Fury"
+          loading="lazy"></a>
+      <figcaption>NSRT → Encounter Alerts → Sszorak: zapnout Winds Helper, Debuff Targets, Marker Map a Serpent's Fury.
+        Klikni pro plnou velikost.</figcaption>
+    </figure>
+    <figure class="shot"><a href="raidplan/sszorak_addon_02.png" target="_blank" rel="noopener"><img src="raidplan/sszorak_addon_02.png"
+          alt="Jak vypadaji alerty ve hre: Marker Map, Winds Helper, Debuff Targets, Serpent's Fury Stack Up"
+          loading="lazy"></a>
+      <figcaption>Jak to vypadá ve hře: Marker Map (mapka marek), Winds Helper (pořadí marek 1–4), Debuff Targets
+        (kdo má debuff) a Serpent's Fury „Stack Up“. Pozici Debuff Targets posouváš přes kotvu vpravo nahoře. Klikni pro
+        plnou velikost.</figcaption>
+    </figure>
+  </div>
+  <p class="callout"><strong>Overview (Mythic):</strong> Jedna fáze dokola: Apex Predator (2× Ravage, 2× Mutilate,
+    1× Tempest v random pořadí) → Venomous Surge → Raging Crosswinds, dvakrát, pak intermission (Howling Maelstrom +
+    Dig In) na 100 energie. Dvě soak skupiny po ≥5 (levá/pravá) na Mutilate. Mythic navíc přidává
+    <strong>Serpent's Fury</strong>: boss markne nejvzdálenějšího hráče (červená šipka, typicky hunter) a nabíjí si
+    rage. Jakmile se <strong>14+ lidí stackne do 8 yd</strong> od markovaného, boss castne <strong>To the
+      Slaughter</strong> — charge soak do stacku (333k phys každému) a všem dá <strong>Virulence</strong> (5s DoT +
+    4 šipky ven z tebe = SPREAD, koho trefíš, tomu dáš 833k a další Virulence). Pokud to nestacknete a rage dojde na 100
+    → <strong>Unbound Ferocity</strong> (+500 % dmg, +50 % attack speed) = wipe. Stack se dělá NA CALL (Stack Up -
+    Northern Sky Addon). Raging Crosswinds má na Mythicu 4 směry místo dvou. Ula'tek's Presence tiká do raidu celý
+    fight.
+    LUST na pull (v intermission je dmg amp - cca 1:45).
   </p>
-  <p class="movement"><strong>Movement:</strong> Boss se natáhne na kraj. Raid se rozdělí dvě grupy - levá a pravá.
-    Budou 2x tank frontal - pryč z platformy (+ swap), 2x group soak - levá, pravá, a 1x tornádka od bosse. Vše v random
-    pořadí.
-    Při tank soaku se spawnou sračky na zemi, posune se boss podél okraje. Spawnou se debufy na 2x random hráčích =>
-    půjdou na marku, která se callne. Potom dostane x-hráčů bílé kolečka kolem sebe s jednou "šipkou". Chceš si
-    stoupnout tak, aby tvoje šipka směřovala na opačnou šipku kamaráda. Nemusíš bejt přesně naproti, stačí že se kolečka
-    kryjí.</p>
+  <p class="movement"><strong>Movement (Mythic):</strong> Boss se natáhne na kraj, raid za ním rozdělený na levou a
+    pravou grupu. Zvolený hráč s markou (hunter) stojí u vchodu aby byl co nejdál od bosse. Apex Predator: 2× Ravage =
+    tank frontal pryč z platformy (+ swap), 2× Mutilate = frontal soak na
+    levou / pravou grupu (≥5 lidí, grupy se střídají), 1× Tempest = tornáda od bosse, dodge. Vše v random pořadí.
+    Venomous Surge: 2 hráči s debuffem (NSRT Debuff Targets) jdou na callnutou marku naproti tunelu, který bude foukat
+    (Winds Helper), a tam položí Cyst. Kaluže od bosse zůstávají na zemi → boss se posouvá na druhou stranu platformy -
+    k východu. Raging Crosswinds: bílé kolečko s šipkou, na Mythicu jsou 4 směry — najdi hráče s opačnou šipkou a
+    stoupni si tak, aby se kolečka kryla (nemusíš bejt přesně naproti). Bez kamaráda movement abilita nebo ping na grip.
+    Serpent's Fury: markovaný hráč stojí dál od raidu a čeká na call — až je raid čistý (po Crosswinds / Surge), stackne
+    se do grupy (14+ do 8 yd), boss chargne To the Slaughter, a HNED po hitu se všichni rozprsknou ke krajům tak, aby
+    šipky Virulence nikoho netrefily - viz. raidplan pozice. Po 5s zpátky na pozice. Intermission: pre-stack ve středu,
+    nechat se sfouknout na orb, pak pod bosse na Dig In.</p>
   <div class="ability"><span class="hc-label">Ability</span>
     <ul>
       <li><strong>Apex Predator</strong> — tank combo — 5 útoků v náhodném pořadí: 2× Ravage + 2× Mutilate + 1× Tempest
@@ -789,9 +827,9 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
         ostatní.</li>
       <li><strong>Howling Maelstrom</strong> — intermission (~každé 2 min): tunely foukaj vítr a tlačí raid z platformy
         — pre-stack ve středu, nechat se sfouknout na orbu, a td...</li>
-      <li><strong>Dig In</strong> — boss +30 % damage taken na 25 s během Maelstromu — sem cooldowny (případně lust?).
+      <li><strong>Dig In</strong> — boss +30 % damage taken na 25 s během Maelstromu.
       </li>
-      <li><strong>Ula'tek's Presence</strong> — ambient raid dmg celý fight (healera navíc?).</li>
+      <li><strong>Ula'tek's Presence</strong> — ambient raid dmg celý fight.</li>
     </ul>
   </div>
   <div class="hc"><span class="hc-label">Nové v Heroicu</span>
@@ -800,47 +838,89 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
       <li>Infected Gash zvyšuje poškození z dalšího Mutilate o 500 % — soak skupiny se MUSÍ střídat.</li>
     </ul>
   </div>
+  <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Serpent's Fury</strong> — dává na pull a potom pokaždé, když se abilita resetne. Markne jednoho hráče
+        (červená šipka nad hlavou), který je nejdál od bosse (hunter). Boss dostane na 100 energie enrage. Energie se mu
+        resetuje tak, že se spustí <strong>To the Slaughter</strong> abilita. Abilita <strong>To the Slaughter</strong>
+        se spustí v momentě, kdy bude minimálně 14 lidí 8 yardů od označeného hráče abilitou Serpent's Fury. Tzn. v
+        momentě, kdy se hráč s červenou šipkou stackne na raid grupu, tak se boss přepne do ability <strong>To the
+          Slaughter</strong>.</li>
+      <li><strong>To the Slaughter</strong> — abilita, která se spustí v momentě, kdy bude minimálně 14 lidí 8 yardů od
+        označeného hráče abilitou Serpent's Fury. Každej hráč dostane 333k phys dmg a aplikuje se na něj
+        <strong>Virulence</strong>.
+      </li>
+      <li><strong>Virulence</strong> — debuff (5s - 125k nature dmg / sec) aplikovaný hráči při soaku ability <strong>To
+          the Slaughter</strong>.
+        Dostaneš 4 šipky, které jdou z tebe a musíš se s tím spreadnout. Pokud někoho hitneš šipkou, tak mu aplikuješ
+        další <strong>Virulence</strong> a dáš mu jebu za 833k nature dmg.</li>
+      <li><strong>Raging Crosswinds</strong> - 4 možnosti směru odhození místo dvou - prostě miř svoji šipku na někoho.
+        Pokud nemáš kamaráda tak použij movement abilitu nebo se pingni na grip (sentinel ping).</li>
+    </ul>
+  </div>
   <div class="roles">
     <div class="role tank">
       <h4>Tank</h4>
       <ul>
-        <li>S bossem začínáš na kraji místnosti. Pokud to nezvládneš tak ho odtáhni po první sadě abilit.</li>
-        <li>Venomous Surge (sračky co padaj na zem) chceš mít na kraji místnosti. Vítr v mezifázi je sfoukne pryč. Po
-          tom co dopadaj sračky move bosse vedle podél místnosti.</li>
-        <li>Boss hit ti stackuje debuff na zvýšený dmg taken. Použij devku na Ravage (solo tank frontal soak) pokud máš
-          na sobě stacky debuffu.</li>
-        <li>Taun swap na druhej Ravage. Můžeš mid cast, on se na tebe podívá. TOHLE MÍŘÍŠ MIMO RAID.</li>
-        <li>Taun swap na druhej Mutilate. Můžeš mid cast, on se na tebe podívá. Na tohle nepotřebuješ defku, je to
-          split. TOHLE MÍŘÍŠ NA URČENOU GRUPU - HC 2 GRUPY JINAK NEBÍČKO.</li>
-        <li>Boss u kraje platformy, raid za ním. Apex Predator = 5 útoků v náhodném pořadí, všechny frontály jdou na
-          aktivního tanka.</li>
-        <li>Caustic Claws cáká kaluže kolem bosse — posouvat ho postupně na čisté výseče. Vítr v mezifázi je zfoukne z
-          platformy, proto ho chceme mít u kraje.</li>
-        <li>V mezifázi můžeš aktivně popovat orby co odhazujou aby se raid nemusel moc hejbat. Musíš proletět středem.
-          Pokud na to máš movement.</li>
+        <li>Pull: boss na startovní pozici na kraji platformy (viz raidplan), raid za ním. Markovaný hunter (Serpent's
+          Fury) stojí u vchodu, aby byl nejdál od bosse.
+        </li>
+        <li>Apex Predator = 5 útoků v náhodném pořadí, všechny frontály jdou na aktivního tanka. Corroding Venom (auto
+          attack) stackuje +3 % dmg taken — swap tak kolem 6 stacků i mimo swapy níže.</li>
+        <li>Ravage = solo tank frontal, na Mythicu jebe ještě víc (vulnerability debuff) → DEFKA, pokud máš na sobě
+          stacky. Taunt swap na druhej Ravage, jde to mid cast, on se na tebe podívá. TOHLE MÍŘÍŠ MIMO RAID / Z
+          PLATFORMY.</li>
+        <li>Mutilate = split frontal na určenou grupu (levá bere první, pravá druhý, ≥5 lidí JINAK NEBÍČKO). Taunt swap
+          na druhej Mutilate, jde to mid cast. Nepotřebuješ defku, je to split. TOHLE MÍŘÍŠ NA GRUPU, KTERÁ JE NA ŘADĚ.
+        </li>
+        <li><strong>Po první sadě abilit</strong> (Apex Predator + Venomous Surge dopadl na zem) přetáhni bosse přes
+          platformu na druhou stranu — k východu. Zahraje se uprostřed odhazování a natáhne se ke kraji. Kaluže zůstanou
+          na startu a vítr v mezifázi je sfoukne pryč. Raid jde za tebou, druhá sada se hraje u východu.</li>
+        <li>To the Slaughter: na call se jako NEAKTIVNÍ TANK stackneš s raidem jako každý (14+ do 8 yd od markovaného), boss chargne do
+          stacku. Po hitu se rozprskni na svoji Virulence pozici (šipky nikoho netrefit).</li>
+        <li>Mezifáze: pre-stack ve středu. Pokud máš movement, můžeš aktivně popovat orby co odhazujou, aby se raid
+          nemusel moc hejbat — musíš proletět středem. Dig In = boss +30 % dmg taken, drž ho tak, aby na něm mohl
+          stát celej raid.</li>
+        <li><strong>Po mezifázi:</strong> raid popne záložní Cyst u východu a odletí zpátky na start. Boss tam jde s
+          tebou — celej cyklus (start → východ) se opakuje.</li>
       </ul>
     </div>
     <div class="role heal">
       <h4>Healeři</h4>
       <ul>
-        <li>Mutilate (raid frontal) se splituje: méně než 5 soakerů = nebíčko. Zasažení dostanou 22s DoT s +500 % na
-          další Mutilate — proto skupina 1 bere první, skupina 2 druhý, nikdo nesmí double-dipnout.</li>
-        <li>Venomous Surge: 2 hráči s těžkým 10s DoTem; expirace = raid hit s falloffem dle vzdálenosti — heal na ně, ať
-          dojdou na marku.</li>
-        <li>Stálý rot z Ula'tek's Presence + pohybové fáze — šetřit mobilní healy na mezifazi.</li>
+        <li>Mutilate (raid frontal) se splituje: méně než 5 soakerů = nebíčko. Zasažení dostanou 22s DoT (Infected Gash)
+          s +500 % na další Mutilate — proto levá bere první, pravá druhý, nikdo nesmí double-dipnout.</li>
+        <li>Venomous Surge: 2 hráči s těžkým 10s DoTem, kaluže padají už během castu; expirace = raid hit s falloffem
+          dle vzdálenosti — heal na ně, ať dojdou na marku.</li>
+        <li><strong>To the Slaughter</strong> = největší heal window fightu: celej raid dostane naráz 333k phys a k tomu
+          Virulence (5s, 125k nature/s na každém). Pre-HoT před callem "Stack Up", raid CD na hit, domluvit rotaci
+          raid CD per stack. Kdo dostane šipku od kamaráda, má 833k navíc + další Virulence → external, nebo je mrtvej.
+        </li>
+        <li>Unbound Ferocity (rage 100) se nehealí, to je wipe — hlídej, že se stack vůbec sešel.</li>
+        <li>Tempest hit = poison, dispel. Raging Crosswinds má 4 směry, bude víc lidí létat mimo range — spot heal na
+          návrat.</li>
+        <li>Stálý rot z Ula'tek's Presence + pohybové fáze — šetřit mobilní healy na mezifázi. V Dig In se stackneš pod
+          bosse s raidem.</li>
       </ul>
     </div>
     <div class="role dps">
       <h4>DPS</h4>
       <ul>
-        <li>Surge target dojde na marku <em>naproti</em> tunelu, který bude foukat, a tam nechá Viscous Cyst. Aktivní
-          tunely mají bílé orby a počet orbů = pořadí (1 orb fouká první). 4 orby na 3 větry — jedna chyba se dá vzít z
-          rezervy, dvě jsou wipe. Po mezifázi se poslední orb vybere - buď směrem k němu.</li>
+        <li>Surge target (NSRT Debuff Targets) dojde na marku <em>naproti</em> tunelu, který bude foukat (Winds Helper
+          1–4, aktivní tunely mají bílé orby, počet orbů = pořadí), a tam nechá Viscous Cyst. 4 orby na 3 větry.</li>
+        <li><strong>Záložní (4.) Cyst jde VŽDY na pozici u východu platformy.</strong> Po mezifázi ho popnete a celej
+          raid odletí zpátky na start, kde začíná další cyklus. Nikam jinam ho nedávej — když ho použijete jako
+          rezervu na chybu, po mezifázi běžíte na start pěšky.</li>
+        <li>Markovaný hráč (Serpent's Fury, typicky hunter): stůj u vchodu co nejdál od bosse a NECHOĎ do raidu, dokud
+          nepřijde call "Stack Up" (NSRT). Pak vběhni do stacku — 14+ lidí do 8 yd od tebe.</li>
+        <li>Ostatní: na call stack na určeném místě (raidplan), boss chargne To the Slaughter, a HNED po hitu spread na
+          svoji Virulence pozici (raidplan). 4 šipky ven z tebe nesmí nikoho trefit — kdo trefí, dá kámošovi 833k a
+          další Virulence. Po 5s zpátky na pozice.</li>
         <li>Tempest: bloudící tornáda ve stylu L'ura glaive — prostě dodge.</li>
-        <li>Raging Crosswinds: šipka tě vystřelí daným směrem — namiř ji na jiného hráče s opačnou šipkou a srazte se ve
-          vzduchu (HITBOX JE CELÝ KRUH, NETŘEBA mířit přesně). NEPOUŽÍVEJ IMUNITU BEZ DOMLUVY PIČE.</li>
+        <li>Raging Crosswinds: na Mythicu 4 směry — najdi hráče s opačnou šipkou a srazte se ve vzduchu (HITBOX JE
+          CELÝ KRUH, NETŘEBA mířit přesně). Bez kamaráda movement abilita nebo ping na grip. NEPOUŽÍVEJ IMUNITU KDYZ NEMUSIS.</li>
         <li>Intermission (Dig In): boss bere +30 % dmg — po popnutí orbu máš wind resist - kopni se doprostřed bosse a
-          generuj čísílka.</li>
+          generuj čísílka. Po mezifázi popnout záložní Cyst u východu → knockback na start.</li>
       </ul>
     </div>
   </div>
