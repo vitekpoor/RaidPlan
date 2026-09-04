@@ -1,7 +1,9 @@
 <section class="boss">
   <div class="boss-head"><span class="boss-num">VI</span>
     <h3>The Twin Fangs — Vexhul &amp; Ithraz</h3><a class="rplink" href="https://raidplan.io/plan/u7tdr98jetxpk3sd"
-      target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Správa debuffů · tier: head</span>
+      target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282"
+      target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Správa debuffů · tier: head</span>
   </div>
   <p class="callout"><strong>Overview:</strong>Fixní rotace, 2× za cyklus: Caustic Deluge → Stone Breaker → Venomous
     Emergence →
@@ -12,6 +14,125 @@
     vyrovnaným HP. Základ je generovat čísla, dodgovat zelené věci a HARD SWITCH ADDKY uprostřed. Treshold stacků je 8 -
     pokud máš tak už nesoukuješ.
     Obecně platí že zelené soaky chceš brát max jeden, nech ostatní ať je soaknou. Vem jenom pokud by měl bouchnout.</p>
+  <div class="macros"><span class="macros-label">Kick rotace — Rouse the Brood (macro)</span>
+    <p>Addky vlevo a vpravo kickuje pevná rotace (RaidPlan, strana 4); addku mezi bossy / u bosse řeší primárně tanci.
+      Každý v rotaci si udělá macro: kick + hláška + ping na dalšího v pořadí. Po posledním jede rotace zase od
+      prvního. Šablona:</p>
+    <code>#showtooltip
+      /cast [PLATER_KICK]
+
+      KICKNUL JSEM, DALSI JE [NEXT_PLAYER_NAME]
+
+      /ping [@NEXT_PLAYER_NAME] 2</code>
+    <div class="macros-grid">
+      <div class="macros-side">
+        <h4>Levá strana</h4>
+        <ol>
+          <li><strong>Akka</strong> <span class="next">→ Irdwy</span>
+            <code>#showtooltip
+              /cast Axe Toss
+
+              KICKNUL JSEM, DALSI JE Irdwy
+
+              /ping [@Irdwy] 2</code>
+          </li>
+          <li><strong>Irdwy</strong> <span class="next">→ Pifta</span>
+            <code>#showtooltip
+              /cast Counterspell
+
+              KICKNUL JSEM, DALSI JE Pifta
+
+              /ping [@Pifta] 2</code>
+          </li>
+          <li><strong>Pifta</strong> <span class="next">→ Rojko</span>
+            <code>#showtooltip
+              /cast Counter Shot
+
+              KICKNUL JSEM, DALSI JE Rojko
+
+              /ping [@Rojko] 2</code>
+          </li>
+          <li><strong>Rojko</strong> <span class="next">→ Hitaro</span>
+            <code>#showtooltip
+              /cast Wind Shear
+
+              KICKNUL JSEM, DALSI JE Hitaro
+
+              /ping [@Hitaro] 2</code>
+          </li>
+          <li><strong>Hitaro</strong> <span class="next">→ Arch</span>
+            <code>#showtooltip
+              /cast Spear Hand Strike
+
+              KICKNUL JSEM, DALSI JE Arch
+
+              /ping [@Arch] 2</code>
+          </li>
+          <li><strong>Arch</strong> <span class="next">→ Akka</span>
+            <code>#showtooltip
+              /cast Kick
+
+              KICKNUL JSEM, DALSI JE Akka
+
+              /ping [@Akka] 2</code>
+          </li>
+        </ol>
+      </div>
+      <div class="macros-side">
+        <h4>Pravá strana</h4>
+        <ol>
+          <li><strong>Meslock</strong> <span class="next">→ Zirael</span>
+            <code>#showtooltip
+              /cast Axe Toss
+
+              KICKNUL JSEM, DALSI JE Zirael
+
+              /ping [@Zirael] 2</code>
+          </li>
+          <li><strong>Zirael</strong> <span class="next">→ Mimik</span>
+            <code>#showtooltip
+              /cast Counterspell
+
+              KICKNUL JSEM, DALSI JE Mimik
+
+              /ping [@Mimik] 2</code>
+          </li>
+          <li><strong>Mimik</strong> <span class="next">→ Nesfe</span>
+            <code>#showtooltip
+              /cast Counter Shot
+
+              KICKNUL JSEM, DALSI JE Nesfe
+
+              /ping [@Nesfe] 2</code>
+          </li>
+          <li><strong>Nesfe</strong> <span class="next">→ Drastic</span>
+            <code>#showtooltip
+              /cast Solar Beam
+
+              KICKNUL JSEM, DALSI JE Drastic
+
+              /ping [@Drastic] 2</code>
+          </li>
+          <li><strong>Drastic</strong> <span class="next">→ Schizoid</span>
+            <code>#showtooltip
+              /cast Rebuke
+
+              KICKNUL JSEM, DALSI JE Schizoid
+
+              /ping [@Schizoid] 2</code>
+          </li>
+          <li><strong>Schizoid</strong> <span class="next">→ Meslock</span>
+            <code>#showtooltip
+              /cast Disrupt
+
+              KICKNUL JSEM, DALSI JE Meslock
+
+              /ping [@Meslock] 2</code>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </div>
   <p class="movement">
     <strong>Movement:</strong> Začínáme tam, kde jsou bossové. Spawnou se zelené kolečka na zemi - každý si veme
     maximálně jedno - dát ti stack (NESMÍ BOUCHNOUT). Pokud si máš vybrat jestli dostaneš hit z červené padají sračky
@@ -39,15 +160,18 @@
         musí insta zmizet.</li>
       <li><strong>Coiling Ichor</strong> — červenej kruhovej debuff — kruh se před vypršením zmenšuje, a pak ti dá jebu
         - defku ke konci debuffu; POLOZ NA VNĚJŠÍ KRAJ MISTNOSTI DO ŘADY BOSSE.</li>
-      <li><strong>Stir the Depths</strong> — zelené vlny od zadní stěny — bezpečné při soakování Feasty, protože na HC odhazuje.
+      <li><strong>Stir the Depths</strong> — zelené vlny od zadní stěny — bezpečné při soakování Feasty, protože na HC
+        odhazuje.
       </li>
       <li><strong>Ravenous Feast</strong> — JEDINÝ DROP STACKŮ: 3 exploze po sobě v jednom soaku. Tzn. tři grupy po cca
         7 lidech a poslední grupa imunity. Max 1 clear za cast a +800% Feast dmg na 8s — G1 (7–10) → G2 (7–10) → G3
         (tanky+immunity), nikdo dvakrát.</li>
       <li><strong>Vile Flood</strong> — intermission laser od Vexhul — směr rotace ukazují orby kolem ní; jdi PROTI
-        rotaci a jakmile začne laser blastit tak jdeš VE SMĚRU ROTACE anebo PROTI pokud je druhý boss na tvé straně.</li>
+        rotaci a jakmile začne laser blastit tak jdeš VE SMĚRU ROTACE anebo PROTI pokud je druhý boss na tvé straně.
+      </li>
       <li><strong>Sanguine Storm</strong> — červené kruhy od Ithraze při intermission — dodge; na HC nechávají Congealed
-        Gore (shadow DoT + 60% slow) - pokud si musíš vybrat jestli tě přejde zelená vlna nebo červené kruhy, vyber kruhy.</li>
+        Gore (shadow DoT + 60% slow) - pokud si musíš vybrat jestli tě přejde zelená vlna nebo červené kruhy, vyber
+        kruhy.</li>
       <li><strong>Clotted Bolt / Concentrated Spittle</strong> — tank mimo range — buď u bosse.</li>
       <li><strong>Submerge / Caustic Rain</strong> — intermission na 100 energie; TŘETÍ Submerge = Caustic Rain, hard
         enrage — oba bossové mrtví před ním, HP vyrovnané.</li>
@@ -60,10 +184,35 @@
       <li>Sanguine Storm nově nechává kaluže: shadow dmg každou vteřinu + 60% slow.</li>
     </ul>
   </div>
+  <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Eternal Venom</strong> — na 10 stacích zabíjí + pokud na to umřeš spawneš 3 nové koule na soak.</li>
+      <li><strong>Blood Torrent</strong> — Tank channel - heal absord. Spawne <strong>Barbed Bulwark</strong>.</li>
+      <li><strong>Barbed Bulwark</strong> - bublina kolem spawnutejch orbů (Caustic Globule) z tank ability
+        <strong>Caustic Deluge</strong> - jako na lastovi. Musí se ccčknout aby zmizela, jinak nejde soak orb.
+        Nefungujou displacement ccs (grip, morph etc.).
+      </li>
+      <li><strong>Rouse the Brood</strong> - mythické addky, které se spawnujou kolem bossů (levá, pravá strana a mezi
+        bossema). Musí se kicknout cast jinak nebíčko.</li>
+      <li><strong>Ravenous Feast</strong> - 3x soak - 4.6M phys dmg spread. Musí v soaku bejt alespon 4 lidi jinak to
+        jebne do celé grupy. Navíc soak odhazuje => musíš se nechat odhodit směrem na svoje místo, kde bude další soak
+        <strong>Taited Blood</strong>.
+      </li>
+      <li><strong>Taited Blood</strong> - absord soak na zemi (jak dimenzius p1) - musí se vysoukovat jinak bumbác -
+        spawne se absorb soak za každej soak hit z bosse, tzn. celkem 3x absorb soaky.</li>
+      <li><strong>Sanguine Storm</strong> - červené sračky na zemi zůstávají celý fight.</li>
+      <li><strong>Stone Breaker</strong> - tři tank soaky - boss lehce odhazuje při spawnu - bacha melečka na wavy -
+        dejte si timer na to.</li>
+    </ul>
+  </div>
   <div class="roles">
     <div class="role tank">
       <h4>Tank</h4>
       <ul>
+        <li>Tank co tankuje Vexhula tak musí na začátku tauntnout i Ithraze před tím, než dá mytický channel
+          <strong>Blood Torrent</strong>. Tzn. dostaneš oba channely - <strong>Blood Torrent</strong> +
+          <strong>Deluge</strong>. Tohle je imunita / defka / external moment...
+        </li>
         <li>Jeden tank na levým druhej tank na pravým. Statickej fight. Nechoď od aktivního bosse jinak se nasere!!</li>
         <li>Vexhul (ten levej) ti insta nejebe tank buster - DANGER DANGER - navíc tě odkopne, takže immunity na
           movement jestli máš.</li>

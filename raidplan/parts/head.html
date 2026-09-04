@@ -190,6 +190,28 @@ code {
   overflow-x: auto;
 }
 .callout strong { color: var(--jade); }
+/* Kick rotation block: template macro + per-player macros in two columns */
+.macros {
+  border-left: 3px solid var(--gold); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: 0 0 1.25rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.macros .macros-label {
+  display: block; color: var(--gold); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.macros p { margin: 0 0 .4rem; }
+.macros-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0 1.25rem; margin-top: .5rem; }
+.macros-side h4 {
+  margin: 0 0 .4rem; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .14em; font-weight: 700; color: var(--dps);
+}
+.macros-side ol { margin: 0; padding-left: 1.3rem; }
+.macros-side li { margin-bottom: .45rem; }
+.macros-side li::marker { color: var(--gold); font-weight: 700; }
+.macros-side li strong { color: var(--ink); font-weight: 600; }
+.macros-side .next { color: var(--muted); font-size: .82rem; }
+.macros-side code { margin: .25rem 0 0; }
 .movement {
   background: var(--callout-bg); border-left: 3px solid var(--tank);
   padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
