@@ -5,15 +5,15 @@
       href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282"
       target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Správa debuffů · tier: head</span>
   </div>
-  <p class="callout"><strong>Overview:</strong>Fixní rotace, 2× za cyklus: Caustic Deluge → Stone Breaker → Venomous
-    Emergence →
-    Coiling Ichor → Stir the Depths → Ravenous Feast, pak Submerge (intermission). Celý fight je o stackách Eternal
-    Venom: každá zelená abilita ti dá stack a jediný způsob jak si shodit JEDEN stack je soak Ravenous Feast (tzn. -1
-    stack za
-    fázi). <strong>Hard enrage = třetí Submerge</strong>, kdy bossové castí Caustic Rain — oba musí zemřít dřív, s
-    vyrovnaným HP. Základ je generovat čísla, dodgovat zelené věci a HARD SWITCH ADDKY uprostřed. Treshold stacků je 8 -
-    pokud máš tak už nesoukuješ.
-    Obecně platí že zelené soaky chceš brát max jeden, nech ostatní ať je soaknou. Vem jenom pokud by měl bouchnout.</p>
+  <p class="callout"><strong>Overview:</strong> Fixní rotace, 2× za fázi: Blood Torrent + Caustic Deluge (CC bublin +
+    soak zelených orbíků) → Stone Breaker (tank souky) → Venomous Emergence + Rouse the Brood (kill addky uprostřed +
+    KICK rotace na addky po stranách) → Coiling Ichor (červená kolečka na kraj) → Stir the Depths → Ravenous Feast
+    (group soaky po skupinách + Tainted Blood absorb soaky), pak Submerge (mezifáze). Celý fight je o stackách Eternal
+    Venom: každá zelená věc ti dá stack a jediný způsob, jak shodit JEDEN stack, je soak Ravenous Feast (tzn. -1 stack
+    za fázi). Na 10 stacích umíráš a navíc spawneš 3 nové koule na soak. <strong>Hard enrage = třetí Submerge</strong>,
+    kdy bossové castí Caustic Rain — oba musí zemřít dřív, s vyrovnaným HP. Základ: generovat čísla, dodgovat zelené
+    věci, HARD SWITCH ADDKY uprostřed a KICKOVAT addky po stranách. Treshold stacků je 8 — pokud máš 8, už nesoukuješ
+    nic zeleného. Zelené orbíky ber max jeden, vem jenom pokud by měl bouchnout.</p>
   <div class="macros"><span class="macros-label">Kick rotace — Rouse the Brood (macro)</span>
     <p>Addky vlevo a vpravo kickuje pevná rotace (RaidPlan, strana 4); addku mezi bossy / u bosse řeší primárně tanci.
       Každý v rotaci si udělá macro: kick + hláška + ping na dalšího v pořadí. Po posledním jede rotace zase od
@@ -133,45 +133,58 @@
       </div>
     </div>
   </div>
-  <p class="movement">
-    <strong>Movement:</strong> Začínáme tam, kde jsou bossové. Spawnou se zelené kolečka na zemi - každý si veme
-    maximálně jedno - dát ti stack (NESMÍ BOUCHNOUT). Pokud si máš vybrat jestli dostaneš hit z červené padají sračky
-    na zemi nebo ze zelené vlny - vybereš si červenou sračku, protože ti nedá stack.
-    Pak se spawnou addky uprostřed - hard switch. Další abilita jsou červené kruhové debufy na random hráčích. Jdete s
-    tím na kraj - vnější - do řady. Vnitří kraje musí být volné.
-    Na Ravenous Feast - kruhový soak - se soakuje po grupách. Jsou celkem tři soaky po sobě s knockbackem, takže budou
-    celkem 3 grupy (buď dvě velké a třetí imunita, nebo rovnoměrně).
-    Pokud jsi souknul jinou než jsi měl, už tam nelez (umřeš). Pokud jsi v druhé nebo třetí grupě, dej bacha na zelené
-    vlny co jdou do zad, protože soak tě odhodí.
-    Intermission: Nabejtí se beam na cíp kde stojíme a jdeme PROTI rotaci kuliček, které jsou kolem bosse. Pokud je
-    druhý boss v našem směru běhu, ronou k němu jdeme. Jinak gejte a druhá strana.
-  </p>
+  <div class="movement">
+    <strong>Movement:</strong> Začínáme tam, kde jsou bossové — levý tank Vexhul, pravý tank Ithraz, ranged a healeři
+    vzadu po stranách (levá / pravá strana podle RaidPlanu). Hned na začátku tank Vexhula tauntne i Ithraze a sežere
+    Blood Torrent + Deluge (imunita / defka / external). Pak jede 2× za fázi tahle rotace:
+    <ol>
+      <li>Zelené orbíky spawnou v bublině Barbed Bulwark — assigned CC (viz DPS) bublinu ccčkne, pak si každý vezme
+        MAX JEDEN orb (NESMÍ BOUCHNOUT). Pokud si máš vybrat mezi červenou sračkou na zemi a zelenou vlnou, ber
+        červenou — nedá ti stack.</li>
+      <li>Uprostřed se spawnou addky (Spawn of Vexhul) — hard switch, kill. Zároveň po stranách (levá, pravá a mezi
+        bossy) spawnou Broodlingy, které castí — kick podle rotace výše (levá strana / pravá strana), addku mezi bossy
+        a u bosse řeší primárně tanci.</li>
+      <li>Červené kruhové debufy (Coiling Ichor) — jdeš s tím na VNĚJŠÍ kraj do řady. Vnitřek musí zůstat volný.</li>
+      <li>Ravenous Feast — 3 soaky po sobě, v každém musí být aspoň 4 lidi. Pořadí: 1. PRAVÁ strana + tank Ithraze →
+        2. LEVÁ strana + tank Vexhula → 3. OSTATNÍ (melee). Soak tě odhodí — nech se odhodit směrem na svoji pozici,
+        kde se spawne Tainted Blood (absorb soak) a ten si skupina vysouká. Pokud jsi soaknul jinou než jsi měl, už
+        nikam nelez (umřeš). Když čekáš na svůj soak, dej bacha na zelené vlny do zad (Stir the Depths).</li>
+    </ol>
+    <strong>Mezifáze:</strong> Vexhul nabíjí beam na aktivního tanka — stojíme na cípu, kde jsme. Koukni, kam se točí
+    zelené kuličky kolem bosse: točí se DOPRAVA a druhý boss je vlevo → jdeme rovnou k němu. Točí se DOLEVA a druhý
+    boss je vpravo → jdeme PROTI směru beamu a vracíme se po směru — gejta, speed, cokoliv. Červené kaluže ze Sanguine
+    Storm zůstávají celý fight, tak si jimi nezasviň cestu.
+  </div>
   <div class="ability"><span class="hc-label">Ability</span>
     <ul>
       <li><strong>Eternal Venom</strong> — hlavní věc na fightu — vše zelené přidává stack. Na HC smrt na 10 stacích.
         Treshold je 8 stacků, pak už nechceš soukovat věci.</li>
-      <li><strong>Caustic Deluge</strong> — spawn malých zelených orbů (Caustic Globule): musí se soaknout. Soak = +1
-        stack za orb, nesoaknutá po 10s = +1 stack celému raidu. Máš-li málo stacků, soakni víc. Treshold je 8 stacků,
-        pak už nechceš soukovat věci. Vem si jednu a nech ostatní ať se taky snaží.</li>
+      <li><strong>Caustic Deluge</strong> — tank channel, spawn malých zelených orbů (Caustic Globule): musí se
+        soaknout. Soak = +1 stack za orb, nesoaknutá po 10s = +1 stack celému raidu. Na M jsou orby v bublině
+        <strong>Barbed Bulwark</strong> — dokud se bublina neccčkne (stun / incap, displacement nefunguje), orb nejde
+        soaknout. Vem si jeden a nech ostatní, ať se taky snaží. Treshold je 8 stacků, pak už nesoukuješ.
+      </li>
       <li><strong>Stone Breaker</strong> — 3 tank soaky (takové malé bíle souky u bosse) — soakovat v pořadí, v jakém se
         objevily! (v tom pořadí do nich boss mlátí); každý stack = Fractured.</li>
-      <li><strong>Venomous Emergence</strong> — 3 addy uprostřed. INSTA SWITCH ADDKY!!! Addy dělaj frontal
-        Corrosive Spit - stojíš s frontalem a NEHEJBEŠ SE - ostatní dodge. Za každej cast dostaneš stack, takže addky
-        musí insta zmizet.</li>
+      <li><strong>Venomous Emergence</strong> — 3 addy uprostřed (Spawn of Vexhul). INSTA SWITCH ADDKY!!! Addy dělaj
+        frontal Corrosive Spit - stojíš s frontalem a NEHEJBEŠ SE - ostatní dodge. Za každej cast dostaneš stack, takže
+        addky musí insta zmizet. Ve stejnou chvíli spawnou po stranách Broodlingy (<strong>Rouse the Brood</strong>) —
+        ty se KICKUJOU podle rotace nahoře, nezabíjí se.</li>
       <li><strong>Coiling Ichor</strong> — červenej kruhovej debuff — kruh se před vypršením zmenšuje, a pak ti dá jebu
         - defku ke konci debuffu; POLOZ NA VNĚJŠÍ KRAJ MISTNOSTI DO ŘADY BOSSE.</li>
-      <li><strong>Stir the Depths</strong> — zelené vlny od zadní stěny — bezpečné při soakování Feasty, protože na HC
-        odhazuje.
-      </li>
-      <li><strong>Ravenous Feast</strong> — JEDINÝ DROP STACKŮ: 3 exploze po sobě v jednom soaku. Tzn. tři grupy po cca
-        7 lidech a poslední grupa imunity. Max 1 clear za cast a +800% Feast dmg na 8s — G1 (7–10) → G2 (7–10) → G3
-        (tanky+immunity), nikdo dvakrát.</li>
+      <li><strong>Stir the Depths</strong> — zelené vlny od zadní stěny, dip = stack. Feast soak tě odhazuje dozadu,
+        takže když čekáš na svůj soak, měj vlny na očích.</li>
+      <li><strong>Ravenous Feast</strong> — JEDINÝ DROP STACKŮ: 3 exploze po sobě v jednom soaku, každou soakuje jiná
+        skupina (min. 4 lidi, jinak to jebne do celého raidu): 1. PRAVÁ + tank → 2. LEVÁ + tank → 3. OSTATNÍ (melee).
+        Max 1 drop za cast (+800 % Feast dmg na 8s) → nikdo dvakrát. Soak odhazuje — nech se odhodit na svoje místo,
+        kde spawne <strong>Tainted Blood</strong> absorb soak (jak Dimensius P1), skupina si ho vysouká. Celkem 3
+        absorb soaky, jeden za každou explozi.</li>
       <li><strong>Vile Flood</strong> — intermission laser od Vexhul — směr rotace ukazují orby kolem ní; jdi PROTI
         rotaci a jakmile začne laser blastit tak jdeš VE SMĚRU ROTACE anebo PROTI pokud je druhý boss na tvé straně.
       </li>
-      <li><strong>Sanguine Storm</strong> — červené kruhy od Ithraze při intermission — dodge; na HC nechávají Congealed
-        Gore (shadow DoT + 60% slow) - pokud si musíš vybrat jestli tě přejde zelená vlna nebo červené kruhy, vyber
-        kruhy.</li>
+      <li><strong>Sanguine Storm</strong> — červené kruhy od Ithraze při mezifázi — dodge; nechávají Congealed Gore
+        (shadow DoT + 60% slow) a na M kaluže zůstávají celý fight. Pokud si musíš vybrat, jestli tě přejde zelená vlna
+        nebo červené kruhy, vyber kruhy.</li>
       <li><strong>Clotted Bolt / Concentrated Spittle</strong> — tank mimo range — buď u bosse.</li>
       <li><strong>Submerge / Caustic Rain</strong> — intermission na 100 energie; TŘETÍ Submerge = Caustic Rain, hard
         enrage — oba bossové mrtví před ním, HP vyrovnané.</li>
@@ -187,18 +200,19 @@
   <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
     <ul>
       <li><strong>Eternal Venom</strong> — na 10 stacích zabíjí + pokud na to umřeš spawneš 3 nové koule na soak.</li>
-      <li><strong>Blood Torrent</strong> — Tank channel - heal absord. Spawne <strong>Barbed Bulwark</strong>.</li>
+      <li><strong>Blood Torrent</strong> — Tank channel - heal absorb. Spawne <strong>Barbed Bulwark</strong>.</li>
       <li><strong>Barbed Bulwark</strong> - bublina kolem spawnutejch orbů (Caustic Globule) z tank ability
         <strong>Caustic Deluge</strong> - jako na lastovi. Musí se ccčknout aby zmizela, jinak nejde soak orb.
         Nefungujou displacement ccs (grip, morph etc.).
       </li>
-      <li><strong>Rouse the Brood</strong> - mythické addky, které se spawnujou kolem bossů (levá, pravá strana a mezi
-        bossema). Musí se kicknout cast jinak nebíčko.</li>
+      <li><strong>Rouse the Brood</strong> - mythické addky (Broodling of Ithraz), které se spawnujou kolem bossů (levá,
+        pravá strana a mezi bossema) spolu s Venomous Emergence. Musí se kicknout cast, jinak nebíčko — levou a pravou
+        stranu kickuje pevná rotace (macra nahoře), mezi bossy a u bosse primárně tanci.</li>
       <li><strong>Ravenous Feast</strong> - 3x soak - 4.6M phys dmg spread. Musí v soaku bejt alespon 4 lidi jinak to
         jebne do celé grupy. Navíc soak odhazuje => musíš se nechat odhodit směrem na svoje místo, kde bude další soak
-        <strong>Taited Blood</strong>.
+        <strong>Tainted Blood</strong>.
       </li>
-      <li><strong>Taited Blood</strong> - absord soak na zemi (jak dimenzius p1) - musí se vysoukovat jinak bumbác -
+      <li><strong>Tainted Blood</strong> - absorb soak na zemi (jak dimenzius p1) - musí se vysoukovat jinak bumbác -
         spawne se absorb soak za každej soak hit z bosse, tzn. celkem 3x absorb soaky.</li>
       <li><strong>Sanguine Storm</strong> - červené sračky na zemi zůstávají celý fight.</li>
       <li><strong>Stone Breaker</strong> - tři tank soaky - boss lehce odhazuje při spawnu - bacha melečka na wavy -
@@ -221,6 +235,11 @@
           vedle sebe - LEFT - MID - RIGHT. Musíš souknout všechny 3, pokud máš krátkou defku tak ji dej late na druhej a
           tředí soak. Každej soak ti stackuje debuff.</li>
         <li>Po tank soakách je tank swap.</li>
+        <li>Broodlingy mezi bossy a u bosse (<strong>Rouse the Brood</strong>) kickujete primárně vy — DPS rotace
+          řeší jen levou a pravou stranu.</li>
+        <li>Orb CC: Blinding Light si držte na DRUHÝ set orbů ve fázi (první set řeší DPS CC).</li>
+        <li>Ravenous Feast: tank Ithraze (pravý) soakuje 1. explozi s pravou stranou, tank Vexhula (levý) 2. explozi
+          s levou stranou. Odhodit se nechte na svoji stranu k Tainted Blood soaku.</li>
         <li>V mezifázi Vexhul baití beam na aktivního tank! stůj na cípu trojúhelníka aby grupa byla vedle tebe. Je to
           ale rychlé takže to neřeš.</li>
         <li>V mezifázi se chceš rychle dostat k bossovi jinak na tebe bude hodně moc nasranej.</li>
@@ -229,22 +248,32 @@
     <div class="role heal">
       <h4>Healeři</h4>
       <ul>
+        <li>Pull: tank Vexhula bere Blood Torrent (heal absorb) + Deluge najednou — external / heal absorb prorazit
+          hned na začátku.</li>
         <li>Venomous Emergence dává celému raidu nevyhnutelný stack — počítejte s rostoucím rotem, jak se stacky
           přidávají napříč fightem. Pokud bude mít někdo moc stacků oproti ostatním tak ho zjebej.</li>
-        <li>Ravenous Feast: 3 exploze splitují masivní dmg.</li>
+        <li>Ravenous Feast: 3 exploze splitují masivní dmg (4.6M phys spread na min. 4 lidi) a hned po nich tři Tainted
+          Blood absorb soaky — každá skupina si vysouká svůj, ať nebumbác.</li>
         <li>Stir the Depths je čistý raid dmg + zelené vlny (stack za dip).</li>
+        <li>Healeři jsou ve Feast skupinách podle stran: Anal + Giarem PRAVÁ (1. soak), Global + Houdy LEVÁ (2. soak).
+          Giarem má navíc Capacitor Totem na orb CC.</li>
       </ul>
     </div>
     <div class="role dps">
       <h4>DPS</h4>
       <ul>
-        <li>Caustic Globule: každá potřebuje jednoho soakera (1 stack) — nesoaknutá po 10 s dá stack celému raidu.</li>
-        <li>Emergence: 3 hadi uprostřed plivou Corrosive Spit linky po náhodných hráčích — INSTA SWITCH.</li>
-        <li>Coiling Ichor: červené kruhy pokládají zpomalující kaluže — odnést na kraj vedle sebe a necestovat přes sebe
-          - defku ke konci, poslední tik ti dá jebu.</li>
-        <li>Ravenous Feast soak: max 1 drop stacku na Feast bez ohledu na počet popů (+800 % debuff) a žádná skupina
-          nesoakuje dvakrát: buď 3 skupiny po 7+, nebo 2 skupiny a třetí pop kryjí immunity (refund dostanou i tak).
-        </li>
+        <li>Orb CC (Barbed Bulwark, RaidPlan strana 3). Orby jsou 2× za fázi po ~1 minutě; mezi 2. setem 1. fáze a 1.
+          setem 2. fáze je 1,5 minuty —
+          podle toho plánuj CD.</li>
+        <li>Caustic Globule: každá potřebuje jednoho soakera (1 stack) — nesoaknutá po 10 s dá stack celému raidu. Max
+          jeden orb na hlavu, na 8 stackách už nesoukuješ.</li>
+        <li>Emergence: 3 hadi uprostřed plivou Corrosive Spit linky po náhodných hráčích — INSTA SWITCH. Broodlingy po
+          stranách se NEZABÍJÍ, kickujou se podle rotace nahoře (macro!).</li>
+        <li>Coiling Ichor: červené kruhy pokládají zpomalující kaluže — odnést na vnější kraj vedle sebe a necestovat
+          přes sebe - defku ke konci, poslední tik ti dá jebu.</li>
+        <li>Ravenous Feast skupiny: 1. PRAVÁ → 2. LEVÁ → 3. OSTATNÍ = melee. Max 1 drop stacku na Feast (+800 % debuff),
+          nikdo nesoakuje dvakrát.
+          Po odhození doběhni k Tainted Blood soaku své skupiny.</li>
       </ul>
     </div>
   </div>
