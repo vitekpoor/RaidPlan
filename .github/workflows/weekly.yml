@@ -2,11 +2,8 @@ name: Weekly raid attendance report
 
 on:
   schedule:
-    # Tuesday 17:00 UTC = 19:00 CEST (summer) / 18:00 CET (winter), the
-    # last evening of the WoW reset week (Wed..Tue). GitHub cron is UTC only;
-    # the script works in Europe/Prague and reports the reset week of the next
-    # raid day, so a one-hour drift here never changes WHICH week is reported.
-    - cron: "0 17 * * 2"
+  # Runs every day at 18:00 UTC.
+  - cron: "0 18 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
