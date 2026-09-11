@@ -1908,8 +1908,18 @@ function submitSimWeb(data) {
     sh.getRange(r, SIM_COL.simc).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     sh.getRange(r, SIM_COL.status).setBackground(SIM_STATUS_BG[SIM_STATUS.pending]);
     var waiting = countPendingSims_(sh);
+    // rovnou spustit runner v GitHub Actions (chyba GitHubu nesmí shodit odeslání formuláře)
+    var started = "";
+    if (SIM_AUTO_RUN) {
+      try {
+        var run = runSimsOnline_("form:" + ch.name);
+        started = run.ok ? " Sim se právě spouští – za pár minut uvidíš upgrady na stránce Simy." : " Sim proběhne automaticky nejpozději do hodiny.";
+      } catch (err) { started = " Sim proběhne automaticky nejpozději do hodiny."; }
+    } else {
+      started = " Sim proběhne automaticky nejpozději do hodiny a upgrady uvidíš na stránce Simy.";
+    }
     return { ok: true, message: "✅ Uloženo: " + ch.name + " (" + p.spec + "). Ve frontě čeká " + waiting +
-      (waiting === 1 ? " sim." : waiting < 5 ? " simy." : " simů.") + " Sim proběhne automaticky (nejpozději do hodiny) a upgrady uvidíš na stránce Simy." };
+      (waiting === 1 ? " sim." : waiting < 5 ? " simy." : " simů.") + started };
   } catch (err) {
     return { ok: false, message: "⚠ Chyba: " + err.message };
   } finally {
@@ -2538,6 +2548,8 @@ var GITHUB_BRANCH = "main";
 var GITHUB_TOKEN_PROP = "GITHUB_TOKEN";
 var SIM_RUN_PASSWORD_PROP = "SIM_RUN_PASSWORD";
 var SIM_RUN_COOLDOWN_SEC = 120;
+var SIM_AUTO_RUN = true;              // odeslání SimC z formuláře rovnou spustí runner v GitHub Actions
+var SIM_RUN_DELAY_MIN = 3;            // když běží cooldown, spustí se odloženě za N minut (time-based trigger)
 
 function setGithubToken() {
   var ui = SpreadsheetApp.getUi();
@@ -2582,10 +2594,35 @@ function runSimsOnline_(reason) {
   var pending = sh ? countPendingSims_(sh) : 0;
   if (!pending) return { ok: true, message: "Fronta je prázdná – není co simovat." };
   var cache = CacheService.getScriptCache();
-  if (cache.get("simrun_last")) return { ok: true, message: "Simy už byly spuštěny před chvílí – počkej, výsledky dorazí." };
+  if (cache.get("simrun_last")) {
+    // někdo spustil před chvílí – GitHub by běžící/čekající run jen nahradil; naplánuj odložený start,
+    // aby se vzaly i řádky přidané během běhu
+    scheduleDelayedSimRun_();
+    return { ok: true, message: "Simy už běží – tvůj řádek se vezme v dalším kole za " + SIM_RUN_DELAY_MIN + " minuty." };
+  }
   var r = triggerSimRunner_(reason);
   if (r.ok) { cache.put("simrun_last", "1", SIM_RUN_COOLDOWN_SEC); r.message = pending + " ve frontě. " + r.message; }
   return r;
+}
+
+/** Jednorázový time-based trigger (jen jeden najednou). */
+function scheduleDelayedSimRun_() {
+  var exists = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "runSimsDelayed"; });
+  if (exists) return;
+  ScriptApp.newTrigger("runSimsDelayed").timeBased().after(SIM_RUN_DELAY_MIN * 60 * 1000).create();
+}
+
+/** Handler odloženého startu – smaže sebe a spustí runner, pokud je co simovat. */
+function runSimsDelayed() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === "runSimsDelayed") ScriptApp.deleteTrigger(t);
+  });
+  var sh = simSheet_();
+  if (!sh || !countPendingSims_(sh)) return;
+  var cache = CacheService.getScriptCache();
+  if (cache.get("simrun_last")) { scheduleDelayedSimRun_(); return; }
+  var r = triggerSimRunner_("delayed");
+  if (r.ok) cache.put("simrun_last", "1", SIM_RUN_COOLDOWN_SEC);
 }
 
 /** Menu Simy → Spustit simy online (GitHub). */

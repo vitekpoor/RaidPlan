@@ -177,6 +177,8 @@ def cmd_setup(cfg):
 class SheetApi:
     def __init__(self, cfg):
         if not cfg["webapp_url"] or not cfg["token"]:
+            if os.environ.get("GITHUB_ACTIONS"):
+                sys.exit("Chybí secrets SIM_WEBAPP_URL / SIM_API_TOKEN – repo → Settings → Secrets and variables → Actions → New repository secret.")
             sys.exit("Není nastavené URL/token – spusť: python sim_runner.py setup")
         self.url = cfg["webapp_url"]
         self.token = cfg["token"]

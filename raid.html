@@ -73,14 +73,14 @@ body {
 .wrap { max-width: 62rem; margin: 0 auto; }
 .mono { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
 
-header { padding: 3.5rem 0 2rem; border-bottom: 1px solid var(--line); }
+header { padding: .4rem 0 1rem; }
 .eyebrow {
   text-transform: uppercase; letter-spacing: .18em; font-size: .72rem;
   color: var(--gold); font-weight: 600; margin: 0 0 .6rem;
 }
 h1 {
   font-family: "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 600;
+  font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 600;
   margin: 0 0 .5rem; letter-spacing: .01em; text-wrap: balance;
 }
 
@@ -249,23 +249,22 @@ th {
 td { padding: .55rem .9rem; border-bottom: 1px solid var(--line); }
 tr:last-child td { border-bottom: none; }
 
-.bossnav {
-  position: sticky; top: 0; z-index: 10; background: var(--ground);
-  display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 0 .75rem;
-  border-bottom: 1px solid var(--line); margin-bottom: .5rem;
+/* --- společná horní lišta (stejná na všech stránkách) --- */
+.sitebar { position: sticky; top: 0; z-index: 20; background: var(--ground); border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+.topnav, .subnav, .bossnav { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.topnav { padding: .6rem 0; }
+.subnav, .bossnav { padding: .5rem 0 .65rem; border-top: 1px solid var(--line); }
+.topnav .brand { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 600; font-size: 1.1rem; color: var(--gold); text-decoration: none; margin-right: .5rem; letter-spacing: .01em; }
+.topnav a:not(.brand), .subnav a, .subnav button, .bossnav a {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: .28rem .8rem;
+  font-size: .82rem; color: var(--ink); text-decoration: none; white-space: nowrap; cursor: pointer; font-family: inherit;
 }
-.bossnav a {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-  padding: .28rem .8rem; font-size: .82rem; color: var(--ink);
-  text-decoration: none; white-space: nowrap;
-}
-.bossnav a:hover { border-color: var(--jade); }
-.bossnav a.active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
-.bossnav a.home { border-color: var(--gold); }
-.bossnav a.home.active { color: var(--gold); background: var(--surface2); }
-.bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
+.topnav a:not(.brand):hover, .subnav a:hover, .subnav button:hover, .bossnav a:hover { border-color: var(--jade); }
+.topnav a.active, .subnav .active, .bossnav a.active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
+.topnav a.ext { border-color: var(--gold); }
+.topnav .grow, .subnav .grow, .bossnav .grow { flex: 1; }
+.subnav .sep, .bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
 .bossnav a.lair { border-color: var(--gold); }
-.bossnav a.lair:hover { border-color: var(--gold); }
 .bossnav a.lair.active { border-color: var(--gold); color: var(--gold); background: var(--surface2); }
 footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
 footer p { color: var(--muted); font-size: .82rem; }
@@ -276,14 +275,18 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 <body>
 
 <div class="wrap">
-<header>
-  <p class="eyebrow" id="page-eyebrow">Midnight · Patch 12.1 · Raid 2. sezóny</p>
-  <h1 id="page-title">The Venomous Abyss</h1>
-  </header>
-
+<div class="sitebar">
+<nav class="topnav">
+  <a href="index.html" class="brand">Eternal Shadows</a>
+  <a href="index.html#omluvenky">Omluvenky</a>
+  <a href="index.html#simc">SimC</a>
+  <a href="loot.html">Simy</a>
+  <a href="raid.html" class="active">Raid taktiky</a>
+  <span class="grow"></span>
+  <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" class="ext" target="_blank" rel="noopener">Tabulka ↗</a>
+  <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" class="ext" target="_blank" rel="noopener">wowaudit ↗</a>
+</nav>
 <nav class="bossnav">
-  <a href="index.html" class="home">← Hlavní stránka</a>
-  <span class="sep" aria-hidden="true"></span>
   <a href="#boss-1">I · Nek'zali</a>
   <a href="#boss-2">II · Sentinels</a>
   <a href="#boss-3">III · Vashnik</a>
@@ -294,9 +297,13 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   <a href="#boss-8">VIII · Ula'tek</a>
   <span class="sep" aria-hidden="true"></span>
   <a href="#boss-9" class="lair">Lair · Nymrissa</a>
-  <span class="sep" aria-hidden="true"></span>
-  <a href="loot.html" class="home" title="Upgrady z Raidbots / QE Live simů podle hráče a bosse">Loot simy</a>
 </nav>
+</div>
+
+<header>
+  <p class="eyebrow" id="page-eyebrow">Midnight · Patch 12.1 · Raid 2. sezóny</p>
+  <h1 id="page-title">The Venomous Abyss</h1>
+</header>
 
 
 <div class="view-home">

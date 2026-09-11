@@ -33,28 +33,27 @@ img,svg { max-width: 100%; }
 }
 body { background: var(--ground); color: var(--ink); font-family: "Segoe UI", -apple-system, sans-serif; line-height: 1.5; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 1.2rem 1.2rem 3rem; }
-header .eyebrow { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .14em; margin: 0 0 .3rem; }
 h1 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 500; font-size: 2rem; margin: 0 0 .4rem; color: var(--gold); }
 h2 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 500; font-size: 1.35rem; margin: 1.6rem 0 .6rem; color: var(--jade); }
-.lead { color: var(--muted); margin: 0 0 1rem; font-size: .92rem; }
+.lead { color: var(--muted); margin: -.2rem 0 .9rem; font-size: .88rem; }
 .mono { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
 a { color: var(--jade); }
 
-.bossnav {
-  position: sticky; top: 0; z-index: 10; background: var(--ground);
-  display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 0 .75rem; align-items: center;
-  border-bottom: 1px solid var(--line); margin-bottom: .8rem;
+/* --- společná horní lišta (stejná na všech stránkách) --- */
+.sitebar { position: sticky; top: 0; z-index: 20; background: var(--ground); border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+.topnav, .subnav { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.topnav { padding: .6rem 0; }
+.subnav { padding: .5rem 0 .65rem; border-top: 1px solid var(--line); }
+.topnav .brand { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 600; font-size: 1.1rem; color: var(--gold); text-decoration: none; margin-right: .5rem; letter-spacing: .01em; }
+.topnav a:not(.brand), .subnav a, .subnav button {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: .28rem .8rem;
+  font-size: .82rem; color: var(--ink); text-decoration: none; white-space: nowrap; cursor: pointer; font-family: inherit;
 }
-.bossnav a, .bossnav button {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-  padding: .28rem .8rem; font-size: .82rem; color: var(--ink); cursor: pointer;
-  text-decoration: none; white-space: nowrap; font-family: inherit;
-}
-.bossnav a:hover, .bossnav button:hover { border-color: var(--jade); }
-.bossnav .active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
-.bossnav a.home { border-color: var(--gold); }
-.bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
-.bossnav .grow { flex: 1; }
+.topnav a:not(.brand):hover, .subnav a:hover, .subnav button:hover { border-color: var(--jade); }
+.topnav a.active, .subnav .active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
+.topnav a.ext { border-color: var(--gold); }
+.topnav .grow, .subnav .grow { flex: 1; }
+.subnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
 
 .controls { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; margin: 0 0 1rem; font-size: .86rem; color: var(--muted); }
 .controls label { display: inline-flex; align-items: center; gap: .35rem; }
@@ -119,23 +118,27 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
 </head>
 <body>
 <div class="wrap">
-<header>
-  <p class="eyebrow">Eternal Shadows · Midnight sezóna 2 · Mythic</p>
-  <h1>Loot simy</h1>
-  <p class="lead">Upgrady z Raidbots Droptimizeru (DPS) a QE Live (healeři) pro každou postavu – itemy počítané jako plně upgradnuté (Myth 6/6),
-     takže i lidem s vytočeným kusem ukáže, jestli se jim boss item vyplatí. Data se berou živě z listu „Sim výsledky“, poslední sim postavy vždy nahrazuje starší.</p>
-</header>
-
-<nav class="bossnav">
-  <a href="index.html" class="home">← Hlavní stránka</a>
+<div class="sitebar">
+<nav class="topnav">
+  <a href="index.html" class="brand">Eternal Shadows</a>
+  <a href="index.html#omluvenky">Omluvenky</a>
+  <a href="index.html#simc">SimC</a>
+  <a href="loot.html" class="active">Simy</a>
   <a href="raid.html">Raid taktiky</a>
-  <span class="sep" aria-hidden="true"></span>
+  <span class="grow"></span>
+  <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" class="ext" target="_blank" rel="noopener">Tabulka ↗</a>
+  <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" class="ext" target="_blank" rel="noopener">wowaudit ↗</a>
+</nav>
+<nav class="subnav">
   <button data-view="players" class="active">Podle hráče</button>
   <button data-view="bosses">Podle bosse</button>
   <button data-view="items">Podle itemu</button>
   <span class="grow"></span>
   <span class="status" id="status">Načítám…</span>
+  <button id="refresh" title="Načíst znovu z tabulky">↻</button>
 </nav>
+</div>
+<p class="lead">Itemy jako plně upgradnuté (Myth 6/6). Raidbots pro DPS, QE Live pro healery – procenta obou rolí nesrovnávej mezi sebou.</p>
 
 <div class="controls">
   <span class="seg" id="unitseg">
@@ -149,11 +152,7 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
 
 <div id="view"></div>
 
-<footer>
-  <p>Zdroje: <a href="https://www.raidbots.com/simbot/droptimizer">Raidbots Droptimizer</a> (Patchwerk, 1 cíl, 5 min, Smart Sim high precision, Upgrade up to Myth 6/6) a
-  <a href="https://questionablyepic.com/live/upgradefinder">QE Live Upgrade Finder</a> (Raid Mythic, plný upgrade). Procenta healerů (HPS skóre z QE) a DPS nejsou navzájem srovnatelná – porovnávej v rámci role.
-  Sim si každý pošle přes formulář „Sim pro loot“; raid leader frontu spustí jedním klikem.</p>
-</footer>
+
 </div>
 
 <script>
@@ -205,17 +204,53 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
   }
   function fmtDate(d) { return d ? d.getDate() + "." + (d.getMonth() + 1) + ". " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0") : ""; }
 
-  function load() {
+  // ---- načítání: loot_items.json jednou, list "Sim výsledky" každou minutu + při návratu do záložky ----
+  var REFRESH_MS = 60000;
+  var lastCsv = null, refreshing = false, itemsLoaded = null;
+
+  function loadItems() {
+    if (!itemsLoaded) {
+      itemsLoaded = fetch(ITEMS_URL).then(function (r) { return r.ok ? r.json() : { items: {}, bosses: [] }; })
+        .catch(function () { return { items: {}, bosses: [] }; });
+    }
+    return itemsLoaded;
+  }
+
+  function refresh(manual) {
+    if (refreshing) return;
+    refreshing = true;
     var status = $("#status");
+    if (manual) status.textContent = "Obnovuji…";
     Promise.all([
       fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); }),
-      fetch(ITEMS_URL).then(function (r) { return r.ok ? r.json() : { items: {}, bosses: [] }; })
+      loadItems()
     ]).then(function (res) {
-      var table = parseCsv(res[0]);
+      if (res[0] === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
+      lastCsv = res[0];
+      applyData(res[0], res[1]);
+      render();
+    }).catch(function (err) {
+      status.textContent = "Nepodařilo se načíst data: " + err.message;
+      status.className = "status err";
+      if (!state.rows.length) $("#view").innerHTML = '<p class="empty">Zkontroluj, že list „' + esc(SHEET_TAB) + '“ existuje a tabulka je sdílená pro čtení.</p>';
+    }).then(function () { refreshing = false; });
+  }
+
+  function showStatus() {
+    var latest = null; state.rows.forEach(function (r) { if (r.time && (!latest || r.time > latest)) latest = r.time; });
+    var players = {}; state.rows.forEach(function (r) { players[r.player] = 1; });
+    var status = $("#status");
+    status.textContent = Object.keys(players).length + " postav · " + state.rows.length + " řádků" + (latest ? " · poslední sim " + fmtDate(latest) : "") +
+      " · načteno " + fmtDate(new Date()) + " (obnova každou minutu)";
+    status.className = "status";
+  }
+
+  function applyData(csvText, lib) {
+      var table = parseCsv(csvText);
       var head = table.shift() || [];
       var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
       if (idx["Postava"] == null || idx["Rozdíl %"] == null) throw new Error("list „" + SHEET_TAB + "“ nemá očekávané sloupce (existuje?)");
-      var items = res[1].items || {}, bosses = res[1].bosses || [];
+      var items = lib.items || {}, bosses = lib.bosses || [];
       var bossById = {}; bosses.forEach(function (b) { bossById[String(b.id)] = b; });
       state.items = items; state.bosses = bosses; state.bossById = bossById;
       state.rows = table.filter(function (r) { return r[idx["Postava"]]; }).map(function (r) {
@@ -235,16 +270,7 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
           base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]])
         };
       });
-      var latest = null; state.rows.forEach(function (r) { if (r.time && (!latest || r.time > latest)) latest = r.time; });
-      var players = {}; state.rows.forEach(function (r) { players[r.player] = 1; });
-      status.textContent = Object.keys(players).length + " postav · " + state.rows.length + " řádků" + (latest ? " · aktualizováno " + fmtDate(latest) : "");
-      status.className = "status";
-      render();
-    }).catch(function (err) {
-      status.textContent = "Nepodařilo se načíst data: " + err.message;
-      status.className = "status err";
-      $("#view").innerHTML = '<p class="empty">Zkontroluj, že list „' + esc(SHEET_TAB) + '“ existuje a tabulka je sdílená pro čtení.</p>';
-    });
+      showStatus();
   }
 
   // ---- helpers for values ----
@@ -372,10 +398,10 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
     });
   }
 
-  document.querySelectorAll(".bossnav button[data-view]").forEach(function (b) {
+  document.querySelectorAll(".subnav button[data-view]").forEach(function (b) {
     b.addEventListener("click", function () {
       state.view = b.getAttribute("data-view");
-      document.querySelectorAll(".bossnav button[data-view]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      document.querySelectorAll(".subnav button[data-view]").forEach(function (x) { x.classList.toggle("active", x === b); });
       render();
     });
   });
@@ -391,7 +417,10 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
     });
   });
   ["#minv", "#showneg", "#q"].forEach(function (s) { $(s).addEventListener("input", render); $(s).addEventListener("change", render); });
-  load();
+  $("#refresh").addEventListener("click", function () { refresh(true); });
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") refresh(false); });
+  setInterval(function () { if (document.visibilityState === "visible") refresh(false); }, REFRESH_MS);
+  refresh(true);
 })();
 </script>
 <!-- Wowhead tooltipy (název, staty, efekty jako ve hře) při hoveru na item; odkazy zůstávají naše, jen bez přebarvení -->

@@ -1,8 +1,7 @@
 <!DOCTYPE html>
-<!-- ZDROJ hlavní stránky guildy (rozcestník). build.bat ji kopíruje do kořene repa
-     jako index.html. Raid guide je vedle jako raid.html, loot simy jako loot.html.
-     Formuláře Omluvenky a SimC jsou vložené (iframe) z Apps Script web appu –
-     ta musí mít setXFrameOptionsMode(ALLOWALL), jinak se zobrazí jen odkaz. -->
+<!-- ZDROJ hlavní stránky (rozcestník). build.bat ji kopíruje do kořene repa jako
+     index.html. Formuláře Omluvenky a SimC jsou vložené (iframe) z Apps Script
+     web appu – ta má setXFrameOptionsMode(ALLOWALL). -->
 <html lang="cs">
 <head>
 <meta charset="utf-8">
@@ -29,174 +28,107 @@ img,svg { max-width: 100%; }
   --ink: #1a2420; --muted: #5c6f67; --jade: #2e8663; --gold: #96742a;
   --tank: #2e64a8; --heal: #2c7d4f; --dps: #b04a3a; --mythic: #a85f1c; --callout-bg: #e6efe9;
 }
-body { background: var(--ground); color: var(--ink); font-family: "Segoe UI", -apple-system, sans-serif; line-height: 1.55; padding: 0 1.25rem 4rem; }
+body { background: var(--ground); color: var(--ink); font-family: "Segoe UI", -apple-system, sans-serif; line-height: 1.55; padding: 0 1.25rem 3rem; }
 .wrap { max-width: 62rem; margin: 0 auto; }
-header { padding: 3rem 0 1.5rem; border-bottom: 1px solid var(--line); }
-.eyebrow { text-transform: uppercase; letter-spacing: .18em; font-size: .72rem; color: var(--gold); font-weight: 600; margin: 0 0 .6rem; }
-h1 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 600; margin: 0 0 .5rem; letter-spacing: .01em; }
-.lead { color: var(--muted); margin: 0; max-width: 46rem; }
-h2 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; font-weight: 600; margin: 2rem 0 .8rem; }
+h2 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.4rem; font-weight: 600; margin: .4rem 0 .8rem; }
 a { color: var(--jade); }
 
-.bossnav {
-  position: sticky; top: 0; z-index: 10; background: var(--ground);
-  display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 0 .75rem; align-items: center;
-  border-bottom: 1px solid var(--line); margin-bottom: .5rem;
+/* --- společná horní lišta (stejná na všech stránkách) --- */
+.sitebar { position: sticky; top: 0; z-index: 20; background: var(--ground); border-bottom: 1px solid var(--line); margin-bottom: 1.2rem; }
+.topnav, .subnav { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.topnav { padding: .6rem 0; }
+.subnav { padding: .5rem 0 .65rem; border-top: 1px solid var(--line); }
+.topnav .brand { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 600; font-size: 1.1rem; color: var(--gold); text-decoration: none; margin-right: .5rem; letter-spacing: .01em; }
+.topnav a:not(.brand), .subnav a, .subnav button {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: .28rem .8rem;
+  font-size: .82rem; color: var(--ink); text-decoration: none; white-space: nowrap; cursor: pointer; font-family: inherit;
 }
-.bossnav a {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-  padding: .28rem .8rem; font-size: .82rem; color: var(--ink); text-decoration: none; white-space: nowrap;
-}
-.bossnav a:hover { border-color: var(--jade); }
-.bossnav a.active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
-.bossnav a.ext { border-color: var(--gold); }
-.bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
+.topnav a:not(.brand):hover, .subnav a:hover, .subnav button:hover { border-color: var(--jade); }
+.topnav a.active, .subnav .active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
+.topnav a.ext { border-color: var(--gold); }
+.topnav .grow, .subnav .grow { flex: 1; }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin-top: 1.2rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin-top: .4rem; }
 .card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1.25rem 1.4rem 1.3rem;
-  display: flex; flex-direction: column; gap: .5rem; text-decoration: none; color: inherit; transition: border-color .15s;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1.2rem 1.3rem;
+  display: flex; flex-direction: column; gap: .4rem; text-decoration: none; color: inherit; transition: border-color .15s;
 }
 .card:hover { border-color: var(--jade); }
-.card .ico { font-size: 1.6rem; line-height: 1; }
-.card h3 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.3rem; font-weight: 600; margin: 0; color: var(--gold); }
-.card p { margin: 0; color: var(--muted); font-size: .9rem; flex: 1; }
-.card .go { color: var(--jade); font-size: .88rem; font-weight: 600; }
-
-.links { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
-.links a {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: .45rem .9rem;
-  text-decoration: none; color: var(--ink); font-size: .88rem;
-}
-.links a:hover { border-color: var(--gold); }
-.links a small { color: var(--muted); display: block; font-size: .75rem; }
+.card .ico { font-size: 1.5rem; line-height: 1; }
+.card h3 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--gold); }
+.card p { margin: 0; color: var(--muted); font-size: .88rem; }
 
 .section { display: none; }
 .section.show { display: block; }
-.callout { background: var(--callout-bg); border: 1px solid var(--line); border-left: 3px solid var(--jade); border-radius: 6px; padding: .8rem 1rem; font-size: .9rem; margin: 0 0 1rem; }
-.callout ol { margin: .3rem 0 0 1.1rem; padding: 0; }
-.callout code { font-family: Consolas, "Cascadia Mono", monospace; background: var(--surface); padding: .05rem .35rem; border-radius: 4px; }
+.steps { color: var(--muted); font-size: .9rem; margin: 0 0 .9rem; }
+.steps code { font-family: Consolas, "Cascadia Mono", monospace; background: var(--surface); padding: .05rem .35rem; border-radius: 4px; color: var(--ink); }
 .frame { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .frame iframe { display: block; width: 100%; height: 680px; border: 0; background: transparent; }
 .framenote { color: var(--muted); font-size: .8rem; margin: .5rem 0 0; }
-.leader { margin-top: 1.4rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: .9rem 1rem; font-size: .9rem; display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; align-items: center; }
-.leader > div { flex: 1 1 22rem; color: var(--muted); }
-.leader strong { color: var(--ink); }
-.leader form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-.leader input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: .4rem .6rem; font: inherit; width: 9rem; }
-.leader button { background: var(--callout-bg); color: var(--jade); border: 1px solid var(--jade); border-radius: 999px; padding: .4rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
+.leader { margin-top: 1.2rem; display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; font-size: .86rem; color: var(--muted); }
+.leader input { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: .35rem .6rem; font: inherit; width: 9rem; }
+.leader button { background: var(--callout-bg); color: var(--jade); border: 1px solid var(--jade); border-radius: 999px; padding: .35rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
 .leader button:disabled { opacity: .6; cursor: wait; }
-.leader .framenote { margin: 0; flex-basis: 100%; }
-footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; color: var(--muted); font-size: .82rem; }
 </style>
 </head>
 <body>
 <div class="wrap">
-<header>
-  <p class="eyebrow">Eternal Shadows · Burning Blade EU · Midnight sezóna 2</p>
-  <h1>Eternal Shadows</h1>
-  <p class="lead">Rozcestník guildy: omluvenky z raidu, simy pro loot, přehled upgradů a taktiky na bossy. Vše na jednom místě, data živě z guildovní tabulky.</p>
-</header>
 
-<nav class="bossnav">
-  <a href="#" data-sec="home" class="active">Přehled</a>
+<div class="sitebar">
+<nav class="topnav">
+  <a href="index.html" class="brand">Eternal Shadows</a>
   <a href="#omluvenky" data-sec="omluvenky">Omluvenky</a>
   <a href="#simc" data-sec="simc">SimC</a>
   <a href="loot.html">Simy</a>
   <a href="raid.html">Raid taktiky</a>
-  <span class="sep" aria-hidden="true"></span>
+  <span class="grow"></span>
   <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" class="ext" target="_blank" rel="noopener">Tabulka ↗</a>
   <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" class="ext" target="_blank" rel="noopener">wowaudit ↗</a>
 </nav>
+</div>
 
 <section class="section show" id="sec-home">
   <div class="grid">
-    <a class="card" href="#omluvenky">
-      <span class="ico">📅</span>
-      <h3>Omluvenky</h3>
-      <p>Nemůžeš na raid nebo přijdeš pozdě? Nahlaš to tady – zapíše se do přehledu absencí i do sestav na bossy.</p>
-      <span class="go">Nahlásit absenci →</span>
-    </a>
-    <a class="card" href="#simc">
-      <span class="ico">🧪</span>
-      <h3>SimC</h3>
-      <p>Pošli SimC string z addonu. Raid leader spustí Droptimizer / QE Live a výsledek se objeví ve wowaudit a v Simech.</p>
-      <span class="go">Poslat SimC string →</span>
-    </a>
-    <a class="card" href="loot.html">
-      <span class="ico">📈</span>
-      <h3>Simy</h3>
-      <p>Kdo chce co z kterého bosse a o kolik je to upgrade – podle hráče, bosse i itemu, počítáno jako plně upgradnuté kusy.</p>
-      <span class="go">Otevřít přehled upgradů →</span>
-    </a>
-    <a class="card" href="raid.html">
-      <span class="ico">⚔️</span>
-      <h3>Raid taktiky</h3>
-      <p>The Venomous Abyss a Nymrissa: taktiky na všechny bosse, kill order, pozice a odkazy na plány v RaidPlanu.</p>
-      <span class="go">Otevřít taktiky →</span>
-    </a>
-  </div>
-
-  <h2>Odkazy</h2>
-  <div class="links">
-    <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Guildovní tabulka <small>Roster · Wishlist · Absence přehled · Boss sestavy · Sim fronta</small></a>
-    <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" target="_blank" rel="noopener">wowaudit <small>tým, wishlisty, loot history</small></a>
-    <a href="https://www.raidbots.com/simbot/droptimizer" target="_blank" rel="noopener">Raidbots Droptimizer <small>když si chceš sim pustit sám</small></a>
-    <a href="https://questionablyepic.com/live/upgradefinder" target="_blank" rel="noopener">QE Live <small>upgrade finder pro healery</small></a>
+    <a class="card" href="#omluvenky"><span class="ico">📅</span><h3>Omluvenky</h3><p>Nahlásit absenci nebo pozdní příchod.</p></a>
+    <a class="card" href="#simc"><span class="ico">🧪</span><h3>SimC</h3><p>Poslat SimC string – sim proběhne sám.</p></a>
+    <a class="card" href="loot.html"><span class="ico">📈</span><h3>Simy</h3><p>Upgrady podle hráče, bosse a itemu.</p></a>
+    <a class="card" href="raid.html"><span class="ico">⚔️</span><h3>Raid taktiky</h3><p>Venomous Abyss a Nymrissa.</p></a>
   </div>
 </section>
 
 <section class="section" id="sec-omluvenky">
   <h2>Omluvenky</h2>
-  <div class="callout">Vyber svoje jméno, datum (nebo rozsah) a typ. Absence se hned propíše do listu „Absence přehled“ a označí tě v sestavách na bossy pro daný den.</div>
   <div class="frame"><iframe data-src="__WEBAPP__" title="Formulář absence" loading="lazy"></iframe></div>
-  <p class="framenote">Nezobrazuje se formulář? <a href="__WEBAPP__" target="_blank" rel="noopener">Otevři ho ve vlastním okně ↗</a></p>
+  <p class="framenote"><a href="__WEBAPP__" target="_blank" rel="noopener">Otevřít formulář ve vlastním okně ↗</a></p>
 </section>
 
 <section class="section" id="sec-simc">
-  <h2>SimC string pro loot</h2>
-  <div class="callout">
-    Jak na to:
-    <ol>
-      <li>Ve hře měj nainstalovaný addon <a href="https://www.curseforge.com/wow/addons/simulationcraft" target="_blank" rel="noopener">SimulationCraft</a> a buď v gearu, ve kterém raiduješ (loot spec podle toho, na co chceš loot).</li>
-      <li>Napiš <code>/simc</code>, v okně stiskni <code>Ctrl+A</code>, <code>Ctrl+C</code>.</li>
-      <li>Vlož string do formuláře níže a odešli. Nic dalšího nastavovat nemusíš.</li>
-    </ol>
-    Raid leader frontu spustí (Droptimizer pro DPS/tanky, QE Live pro healery, itemy jako plně upgradnuté). Výsledek uvidíš ve <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows/loot/characters" target="_blank" rel="noopener">wowaudit</a> a v <a href="loot.html">Simech</a>. Nový string vždy nahradí ten předchozí.
-  </div>
+  <h2>SimC</h2>
+  <p class="steps">Addon <a href="https://www.curseforge.com/wow/addons/simulationcraft" target="_blank" rel="noopener">SimulationCraft</a> → ve hře <code>/simc</code> → <code>Ctrl+A</code>, <code>Ctrl+C</code> → vložit sem. Sim proběhne sám, výsledek je v <a href="loot.html">Simech</a>.</p>
   <div class="frame"><iframe data-src="__WEBAPP__?p=sim" title="Formulář SimC" loading="lazy"></iframe></div>
-  <p class="framenote">Nezobrazuje se formulář? <a href="__WEBAPP__?p=sim" target="_blank" rel="noopener">Otevři ho ve vlastním okně ↗</a></p>
-
-  <div class="leader">
-    <div>
-      <strong>Pro raid leadera:</strong> fronta se simuje automaticky každou hodinu (GitHub Actions). Nechceš čekat? Zadej heslo a spusť ji hned.
-    </div>
-    <form id="runsims">
-      <input type="password" id="runpw" placeholder="heslo" autocomplete="current-password" required>
-      <button type="submit">Spustit simy teď</button>
-      <span id="runmsg" class="framenote"></span>
-    </form>
-  </div>
+  <p class="framenote"><a href="__WEBAPP__?p=sim" target="_blank" rel="noopener">Otevřít formulář ve vlastním okně ↗</a></p>
+  <form class="leader" id="runsims">
+    <span>Raid leader:</span>
+    <input type="password" id="runpw" placeholder="heslo" autocomplete="current-password" required>
+    <button type="submit">Spustit simy teď</button>
+    <span id="runmsg"></span>
+  </form>
 </section>
 
-<footer>
-  <p>Eternal Shadows · Burning Blade EU. Taktiky, simy a formuláře spravuje raid leader; data jsou v <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">guildovní tabulce</a>.</p>
-</footer>
 </div>
 
 <script>
 (function () {
   var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";
-  // doplnit URL web appu do iframů a záložních odkazů
   document.querySelectorAll("iframe[data-src], a[href^='__WEBAPP__']").forEach(function (el) {
     var attr = el.tagName === "IFRAME" ? "data-src" : "href";
     el.setAttribute(attr, el.getAttribute(attr).replace("__WEBAPP__", WEBAPP));
   });
-  var nav = document.querySelectorAll(".bossnav a[data-sec]");
+  var nav = document.querySelectorAll(".topnav a[data-sec]");
   var secs = { home: "sec-home", omluvenky: "sec-omluvenky", simc: "sec-simc" };
   function route() {
     var h = location.hash.replace("#", "");
-    // staré odkazy na taktiky (…/RaidPlan/#boss-N) vedou teď na raid.html
+    // staré odkazy na taktiky (…/RaidPlan/#boss-N) vedou na raid.html
     if (/^boss-\d$/.test(h)) { location.replace("raid.html#" + h); return; }
     if (!secs[h]) h = "home";
     Object.keys(secs).forEach(function (k) {
@@ -210,7 +142,7 @@ footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.2
   window.addEventListener("hashchange", route);
   route();
 
-  // tlačítko raid leadera: POST { p: "runsims", pw } na web app -> GitHub Actions workflow_dispatch
+  // raid leader: POST { p: "runsims", pw } -> web app -> GitHub Actions workflow_dispatch
   var form = document.getElementById("runsims");
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
@@ -219,7 +151,7 @@ footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.2
     fetch(WEBAPP, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ p: "runsims", pw: pw.value }), redirect: "follow" })
       .then(function (r) { return r.json(); })
       .then(function (j) { msg.textContent = (j.ok ? "✅ " : "⚠ ") + (j.message || ""); if (j.ok) pw.value = ""; })
-      .catch(function (err) { msg.textContent = "⚠ Nepodařilo se spojit s web appem: " + err.message; })
+      .catch(function (err) { msg.textContent = "⚠ Web app neodpověděl: " + err.message; })
       .then(function () { btn.disabled = false; });
   });
 })();
