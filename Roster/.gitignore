@@ -3,3 +3,11 @@
 splits_proposal.*
 *.xlsx
 __pycache__/
+# wowaudit exports (generated from the team API, contain player data)
+wowaudit_*.csv
+wowaudit_report.html
+wowaudit_*.json
+# sim_runner.py: Raidbots login profile, web-app token, debug screenshots
+.raidbots_profile/
+sim_runner.config.json
+sim_runner_logs/

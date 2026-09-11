@@ -1285,8 +1285,14 @@ function findAbsencePlayerRow_(ov, player, roster) {
 // Po každé změně kódu: Nasadit → Spravovat nasazení → ✏️ → Verze: Nová
 // verze → Nasadit (URL zůstává stejná).
 
-/** GET = servíruj formulář. Jména hráčů se vkládají ze serveru (Roster). */
-function doGet() {
+/**
+ * GET = servíruj formulář. Jména hráčů se vkládají ze serveru (Roster).
+ * Stejná web app obsluhuje i sim frontu: URL …/exec?p=sim (viz SIM FRONTA).
+ */
+function doGet(e) {
+  var page = e && e.parameter ? String(e.parameter.p || "") : "";
+  if (page === "sim") return simFormPage_();
+  if (page === "simapi") return simApi_(e);
   var roster = getRoster_() || [];
   var names = roster.map(function (p) { return p.player; });
   var html = ABSENCE_FORM_HTML_
@@ -1625,4 +1631,851 @@ function applyClassDropdowns() {
   SpreadsheetApp.getUi().alert(
     "Hotovo: " + applied + " buněk s dropdownem.\n" +
     (unknown.length ? "Neznámé jméno (přidej do PLAYER_CLASS): " + unknown.join(", ") : "Všechna jména rozpoznána."));
+}
+
+// ================== SIM FRONTA (SimC string -> Raidbots Droptimizer -> wowaudit) ==================
+//
+// Hráč neumí/nechce nastavovat Raidbots, tak pošle jen SimC string z addonu
+// (/simc ve hře) přes webový formulář …/exec?p=sim. Řádek skončí v listu
+// "Sim fronta". Raid leader v Sheets otevře menu Simy → Zpracovat frontu:
+// dialog mu SimC zkopíruje do schránky, otevře Raidbots Droptimizer a po
+// vložení odkazu na hotový report ho nahraje do wowaudit přes API
+// (POST /v1/wishlists) pro správnou postavu. Odkaz jde vložit i přímo do
+// sloupce "Report URL" – instalovatelný onEdit trigger udělá to samé.
+//
+// Jednorázové nastavení (vlastník, v editoru Apps Script):
+//   1. setWowauditApiKey()   – uloží API klíč týmu (wowaudit → Settings → API)
+//                              do Script Properties (nikdy ne do kódu).
+//   2. buildSimSheet()       – založí list "Sim fronta".
+//   3. installSimTrigger()   – onEdit trigger pro ruční vložení Report URL.
+//   4. Nasadit web app (viz ABSENCE WEB APP) – formulář je na …/exec?p=sim.
+//
+// Nastavení Raidbots je vypsané v dialogu (a v SIM_RAIDBOTS_STEPS níže);
+// odpovídá referenčnímu reportu 96x39Cpcgyn2Tmneq7G6ht: Season 2 Raids,
+// Mythic, Patchwerk, 1 cíl, 5 minut, výchozí raid buffy a consumables,
+// Smart Sim (high precision).
+
+var SIM_SHEET_NAME = "Sim fronta";
+var SIM_HEADER = ["Čas", "Postava", "Spec", "SimC string", "Report URL", "Stav", "Poznámka", "wowaudit ID"];
+var SIM_COL = { time: 1, character: 2, spec: 3, simc: 4, report: 5, status: 6, note: 7, id: 8 };
+var SIM_STATUS = { pending: "⏳ čeká na sim", running: "🔄 simuluje", done: "✅ ve wowaudit", error: "⚠ chyba", dropped: "❌ zahozeno" };
+var SIM_STATUS_BG = { "⏳ čeká na sim": "#FFF2CC", "🔄 simuluje": "#CFE2F3", "✅ ve wowaudit": "#D9EAD3", "⚠ chyba": "#F4CCCC", "❌ zahozeno": "#EFEFEF" };
+var SIM_MAX_SIMC = 200000;         // pojistka na velikost vstupu (SimC export má ~10–20 kB)
+
+var WOWAUDIT_API = "https://api.wowaudit.com/v1";
+var WOWAUDIT_KEY_PROP = "WOWAUDIT_API_KEY";
+var WOWAUDIT_CHARS_CACHE = "wowaudit_characters_v1";
+var WOWAUDIT_CHARS_TTL = 6 * 3600;  // CacheService maximum
+var WOWAUDIT_REPLACE_MANUAL = false; // true = sim přepíše ruční úpravy hráče ve wowaudit
+
+var RAIDBOTS_DROPTIMIZER_URL = "https://www.raidbots.com/simbot/droptimizer";
+var SIM_RAIDBOTS_STEPS = [
+  "Vlož SimC string do pole „SimC Addon“ (ne Armory).",
+  "Source: Raids → „Season 2 Raids“ (The Venomous Abyss + Tidebound Grotto), Difficulty: Mythic.",
+  "Fight: Patchwerk, 1 cíl (1 boss), délka 5 minut (300 s).",
+  "Buffs & consumables nechat výchozí (všechny raid buffy zapnuté, Bloodlust ano, Power Infusion ne, výchozí potion/food/flask).",
+  "Smart Sim: zapnuto, High precision: zapnuto.",
+  "Run Droptimizer → po dokončení zkopíruj URL reportu (…/simbot/report/XXXX) a vlož ho sem.",
+  "Healeři: místo Raidbots použij QE Live Upgrade Finder (questionablyepic.com/live/upgradefinder) – Import → SimC string, Raid: Mythic, Generate → zkopíruj odkaz reportu a vlož ho sem stejně."
+];
+var QE_UPGRADE_FINDER_URL = "https://questionablyepic.com/live/upgradefinder";
+
+/* ---------- wowaudit API ---------- */
+
+/** Jednorázově: uloží API klíč týmu do Script Properties (prompt v Sheets). */
+function setWowauditApiKey() {
+  var ui = SpreadsheetApp.getUi();
+  var res = ui.prompt("wowaudit API klíč",
+    "Vlož API klíč týmu (wowaudit → tým → Settings → API). Uloží se do Script Properties, ne do kódu.",
+    ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  var key = res.getResponseText().trim();
+  if (!/^[0-9a-f]{40,}$/i.test(key)) { ui.alert("To nevypadá jako wowaudit API klíč (hex řetězec)."); return; }
+  PropertiesService.getScriptProperties().setProperty(WOWAUDIT_KEY_PROP, key);
+  CacheService.getScriptCache().remove(WOWAUDIT_CHARS_CACHE);
+  var chars = wowauditCharacters_(true);
+  ui.alert("Klíč uložen. wowaudit vrátil " + chars.length + " postav: " +
+    chars.map(function (c) { return c.name; }).join(", "));
+}
+
+function wowauditKey_() {
+  var key = PropertiesService.getScriptProperties().getProperty(WOWAUDIT_KEY_PROP);
+  if (!key) throw new Error("Chybí wowaudit API klíč – spusť setWowauditApiKey().");
+  return key;
+}
+
+/** HTTP volání wowaudit API. Vrací { code, body(text), json(objekt|null) }. */
+function wowauditFetch_(path, method, payload) {
+  var opts = {
+    method: method || "get",
+    headers: { "Authorization": "Bearer " + wowauditKey_(), "Accept": "application/json" },
+    muteHttpExceptions: true
+  };
+  if (payload) { opts.contentType = "application/json"; opts.payload = JSON.stringify(payload); }
+  var resp = UrlFetchApp.fetch(WOWAUDIT_API + path, opts);
+  var body = resp.getContentText();
+  var json = null;
+  try { json = JSON.parse(body); } catch (err) { /* text */ }
+  return { code: resp.getResponseCode(), body: body, json: json };
+}
+
+/**
+ * Seznam postav týmu ve wowaudit [{id, name, realm, cls, role}], seřazený
+ * podle jména. Cache 6 h (formulář se otevírá často); force = obnovit.
+ */
+function wowauditCharacters_(force) {
+  var cache = CacheService.getScriptCache();
+  if (!force) {
+    var hit = cache.get(WOWAUDIT_CHARS_CACHE);
+    if (hit) return JSON.parse(hit);
+  }
+  var r = wowauditFetch_("/characters", "get");
+  if (r.code !== 200 || !Array.isArray(r.json)) {
+    throw new Error("wowaudit /characters vrátil HTTP " + r.code + ": " + r.body.slice(0, 200));
+  }
+  var chars = r.json.map(function (c) {
+    return { id: c.id, name: String(c.name || ""), realm: String(c.realm || ""),
+             cls: String(c["class"] || ""), role: String(c.role || "") };
+  }).sort(function (a, b) { return a.name.localeCompare(b.name, "cs"); });
+  cache.put(WOWAUDIT_CHARS_CACHE, JSON.stringify(chars), WOWAUDIT_CHARS_TTL);
+  return chars;
+}
+
+/** Menu: vynutí nové načtení postav z wowaudit (po přidání hráče do týmu). */
+function refreshWowauditCharacters() {
+  var chars = wowauditCharacters_(true);
+  SpreadsheetApp.getUi().alert("Načteno " + chars.length + " postav z wowaudit:\n" +
+    chars.map(function (c) { return c.name + " (" + c.cls + ")"; }).join("\n"));
+}
+
+/* ---------- list Sim fronta ---------- */
+
+function simSheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SIM_SHEET_NAME);
+}
+
+/** Jednorázově založí list "Sim fronta" (idempotentní – existující data nechá). */
+function buildSimSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = simSheet_();
+  if (!sh) sh = ss.insertSheet(SIM_SHEET_NAME);
+  sh.getRange(1, 1, 1, SIM_HEADER.length).setValues([SIM_HEADER])
+    .setFontWeight("bold").setBackground("#24322C").setFontColor("#FFFFFF");
+  sh.setFrozenRows(1);
+  var widths = [130, 130, 110, 260, 300, 120, 260, 90];
+  widths.forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+  sh.getRange(1, 1, Math.max(sh.getMaxRows(), 2), SIM_HEADER.length)
+    .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP).setVerticalAlignment("middle");
+  sh.getRange(2, SIM_COL.time, sh.getMaxRows() - 1, 1).setNumberFormat("d.M.yyyy H:mm");
+  sh.getRange(1, SIM_COL.simc).setNote("Celý SimC string – kopíruj přes menu Simy → Zpracovat frontu " +
+    "(Ctrl+C z buňky s víceřádkovým textem přidá uvozovky).");
+  sh.getRange(1, SIM_COL.report).setNote("Sem stačí vložit odkaz na hotový Raidbots report – trigger ho nahraje do wowaudit.");
+  SpreadsheetApp.getUi().alert("List „" + SIM_SHEET_NAME + "“ je připravený.\n" +
+    "Nezapomeň: setWowauditApiKey(), installSimTrigger() a nasadit web app (formulář …/exec?p=sim).");
+}
+
+/** Instalovatelný onEdit trigger pro ruční vložení Report URL (nahradí starý). */
+function installSimTrigger() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === "onSimEdit") { ScriptApp.deleteTrigger(t); n++; }
+  });
+  ScriptApp.newTrigger("onSimEdit").forSpreadsheet(ss).onEdit().create();
+  SpreadsheetApp.getUi().alert("Trigger onSimEdit nainstalován" + (n ? " (starý nahrazen)." : "."));
+}
+
+/** Menu Simy v Sheets. (Jednoduchý onOpen – běží pro každého, ale menu je jen kosmetika.) */
+function onOpen() {
+  try {
+    SpreadsheetApp.getUi().createMenu("Simy")
+      .addItem("Zpracovat frontu…", "showSimQueue")
+      .addSeparator()
+      .addItem("Obnovit seznam postav z wowaudit", "refreshWowauditCharacters")
+      .addItem("Nastavit wowaudit API klíč…", "setWowauditApiKey")
+      .addItem("Vytvořit list Sim fronta", "buildSimSheet")
+      .addItem("Nainstalovat trigger (Report URL)", "installSimTrigger")
+      .addItem("Token pro sim_runner.py…", "setSimApiToken")
+      .addSeparator()
+      .addItem("Vytvořit list Sim výsledky", "buildSimResultsSheet")
+      .addItem("Načíst výsledky ze všech hotových reportů", "rebuildSimResults")
+      .addToUi();
+  } catch (err) { /* bez UI (trigger/web) */ }
+}
+
+/* ---------- SimC parsing ---------- */
+
+/**
+ * Vytáhne z SimC exportu jméno postavy, classu, spec a server. Vrací
+ * { name, cls, spec, server, ok, error }. Kontroluje, že jde opravdu o SimC export
+ * (řádek `<classa>="Jméno"` + aspoň jeden slot s `,id=`).
+ */
+function parseSimc_(text) {
+  var s = String(text || "").replace(/\r/g, "").trim();
+  var out = { name: "", cls: "", spec: "", server: "", ok: false, error: "" };
+  if (!s) { out.error = "SimC string je prázdný."; return out; }
+  if (s.length > SIM_MAX_SIMC) { out.error = "SimC string je podezřele dlouhý."; return out; }
+  var m = /^(deathknight|demonhunter|druid|evoker|hunter|mage|monk|paladin|priest|rogue|shaman|warlock|warrior)="([^"\n]+)"\s*$/mi.exec(s);
+  if (!m) { out.error = "Nenašel jsem řádek classa=\"Jméno\" – vlož celý export z addonu SimulationCraft (/simc)."; return out; }
+  out.cls = m[1].toLowerCase();
+  out.name = m[2].trim();
+  var sp = /^spec=([a-z_]+)\s*$/mi.exec(s);
+  out.spec = sp ? sp[1].toLowerCase() : "";
+  var sv = /^server=([^\s]+)\s*$/mi.exec(s);
+  out.server = sv ? sv[1] : "";
+  if (!/^[a-z_0-9]+=,id=\d+/mi.test(s)) { out.error = "Export neobsahuje žádný vybavený item (řádky head=,id=…)."; return out; }
+  out.ok = true;
+  return out;
+}
+
+/** Porovnání jmen bez diakritiky a velikosti písmen (Ähaferös ~ ahaferos). */
+function simNameKey_(name) {
+  return String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+/**
+ * Z odkazu/ID na sim report vrátí { id, kind, url } nebo null.
+ * kind = "raidbots" (Droptimizer) nebo "qe" (QE Live Upgrade Finder pro
+ * healery). Stejné tvary odkazů akceptuje i wowaudit UI:
+ *   raidbots.com/simbot/report/<id>, raidbots.com/reports/<id>/data.json,
+ *   questionablyepic.com/live/upgradereport/<id>, /live/report/<id>, /api/upgrades/<id>.
+ * Samotné ID bez odkazu bere jako Raidbots.
+ */
+function parseReportLink_(s) {
+  s = String(s || "").trim();
+  var m = /raidbots\.com\/(?:simbot\/report|reports)\/([A-Za-z0-9]{10,40})/.exec(s);
+  if (m) return { id: m[1], kind: "raidbots", url: "https://www.raidbots.com/simbot/report/" + m[1] };
+  m = /questionablyepic\.com\/(?:live\/upgradereport|live\/report|api\/upgrades)\/([A-Za-z0-9_-]{6,80})/.exec(s);
+  if (m) return { id: m[1], kind: "qe", url: "https://questionablyepic.com/live/upgradereport/" + m[1] };
+  if (/^[A-Za-z0-9]{10,40}$/.test(s)) return { id: s, kind: "raidbots", url: "https://www.raidbots.com/simbot/report/" + s };
+  return null;
+}
+
+/** Zpětně kompatibilní zkratka: ID reportu nebo "". */
+function raidbotsReportId_(s) {
+  var r = parseReportLink_(s);
+  return r ? r.id : "";
+}
+
+/* ---------- webový formulář pro hráče (…/exec?p=sim) ---------- */
+
+function simFormPage_() {
+  return HtmlService.createHtmlOutput(SIM_FORM_HTML_)
+    .setTitle("Sim pro loot")
+    .addMetaTag("viewport", "width=device-width, initial-scale=1");
+}
+
+/**
+ * Odeslání z webového formuláře: data = { simc }. Postavu najde podle jména
+ * (a serveru) v SimC stringu mezi postavami wowaudit týmu a zapíše řádek do
+ * fronty. Vrací { ok, message }.
+ */
+function submitSimWeb(data) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (err) { return { ok: false, message: "⚠ Zkus to za chvíli znovu (souběžné odeslání)." }; }
+  try {
+    data = data || {};
+    var p = parseSimc_(data.simc);
+    if (!p.ok) return { ok: false, message: "⚠ " + p.error };
+
+    var found = findWowauditCharacter_(p.name, p.server);
+    if (found.error) return { ok: false, message: "⚠ " + found.error };
+    var ch = found.character;
+
+    var sh = simSheet_();
+    if (!sh) return { ok: false, message: "⚠ List „" + SIM_SHEET_NAME + "“ neexistuje – napiš raid leaderovi." };
+
+    // starší čekající řádky té samé postavy zahodíme – platí poslední sim
+    var last = sh.getLastRow();
+    if (last >= 2) {
+      var vals = sh.getRange(2, 1, last - 1, SIM_HEADER.length).getValues();
+      vals.forEach(function (v, i) {
+        if (String(v[SIM_COL.character - 1]) === ch.name && String(v[SIM_COL.status - 1]) === SIM_STATUS.pending) {
+          setSimStatus_(sh, i + 2, SIM_STATUS.dropped, "nahrazeno novějším odesláním");
+        }
+      });
+    }
+    sh.appendRow([new Date(), ch.name, p.spec, String(data.simc).replace(/\r/g, "").trim(),
+                  "", SIM_STATUS.pending, "", ch.id]);
+    var r = sh.getLastRow();
+    sh.getRange(r, SIM_COL.simc).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+    sh.getRange(r, SIM_COL.status).setBackground(SIM_STATUS_BG[SIM_STATUS.pending]);
+    var waiting = countPendingSims_(sh);
+    return { ok: true, message: "✅ Uloženo: " + ch.name + " (" + p.spec + "). Ve frontě čeká " + waiting +
+      (waiting === 1 ? " sim." : waiting < 5 ? " simy." : " simů.") + " Raid leader sim spustí a výsledek uvidíš ve wowaudit." };
+  } catch (err) {
+    return { ok: false, message: "⚠ Chyba: " + err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Najde postavu wowaudit týmu podle jména ze SimC (bez diakritiky/velikosti
+ * písmen); při shodě více jmen rozhodne server (SimC `server=drakthul` vs.
+ * wowaudit realm "Drak'thul"). Vrací { character } nebo { error }.
+ */
+function findWowauditCharacter_(name, server) {
+  var chars = wowauditCharacters_(false);
+  var key = simNameKey_(name);
+  var hits = chars.filter(function (c) { return simNameKey_(c.name) === key; });
+  if (hits.length > 1 && server) {
+    var sk = simRealmKey_(server);
+    var narrowed = hits.filter(function (c) { return simRealmKey_(c.realm) === sk; });
+    if (narrowed.length) hits = narrowed;
+  }
+  if (hits.length === 1) return { character: hits[0] };
+  if (hits.length === 0) {
+    return { error: "Postava „" + name + "“ není ve wowaudit týmu. Pošli string z postavy, se kterou raiduješ, nebo napiš raid leaderovi, ať ji do wowaudit přidá." };
+  }
+  return { error: "Jméno „" + name + "“ mají ve wowaudit " + hits.length + " postavy (" +
+    hits.map(function (c) { return c.name + "-" + c.realm; }).join(", ") + ") – napiš raid leaderovi." };
+}
+
+/** "Drak'thul" / "drakthul" / "Twisting Nether" -> "drakthul" / "twistingnether". */
+function simRealmKey_(realm) {
+  return simNameKey_(realm).replace(/[^a-z0-9]/g, "");
+}
+
+function countPendingSims_(sh) {
+  var last = sh.getLastRow();
+  if (last < 2) return 0;
+  return sh.getRange(2, SIM_COL.status, last - 1, 1).getValues()
+    .filter(function (v) { return String(v[0]) === SIM_STATUS.pending; }).length;
+}
+
+function setSimStatus_(sh, row, status, note) {
+  sh.getRange(row, SIM_COL.status).setValue(status).setBackground(SIM_STATUS_BG[status] || null);
+  if (note !== undefined) sh.getRange(row, SIM_COL.note).setValue(note);
+}
+
+/* ---------- nahrání reportu do wowaudit ---------- */
+
+/**
+ * Nahraje Raidbots report z řádku fronty do wowaudit pro postavu v řádku.
+ * Vrací { ok, message }. Používá dialog i onEdit trigger.
+ */
+function uploadSimReport_(sh, row, reportUrl) {
+  var vals = sh.getRange(row, 1, 1, SIM_HEADER.length).getValues()[0];
+  var character = String(vals[SIM_COL.character - 1] || "");
+  var charId = Number(vals[SIM_COL.id - 1]);
+  var link = parseReportLink_(reportUrl);
+  if (!link) { setSimStatus_(sh, row, SIM_STATUS.error, "Neplatný odkaz na report (Raidbots / QE Live): " + reportUrl); return { ok: false, message: "⚠ Neplatný odkaz – vlož odkaz na Raidbots Droptimizer nebo QE Live Upgrade Finder report." }; }
+  var reportId = link.id;
+  if (!charId) {
+    // řádek bez ID (např. ručně vložený) – dohledej podle jména
+    var chars = wowauditCharacters_(false);
+    chars.forEach(function (c) { if (simNameKey_(c.name) === simNameKey_(character)) charId = c.id; });
+    if (!charId) { setSimStatus_(sh, row, SIM_STATUS.error, "Postava není ve wowaudit"); return { ok: false, message: "⚠ Postava „" + character + "“ není ve wowaudit." }; }
+    sh.getRange(row, SIM_COL.id).setValue(charId);
+  }
+  var r = wowauditFetch_("/wishlists", "post", {
+    report_id: reportId, character_id: charId,
+    replace_manual_edits: WOWAUDIT_REPLACE_MANUAL, clear_conduits: false
+  });
+  var url = link.url;
+  if (r.code === 200 && r.json && r.json.created) {
+    sh.getRange(row, SIM_COL.report).setValue(url);
+    var stored = storeSimResults_(character, String(vals[SIM_COL.spec - 1] || ""), link);
+    setSimStatus_(sh, row, SIM_STATUS.done, "nahráno " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "d.M. H:mm") +
+      (link.kind === "qe" ? " (QE Live)" : "") +
+      (stored.ok ? ", výsledky: " + stored.message : ", výsledky se nenačetly: " + stored.message));
+    return { ok: true, message: "✅ " + character + " nahráno do wowaudit" + (link.kind === "qe" ? " (QE Live)." : ".") };
+  }
+  var msg = r.json && (r.json.message || r.json.error) ? String(r.json.message || r.json.error) : r.body.slice(0, 200);
+  sh.getRange(row, SIM_COL.report).setValue(url);
+  setSimStatus_(sh, row, SIM_STATUS.error, "wowaudit HTTP " + r.code + ": " + msg);
+  return { ok: false, message: "⚠ wowaudit odmítl report (HTTP " + r.code + "): " + msg };
+}
+
+/** Handler instalovatelného onEdit triggeru – vložení odkazu do sloupce Report URL. */
+function onSimEdit(e) {
+  try {
+    if (!e || !e.range) return;
+    var sh = e.range.getSheet();
+    if (sh.getName() !== SIM_SHEET_NAME) return;
+    if (e.range.getColumn() !== SIM_COL.report || e.range.getRow() < 2 || e.range.getNumRows() !== 1) return;
+    var val = String(e.value || e.range.getValue() || "").trim();
+    if (!val) return;
+    var lock = LockService.getScriptLock();
+    try { lock.waitLock(20000); } catch (err) { return; }
+    try { uploadSimReport_(sh, e.range.getRow(), val); } finally { lock.releaseLock(); }
+  } catch (err) {
+    try { e.range.getSheet().getRange(e.range.getRow(), SIM_COL.note).setValue("⚠ " + err.message); } catch (e2) { /* ignore */ }
+  }
+}
+
+/* ---------- dialog pro raid leadera (menu Simy → Zpracovat frontu) ---------- */
+
+function showSimQueue() {
+  var html = HtmlService.createHtmlOutput(SIM_QUEUE_HTML_
+      .replace("__STEPS__", JSON.stringify(SIM_RAIDBOTS_STEPS))
+      .replace("__RAIDBOTS__", JSON.stringify(RAIDBOTS_DROPTIMIZER_URL))
+      .replace("__QE__", JSON.stringify(QE_UPGRADE_FINDER_URL)))
+    .setWidth(900).setHeight(640);
+  SpreadsheetApp.getUi().showModalDialog(html, "Sim fronta – Raidbots → wowaudit");
+}
+
+/** Data pro dialog: čekající (a chybové) řádky bez SimC stringu. */
+function getSimQueue() {
+  var sh = simSheet_();
+  if (!sh) throw new Error("List „" + SIM_SHEET_NAME + "“ neexistuje – spusť buildSimSheet().");
+  var last = sh.getLastRow();
+  var out = [];
+  if (last < 2) return out;
+  var vals = sh.getRange(2, 1, last - 1, SIM_HEADER.length).getValues();
+  var tz = Session.getScriptTimeZone();
+  vals.forEach(function (v, i) {
+    var status = String(v[SIM_COL.status - 1]);
+    if (status !== SIM_STATUS.pending && status !== SIM_STATUS.running && status !== SIM_STATUS.error) return;
+    out.push({
+      row: i + 2,
+      time: v[SIM_COL.time - 1] instanceof Date ? Utilities.formatDate(v[SIM_COL.time - 1], tz, "d.M. H:mm") : String(v[SIM_COL.time - 1]),
+      character: String(v[SIM_COL.character - 1]),
+      spec: String(v[SIM_COL.spec - 1]),
+      status: status,
+      note: String(v[SIM_COL.note - 1] || ""),
+      simcLength: String(v[SIM_COL.simc - 1] || "").length
+    });
+  });
+  return out;
+}
+
+/** SimC string jednoho řádku (pro kopírování do schránky v dialogu). */
+function getSimcForRow(row) {
+  var sh = simSheet_();
+  return String(sh.getRange(Number(row), SIM_COL.simc).getValue() || "");
+}
+
+/** Dialog: nahrát report pro řádek. */
+function uploadSimRow(row, reportUrl) {
+  var sh = simSheet_();
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (err) { return { ok: false, message: "⚠ Zkus to za chvíli znovu." }; }
+  try { return uploadSimReport_(sh, Number(row), reportUrl); }
+  catch (err) { return { ok: false, message: "⚠ " + err.message }; }
+  finally { lock.releaseLock(); }
+}
+
+/** Dialog: zahodit řádek (např. hráč poslal nesmysl). */
+function dropSimRow(row) {
+  var sh = simSheet_();
+  setSimStatus_(sh, Number(row), SIM_STATUS.dropped, "zahozeno raid leaderem");
+  return { ok: true, message: "Řádek zahozen." };
+}
+
+var SIM_QUEUE_HTML_ = '<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8">\
+<style>\
+  * { box-sizing:border-box; }\
+  body { font-family:"Segoe UI",-apple-system,sans-serif; font-size:13px; color:#222; margin:0; padding:12px 14px; }\
+  h3 { margin:0 0 8px; font-size:15px; }\
+  .wrap { display:grid; grid-template-columns: 1fr 300px; gap:14px; }\
+  .item { border:1px solid #ddd; border-radius:6px; padding:8px 10px; margin-bottom:8px; background:#fafafa; }\
+  .item.err { border-color:#e06666; background:#fdf3f3; }\
+  .head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }\
+  .name { font-weight:700; font-size:14px; }\
+  .meta { color:#666; font-size:12px; }\
+  .note { color:#b45309; font-size:12px; margin-top:4px; white-space:pre-line; }\
+  .row { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; align-items:center; }\
+  input[type=text] { flex:1; min-width:220px; padding:5px 7px; border:1px solid #bbb; border-radius:4px; font-size:13px; }\
+  button, a.btn { padding:5px 10px; border-radius:4px; border:1px solid #999; background:#fff; cursor:pointer; font-size:13px; text-decoration:none; color:#222; }\
+  button.primary { background:#2e7d32; color:#fff; border-color:#2e7d32; }\
+  button.danger { color:#b00020; }\
+  button:disabled { opacity:.5; cursor:wait; }\
+  .steps { background:#f1f5f3; border:1px solid #cfdad4; border-radius:6px; padding:10px 12px; font-size:12px; }\
+  .steps ol { padding-left:18px; margin:6px 0 0; } .steps li { margin-bottom:5px; }\
+  .msg { margin-top:6px; font-weight:600; font-size:12px; } .msg.ok { color:#2e7d32; } .msg.err { color:#b00020; }\
+  .empty { color:#666; padding:20px; text-align:center; }\
+  textarea.hidden { position:absolute; left:-9999px; top:0; }\
+</style></head><body>\
+<div class="wrap"><div>\
+<h3>Fronta simů <span id="count" class="meta"></span> <button id="reload" style="float:right">↻ Obnovit</button></h3>\
+<div id="list"><div class="empty">Načítám…</div></div>\
+</div><div>\
+<div class="steps"><b>Postup pro každou postavu</b>\
+<ol id="steps"></ol>\
+<p style="margin:8px 0 0"><a class="btn" id="rb" target="_blank" rel="noopener">🚀 Otevřít Raidbots Droptimizer</a> \
+<a class="btn" id="qe" target="_blank" rel="noopener">💚 QE Live (healeři)</a></p>\
+<p class="meta" style="margin-top:8px">Raidbots si nastavení pamatuje v prohlížeči – po prvním správném nastavení stačí jen vložit SimC a spustit.</p>\
+</div></div></div>\
+<textarea class="hidden" id="clip"></textarea>\
+<script>\
+var STEPS = __STEPS__, RAIDBOTS = __RAIDBOTS__, QE = __QE__;\
+var $ = function (id) { return document.getElementById(id); };\
+$("rb").href = RAIDBOTS; $("qe").href = QE;\
+STEPS.forEach(function (s) { var li = document.createElement("li"); li.textContent = s; $("steps").appendChild(li); });\
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\"": "&quot;" }[c]; }); }\
+function copyText(text, btn) {\
+  var done = function (ok) { btn.textContent = ok ? "✅ Zkopírováno" : "⚠ Kopírování selhalo"; setTimeout(function () { btn.textContent = "📋 Kopírovat SimC"; }, 2500); };\
+  if (navigator.clipboard && navigator.clipboard.writeText) {\
+    navigator.clipboard.writeText(text).then(function () { done(true); }, function () { fallback(); });\
+  } else { fallback(); }\
+  function fallback() { var ta = $("clip"); ta.value = text; ta.select(); var ok = false; try { ok = document.execCommand("copy"); } catch (e) {} done(ok); }\
+}\
+function render(items) {\
+  var list = $("list"); list.innerHTML = "";\
+  $("count").textContent = items.length ? "(" + items.length + ")" : "";\
+  if (!items.length) { list.innerHTML = "<div class=\\"empty\\">Fronta je prázdná 🎉</div>"; return; }\
+  items.forEach(function (it) {\
+    var div = document.createElement("div"); div.className = "item" + (it.status.indexOf("chyba") >= 0 ? " err" : "");\
+    div.innerHTML = "<div class=\\"head\\"><span class=\\"name\\">" + esc(it.character) + "</span><span class=\\"meta\\">" + esc(it.spec) + " · " + esc(it.time) + " · " + esc(it.status) + "</span></div>" +\
+      (it.note ? "<div class=\\"note\\">" + esc(it.note) + "</div>" : "") +\
+      "<div class=\\"row\\"><button class=\\"copy\\">📋 Kopírovat SimC</button>" +\
+      "<a class=\\"btn\\" href=\\"" + RAIDBOTS + "\\" target=\\"_blank\\" rel=\\"noopener\\">🚀 Raidbots</a>" +\
+      "<a class=\\"btn\\" href=\\"" + QE + "\\" target=\\"_blank\\" rel=\\"noopener\\" title=\\"Healeři\\">💚 QE Live</a>" +\
+      "<button class=\\"drop danger\\" title=\\"Zahodit tento řádek\\">✖</button></div>" +\
+      "<div class=\\"row\\"><input type=\\"text\\" class=\\"url\\" placeholder=\\"https://www.raidbots.com/simbot/report/…\\">" +\
+      "<button class=\\"up primary\\">⬆ Nahrát do wowaudit</button></div><div class=\\"msg\\"></div>";\
+    var copyBtn = div.querySelector(".copy"), upBtn = div.querySelector(".up"), dropBtn = div.querySelector(".drop"), url = div.querySelector(".url"), msg = div.querySelector(".msg");\
+    copyBtn.addEventListener("click", function () {\
+      copyBtn.disabled = true; copyBtn.textContent = "⏳…";\
+      google.script.run.withSuccessHandler(function (t) { copyBtn.disabled = false; copyText(t, copyBtn); })\
+        .withFailureHandler(function (e) { copyBtn.disabled = false; copyBtn.textContent = "⚠ " + e.message; }).getSimcForRow(it.row);\
+    });\
+    url.addEventListener("keydown", function (e) { if (e.key === "Enter") upBtn.click(); });\
+    upBtn.addEventListener("click", function () {\
+      if (!url.value.trim()) { msg.className = "msg err"; msg.textContent = "Vlož odkaz na report."; return; }\
+      upBtn.disabled = true; msg.className = "msg"; msg.textContent = "⏳ Nahrávám do wowaudit…";\
+      google.script.run.withSuccessHandler(function (res) { upBtn.disabled = false; msg.className = "msg " + (res.ok ? "ok" : "err"); msg.textContent = res.message; if (res.ok) setTimeout(load, 900); })\
+        .withFailureHandler(function (e) { upBtn.disabled = false; msg.className = "msg err"; msg.textContent = "⚠ " + e.message; }).uploadSimRow(it.row, url.value.trim());\
+    });\
+    dropBtn.addEventListener("click", function () {\
+      if (!confirm("Zahodit sim pro " + it.character + "?")) return;\
+      google.script.run.withSuccessHandler(load).dropSimRow(it.row);\
+    });\
+    list.appendChild(div);\
+  });\
+}\
+function load() {\
+  google.script.run.withSuccessHandler(render).withFailureHandler(function (e) { $("list").innerHTML = "<div class=\\"empty\\">⚠ " + esc(e.message) + "</div>"; }).getSimQueue();\
+}\
+$("reload").addEventListener("click", load);\
+load();\
+</script></body></html>';
+
+// Formulář pro hráče – jen jedno pole, postava se pozná ze SimC stringu.
+// Stejný vzhled jako absence (tmavý, jade/gold).
+var SIM_FORM_HTML_ = '<!DOCTYPE html>\
+<html lang="cs"><head><meta charset="utf-8"><title>Sim pro loot</title>\
+<style>\
+  :root { color-scheme: dark; }\
+  * { box-sizing: border-box; }\
+  body { background:#101815; color:#d9e4de; font-family:"Segoe UI",-apple-system,sans-serif;\
+         margin:0; padding:1.25rem; line-height:1.5; }\
+  .card { max-width:32rem; margin:0 auto; background:#18231f; border:1px solid #24322c;\
+          border-radius:8px; padding:1.5rem 1.5rem 1.25rem; }\
+  h1 { font-size:1.25rem; margin:0 0 .5rem; color:#55b98a; }\
+  textarea { width:100%; min-height:14rem; font-size:.8rem; padding:.55rem .7rem; margin-top:.8rem;\
+          background:#101815; color:#d9e4de; border:1px solid #24322c; border-radius:6px;\
+          font-family:Consolas,monospace; resize:vertical; }\
+  textarea:focus { outline:2px solid #55b98a; border-color:#55b98a; }\
+  .hint { color:#8ba49a; font-size:.78rem; margin:.25rem 0 0; }\
+  .how { background:#101815; border:1px solid #24322c; border-radius:6px; padding:.7rem .9rem; font-size:.85rem; margin-top:1rem; }\
+  .how ol { margin:.3rem 0 0; padding-left:1.2rem; } .how li { margin-bottom:.25rem; }\
+  code { background:#24322c; padding:.05rem .35rem; border-radius:4px; font-size:.85em; }\
+  button { width:100%; margin-top:1rem; padding:.7rem; font-size:1.05rem; font-weight:700;\
+           background:#55b98a; color:#0d1411; border:none; border-radius:6px; cursor:pointer; }\
+  button:disabled { opacity:.5; cursor:wait; }\
+  #status { margin-top:1rem; font-weight:600; min-height:1.4em; white-space:pre-line; }\
+  #status.ok { color:#55b98a; } #status.err { color:#e08a3c; }\
+  #detected { color:#8ba49a; font-size:.85rem; margin-top:.4rem; min-height:1.2em; }\
+  #detected b { color:#d9e4de; }\
+</style></head><body><div class="card">\
+<h1>⚔️ Sim pro loot</h1>\
+<p class="hint">Vlož sem celý text z <code>/simc</code>. Postavu poznáme automaticky, Raidbots spustí raid leader a upgrady uvidíš ve wowaudit.</p>\
+<textarea id="simc" placeholder="Sem vlož SimC string (Ctrl+V)…" spellcheck="false" autofocus></textarea>\
+<div id="detected"></div>\
+<button id="send">Odeslat</button>\
+<div id="status"></div>\
+<div class="how"><b>Jak získat SimC string</b>\
+<ol><li>Nainstaluj addon <b>SimulationCraft</b> (CurseForge / Wago).</li>\
+<li>Ve hře na postavě, se kterou raiduješ (v raidovém gearu), napiš <code>/simc</code>.</li>\
+<li>V okně, které se otevře: <code>Ctrl+A</code>, <code>Ctrl+C</code> – a sem <code>Ctrl+V</code>.</li>\
+<li>Po výměně gearu pošli nový string – starý nevyřízený se automaticky nahradí.</li></ol></div>\
+</div>\
+<script>\
+var $ = function (id) { return document.getElementById(id); };\
+function show(ok, msg) { var s = $("status"); s.className = ok ? "ok" : "err"; s.textContent = msg; }\
+$("simc").addEventListener("input", function () {\
+  var m = /^(deathknight|demonhunter|druid|evoker|hunter|mage|monk|paladin|priest|rogue|shaman|warlock|warrior)="([^"\\n]+)"/mi.exec(this.value);\
+  var sp = /^spec=([a-z_]+)/mi.exec(this.value);\
+  var d = $("detected");\
+  if (!m) { d.textContent = this.value.trim() ? "⚠ Nevypadá to jako export z /simc." : ""; return; }\
+  d.innerHTML = "Postava: <b>" + m[2].replace(/[<>&]/g, "") + "</b>" + (sp ? " · " + sp[1] : "") + " · " + m[1];\
+});\
+$("send").addEventListener("click", function () {\
+  if (!$("simc").value.trim()) return show(false, "⚠ Vlož SimC string.");\
+  $("send").disabled = true; show(true, "⏳ Odesílám…");\
+  google.script.run.withSuccessHandler(function (res) {\
+    $("send").disabled = false; show(res.ok, res.message);\
+    if (res.ok) { $("simc").value = ""; $("detected").textContent = ""; }\
+  }).withFailureHandler(function (err) {\
+    $("send").disabled = false; show(false, "⚠ Chyba spojení: " + err.message);\
+  }).submitSimWeb({ simc: $("simc").value });\
+});\
+</script></body></html>';
+
+/* ---------- JSON API pro lokální sim_runner.py (…/exec?p=simapi) ----------
+ *
+ * Roster/sim_runner.py (Playwright) si stáhne čekající řádky, pro každý na
+ * Raidbots spustí Droptimizer a hotový report nahlásí zpět; upload do
+ * wowaudit dělá stejná funkce jako dialog. Přístup chrání token ve Script
+ * Properties (menu Simy → Token pro sim_runner.py…). Volání:
+ *   ?p=simapi&token=…&action=queue                      → { ok, rows:[{row, character, spec, simc, id, status}] }
+ *   ?p=simapi&token=…&action=running&row=N&character=…&url=…   → řádek dostane stav 🔄 (odkaz do Poznámky)
+ *   ?p=simapi&token=…&action=done&row=N&character=…&url=…      → upload do wowaudit (stejně jako dialog)
+ *   ?p=simapi&token=…&action=error&row=N&character=…&note=…    → stav ⚠ + poznámka
+ *   ?p=simapi&token=…&action=note&row=N&character=…&note=…     → jen poznámka (stav se nemění)
+ * `character` slouží jako kontrola, že se řádky mezitím neposunuly.
+ */
+
+var SIM_API_TOKEN_PROP = "SIM_API_TOKEN";
+
+/** Jednorázově: vygeneruje (nebo ukáže) token a URL pro sim_runner.py. */
+function setSimApiToken() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty(SIM_API_TOKEN_PROP);
+  if (!token) {
+    token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+    props.setProperty(SIM_API_TOKEN_PROP, token);
+  }
+  ui.alert("Token pro sim_runner.py",
+    "Spusť v Roster/:  python sim_runner.py setup\n\n" +
+    "Web app URL: použij stejnou adresu …/exec, na které hráči mají formulář absence / simu " +
+    "(Apps Script → Nasadit → Spravovat nasazení → webová aplikace). " +
+    "ScriptApp.getService().getUrl() z menu vrací jiné ID, které nefunguje.\n\nToken:\n" + token +
+    "\n\n(Token je uložený ve Script Properties – smazáním property SIM_API_TOKEN se vygeneruje nový.)",
+    ui.ButtonSet.OK);
+}
+
+function simApiJson_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function simApi_(e) {
+  var q = (e && e.parameter) || {};
+  try {
+    var token = PropertiesService.getScriptProperties().getProperty(SIM_API_TOKEN_PROP);
+    if (!token || String(q.token || "") !== token) return simApiJson_({ ok: false, error: "bad token" });
+    var sh = simSheet_();
+    if (!sh) return simApiJson_({ ok: false, error: "List „" + SIM_SHEET_NAME + "“ neexistuje." });
+    var action = String(q.action || "");
+    if (action === "queue") return simApiJson_({ ok: true, rows: simApiQueue_(sh) });
+
+    var row = Number(q.row);
+    if (!(row >= 2)) return simApiJson_({ ok: false, error: "chybí row" });
+    var vals = sh.getRange(row, 1, 1, SIM_HEADER.length).getValues()[0];
+    var character = String(vals[SIM_COL.character - 1] || "");
+    if (q.character !== undefined && simNameKey_(q.character) !== simNameKey_(character)) {
+      return simApiJson_({ ok: false, error: "řádek " + row + " je teď „" + character + "“, ne „" + q.character + "“ – fronta se posunula, načti ji znovu" });
+    }
+    var lock = LockService.getScriptLock();
+    try { lock.waitLock(20000); } catch (err) { return simApiJson_({ ok: false, error: "lock timeout" }); }
+    try {
+      if (action === "running") {
+        setSimStatus_(sh, row, SIM_STATUS.running, "Raidbots " + String(q.url || "") + " (" +
+          Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "d.M. H:mm") + ")");
+        return simApiJson_({ ok: true });
+      }
+      if (action === "done") {
+        var r = uploadSimReport_(sh, row, String(q.url || ""));
+        return simApiJson_({ ok: r.ok, message: r.message });
+      }
+      if (action === "error") { setSimStatus_(sh, row, SIM_STATUS.error, String(q.note || "sim_runner: chyba")); return simApiJson_({ ok: true }); }
+      if (action === "note") { sh.getRange(row, SIM_COL.note).setValue(String(q.note || "")); return simApiJson_({ ok: true }); }
+      return simApiJson_({ ok: false, error: "neznámá action " + action });
+    } finally { lock.releaseLock(); }
+  } catch (err) {
+    return simApiJson_({ ok: false, error: String(err && err.message || err) });
+  }
+}
+
+/**
+ * Čekající řádky včetně SimC stringu (+ rozběhnuté, kdyby runner spadl,
+ * + chybové, kde chybu zapsal sám sim_runner – ty zkusí znovu).
+ */
+function simApiQueue_(sh) {
+  var last = sh.getLastRow();
+  var out = [];
+  if (last < 2) return out;
+  var vals = sh.getRange(2, 1, last - 1, SIM_HEADER.length).getValues();
+  vals.forEach(function (v, i) {
+    var status = String(v[SIM_COL.status - 1]);
+    var note = String(v[SIM_COL.note - 1] || "");
+    var runnerError = status === SIM_STATUS.error && /^sim_runner:/.test(note);
+    if (status !== SIM_STATUS.pending && status !== SIM_STATUS.running && !runnerError) return;
+    out.push({
+      row: i + 2,
+      character: String(v[SIM_COL.character - 1]),
+      spec: String(v[SIM_COL.spec - 1]),
+      simc: String(v[SIM_COL.simc - 1] || ""),
+      id: Number(v[SIM_COL.id - 1]) || 0,
+      status: status,
+      note: String(v[SIM_COL.note - 1] || "")
+    });
+  });
+  return out;
+}
+
+// ================== SIM VÝSLEDKY (Raidbots / QE Live report -> list "Sim výsledky") ==================
+//
+// Po úspěšném uploadu do wowaudit (dialog, onEdit trigger i sim_runner přes
+// uploadSimReport_) se stáhne veřejný JSON reportu a itemy z raidu se zapíšou
+// do listu "Sim výsledky" – jeden řádek na item. Starší řádky té samé postavy
+// se smažou (platí vždy poslední sim). Stránka loot.html na GitHub Pages čte
+// tenhle list přes gviz CSV, takže je vždy aktuální bez dalšího publikování.
+//
+// Raidbots: https://www.raidbots.com/reports/<id>/data.json – profilesety
+//   "instance/encounter/raid-mythic/itemId/ilvl/enchant/slot////" + mean DPS,
+//   základ = players[0].collected_data.dps.mean, názvy z simbot.meta.itemLibrary.
+// QE Live: https://questionablyepic.com/api/getUpgradeReport.php?reportID=<id>
+//   (JSON zabalený ve stringu) – results[] {item, dropLoc, dropType, level,
+//   rawDiff, percDiff}; bereme dropLoc "Raid" a dropType "max" (plný upgrade).
+//   Boss/název u QE itemů doplní stránka z raidplan/loot_items.json.
+
+var SIM_RESULTS_SHEET_NAME = "Sim výsledky";
+var SIM_RESULTS_HEADER = ["Postava", "Spec", "Zdroj", "Report", "Čas", "Boss ID", "Boss", "Item ID", "Item",
+                          "Slot", "ilvl", "Základ", "S itemem", "Rozdíl", "Rozdíl %"];
+var SIM_RESULTS_ONLY_RAID = true;   // false = ukládat i dungeon/crafted/… (jen QE, Raidbots posíláme jen raid)
+
+function simResultsSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SIM_RESULTS_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(SIM_RESULTS_SHEET_NAME);
+    sh.getRange(1, 1, 1, SIM_RESULTS_HEADER.length).setValues([SIM_RESULTS_HEADER]).setFontWeight("bold");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/** Menu: založí list (idempotentní). */
+function buildSimResultsSheet() {
+  simResultsSheet_();
+  SpreadsheetApp.getUi().alert("List „" + SIM_RESULTS_SHEET_NAME + "“ je připravený.");
+}
+
+/**
+ * Stáhne report a zapíše výsledky postavy. Vrací { ok, count, message }.
+ * Nikdy nehází – volá se po úspěšném uploadu a nesmí ho „zkazit“.
+ */
+function storeSimResults_(character, spec, link) {
+  try {
+    var rows = link.kind === "qe" ? simResultsFromQe_(link.id) : simResultsFromRaidbots_(link.id);
+    var sh = simResultsSheet_();
+    var now = new Date();
+    var out = rows.map(function (r) {
+      return [character, spec, link.kind === "qe" ? "QE Live" : "Raidbots", link.url, now,
+              r.bossId, r.boss, r.itemId, r.item, r.slot, r.ilvl, r.base, r.value, r.diff, r.pct];
+    });
+    // smazat staré řádky postavy (odspodu, aby se neposouvaly indexy)
+    var last = sh.getLastRow();
+    if (last >= 2) {
+      var names = sh.getRange(2, 1, last - 1, 1).getValues();
+      var key = simNameKey_(character);
+      for (var i = names.length - 1; i >= 0; i--) {
+        if (simNameKey_(names[i][0]) === key) sh.deleteRow(i + 2);
+      }
+    }
+    if (out.length) {
+      var start = sh.getLastRow() + 1;
+      sh.getRange(start, 1, out.length, SIM_RESULTS_HEADER.length).setValues(out);
+      sh.getRange(start, 5, out.length, 1).setNumberFormat("d.M.yyyy H:mm");
+      sh.getRange(start, 12, out.length, 3).setNumberFormat("0");
+      sh.getRange(start, 15, out.length, 1).setNumberFormat("0.00");
+    }
+    return { ok: true, count: out.length, message: out.length + " itemů" };
+  } catch (err) {
+    return { ok: false, count: 0, message: String(err && err.message || err) };
+  }
+}
+
+function simResultsFromRaidbots_(reportId) {
+  var resp = UrlFetchApp.fetch("https://www.raidbots.com/reports/" + reportId + "/data.json", { muteHttpExceptions: true });
+  if (resp.getResponseCode() !== 200) throw new Error("Raidbots data.json HTTP " + resp.getResponseCode());
+  var d = JSON.parse(resp.getContentText());
+  var sim = d.sim || {};
+  var base = Number(((((sim.players || [])[0] || {}).collected_data || {}).dps || {}).mean);
+  if (!base) throw new Error("v reportu chybí základní DPS");
+  var lib = {};
+  (((d.simbot || {}).meta || {}).itemLibrary || []).forEach(function (it) { lib[String(it.id)] = it; });
+  var bosses = {};
+  (((d.simbot || {}).meta || {}).instanceLibrary || []).forEach(function (inst) {
+    (inst.encounters || []).forEach(function (e) { bosses[String(e.id)] = e.name; });
+  });
+  var best = {};
+  (((sim.profilesets || {}).results) || []).forEach(function (r) {
+    var p = String(r.name || "").split("/");
+    if (p.length < 7) return;
+    if (SIM_RESULTS_ONLY_RAID && p[2].indexOf("raid") !== 0) return;
+    var itemId = p[3];
+    var mean = Number(r.mean);
+    var bossId = Number(p[1]);
+    // jeden řádek na item a bosse (tier kusy padají z více bossů);
+    // prsteny/trinkety jsou v obou slotech – necháme lepší
+    var key = itemId + "/" + bossId;
+    if (best[key] && best[key].value >= mean) return;
+    var it = lib[itemId] || {};
+    best[key] = {
+      bossId: bossId,
+      boss: (it.encounter && it.encounter.name) || bosses[String(bossId)] || (bossId === -97 ? "Trash" : ""),
+      itemId: Number(itemId), item: it.name || "", slot: p[6].replace(/[12]$/, ""),
+      ilvl: Number(it.itemLevel) || Number(p[4]) || "",   // itemLibrary má ilvl včetně zvoleného upgradu
+      base: Math.round(base), value: Math.round(mean),
+      diff: Math.round(mean - base), pct: Math.round((mean - base) / base * 10000) / 100
+    };
+  });
+  return Object.keys(best).map(function (k) { return best[k]; })
+    .sort(function (a, b) { return b.pct - a.pct; });
+}
+
+function simResultsFromQe_(reportId) {
+  var resp = UrlFetchApp.fetch("https://questionablyepic.com/api/getUpgradeReport.php?reportID=" + encodeURIComponent(reportId), { muteHttpExceptions: true });
+  if (resp.getResponseCode() !== 200) throw new Error("QE report HTTP " + resp.getResponseCode());
+  var d = JSON.parse(resp.getContentText());
+  if (typeof d === "string") d = JSON.parse(d);
+  var results = d.results || [];
+  var best = {};
+  results.forEach(function (r) {
+    if (SIM_RESULTS_ONLY_RAID && String(r.dropLoc) !== "Raid") return;
+    if (String(r.dropType || "drop") !== "max") return;   // plně upgradnutý item
+    var pct = Number(r.percDiff);
+    var raw = Number(r.rawDiff);
+    var id = String(r.item);
+    if (best[id] && best[id].pct >= pct) return;
+    var base = (pct && raw) ? Math.round(raw / (pct / 100)) : "";
+    best[id] = {
+      bossId: "", boss: "", itemId: Number(id), item: "", slot: "",
+      ilvl: Number(r.level) || "", base: base, value: base !== "" ? base + Math.round(raw) : "",
+      diff: Math.round(raw), pct: Math.round(pct * 100) / 100
+    };
+  });
+  return Object.keys(best).map(function (k) { return best[k]; })
+    .sort(function (a, b) { return b.pct - a.pct; });
+}
+
+/** Menu: znovu načte výsledky ze všech ✅ řádků fronty (např. po založení listu). */
+function rebuildSimResults() {
+  var sh = simSheet_();
+  if (!sh) { SpreadsheetApp.getUi().alert("List „" + SIM_SHEET_NAME + "“ neexistuje."); return; }
+  var last = sh.getLastRow();
+  var done = 0, failed = [];
+  if (last >= 2) {
+    var vals = sh.getRange(2, 1, last - 1, SIM_HEADER.length).getValues();
+    // pro každou postavu jen poslední ✅ řádek
+    var latest = {};
+    vals.forEach(function (v) {
+      if (String(v[SIM_COL.status - 1]) !== SIM_STATUS.done) return;
+      latest[simNameKey_(v[SIM_COL.character - 1])] = v;
+    });
+    Object.keys(latest).forEach(function (k) {
+      var v = latest[k];
+      var link = parseReportLink_(v[SIM_COL.report - 1]);
+      if (!link) { failed.push(v[SIM_COL.character - 1] + " (neplatný odkaz)"); return; }
+      var r = storeSimResults_(String(v[SIM_COL.character - 1]), String(v[SIM_COL.spec - 1]), link);
+      if (r.ok) done++; else failed.push(v[SIM_COL.character - 1] + " (" + r.message + ")");
+    });
+  }
+  SpreadsheetApp.getUi().alert("Výsledky načteny pro " + done + " postav." + (failed.length ? "\nSelhalo: " + failed.join(", ") : ""));
 }
