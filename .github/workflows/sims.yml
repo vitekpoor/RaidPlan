@@ -10,6 +10,9 @@ name: Sim queue (Raidbots / QE Live)
 #   SIM_API_TOKEN           token (menu Simy -> Token pro sim_runner.py…)
 #   RAIDBOTS_STORAGE_STATE  obsah souboru z `python sim_runner.py login --export`
 #                           (přihlášení do Raidbots Premium; bez něj běží jako free účet)
+#   RAIDBOTS_EMAIL          e-mail + heslo účtu Raidbots (https://www.raidbots.com/auth) –
+#   RAIDBOTS_PASSWORD       skript se jimi přihlásí, když session chybí nebo vypršela.
+#                           Stačí jedno z toho (session nebo e-mail+heslo); obojí = nejrobustnější.
 
 on:
   schedule:
@@ -65,19 +68,26 @@ jobs:
         if: steps.queue.outputs.count != '0'
         env:
           RAIDBOTS_STORAGE_STATE: ${{ secrets.RAIDBOTS_STORAGE_STATE }}
+          RAIDBOTS_EMAIL: ${{ secrets.RAIDBOTS_EMAIL }}
         run: |
           if [ -n "$RAIDBOTS_STORAGE_STATE" ]; then
             printf '%s' "$RAIDBOTS_STORAGE_STATE" > "$RUNNER_TEMP/raidbots_state.json"
             echo "SIM_STORAGE_STATE=$RUNNER_TEMP/raidbots_state.json" >> "$GITHUB_ENV"
             echo "Raidbots session restored."
           else
-            echo "::warning::RAIDBOTS_STORAGE_STATE secret není nastavený – Raidbots poběží jako free účet (1 sim, pomalá fronta)."
+            if [ -n "$RAIDBOTS_EMAIL" ]; then
+              echo "RAIDBOTS_STORAGE_STATE není nastavený – sim_runner se přihlásí e-mailem a heslem."
+            else
+              echo "::warning::Ani RAIDBOTS_STORAGE_STATE, ani RAIDBOTS_EMAIL/RAIDBOTS_PASSWORD nejsou nastavené – Raidbots poběží jako free účet (1 sim, pomalá fronta)."
+            fi
           fi
 
       - name: Run sims
         if: steps.queue.outputs.count != '0'
         env:
           SIM_PARALLEL: ${{ inputs.parallel }}
+          RAIDBOTS_EMAIL: ${{ secrets.RAIDBOTS_EMAIL }}
+          RAIDBOTS_PASSWORD: ${{ secrets.RAIDBOTS_PASSWORD }}
         run: python tools/roster/sim_runner.py --headless
 
       - name: Upload debug screenshots

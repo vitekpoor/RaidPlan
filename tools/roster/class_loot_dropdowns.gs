@@ -1335,29 +1335,28 @@ function parseIsoDate_(s) {
   var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || "").trim());
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
 }
-
-// Barvy odpovídají tmavému vzhledu raid guide (jade/gold na tmavém podkladu).
+// Barvy odpovídají vzhledu webu (web/assets/css/site.css – tmavě šedá + růžový akcent, šablona Cyborg Gaming).
 var ABSENCE_FORM_HTML_ = '<!DOCTYPE html>\
-<html lang="cs"><head><meta charset="utf-8"><title>Hlášení absence</title>\
+<html lang="cs"><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><title>Hlášení absence</title>\
 <style>\
   :root { color-scheme: dark; }\
   * { box-sizing: border-box; }\
-  body { background:#101815; color:#d9e4de; font-family:"Segoe UI",-apple-system,sans-serif;\
+  body { background:#111413; color:#e4eae6; font-family:"Inter","Segoe UI",-apple-system,sans-serif;\
          margin:0; padding:1.25rem; line-height:1.5; }\
-  .card { max-width:26rem; margin:0 auto; background:#18231f; border:1px solid #24322c;\
-          border-radius:8px; padding:1.5rem 1.5rem 1.25rem; }\
-  h1 { font-size:1.25rem; margin:0 0 1rem; color:#55b98a; }\
+  .card { max-width:26rem; margin:0 auto; background:#171b19; border:1px solid #242a27;\
+          border-radius:10px; padding:1.5rem 1.5rem 1.25rem; }\
+  h1 { font-size:1.25rem; margin:0 0 1rem; color:#3fd68a; }\
   label { display:block; font-size:.75rem; text-transform:uppercase; letter-spacing:.1em;\
-          color:#8ba49a; font-weight:700; margin:0.9rem 0 .3rem; }\
+          color:#8b968f; font-weight:700; margin:0.9rem 0 .3rem; }\
   select, input[type=date] { width:100%; font-size:1rem; padding:.55rem .7rem;\
-          background:#101815; color:#d9e4de; border:1px solid #24322c; border-radius:6px; }\
-  select:focus, input:focus { outline:2px solid #55b98a; border-color:#55b98a; }\
-  .hint { color:#8ba49a; font-size:.78rem; margin:.25rem 0 0; }\
+          background:#0a0c0b; color:#e4eae6; border:1px solid #242a27; border-radius:6px; }\
+  select:focus, input:focus { outline:2px solid #3fd68a; border-color:#3fd68a; }\
+  .hint { color:#8b968f; font-size:.78rem; margin:.25rem 0 0; }\
   button { width:100%; margin-top:1.3rem; padding:.7rem; font-size:1.05rem; font-weight:700;\
-           background:#55b98a; color:#0d1411; border:none; border-radius:6px; cursor:pointer; }\
+           background:#3fd68a; color:#07110c; border:none; border-radius:999px; cursor:pointer; }\
   button:disabled { opacity:.5; cursor:wait; }\
   #status { margin-top:1rem; font-weight:600; min-height:1.4em; white-space:pre-line; }\
-  #status.ok { color:#55b98a; } #status.err { color:#e08a3c; }\
+  #status.ok { color:#3fd68a; } #status.err { color:#f0857a; }\
 </style></head><body><div class="card">\
 <h1>🗓️ Hlášení absence</h1>\
 <label for="player">Hráč</label>\
@@ -2199,31 +2198,31 @@ load();\
 </script></body></html>';
 
 // Formulář pro hráče – jen jedno pole, postava se pozná ze SimC stringu.
-// Stejný vzhled jako absence (tmavý, jade/gold).
+// Stejný vzhled jako absence (tmavý, růžový akcent).
 var SIM_FORM_HTML_ = '<!DOCTYPE html>\
 <html lang="cs"><head><meta charset="utf-8"><title>Sim pro loot</title>\
 <style>\
   :root { color-scheme: dark; }\
   * { box-sizing: border-box; }\
-  body { background:#101815; color:#d9e4de; font-family:"Segoe UI",-apple-system,sans-serif;\
+  body { background:#111413; color:#e4eae6; font-family:"Inter","Segoe UI",-apple-system,sans-serif;\
          margin:0; padding:1.25rem; line-height:1.5; }\
-  .card { max-width:32rem; margin:0 auto; background:#18231f; border:1px solid #24322c;\
-          border-radius:8px; padding:1.5rem 1.5rem 1.25rem; }\
-  h1 { font-size:1.25rem; margin:0 0 .5rem; color:#55b98a; }\
+  .card { max-width:32rem; margin:0 auto; background:#171b19; border:1px solid #242a27;\
+          border-radius:10px; padding:1.5rem 1.5rem 1.25rem; }\
+  h1 { font-size:1.25rem; margin:0 0 .5rem; color:#3fd68a; }\
   textarea { width:100%; min-height:14rem; font-size:.8rem; padding:.55rem .7rem; margin-top:.8rem;\
-          background:#101815; color:#d9e4de; border:1px solid #24322c; border-radius:6px;\
+          background:#0a0c0b; color:#e4eae6; border:1px solid #242a27; border-radius:6px;\
           font-family:Consolas,monospace; resize:vertical; }\
-  textarea:focus { outline:2px solid #55b98a; border-color:#55b98a; }\
-  .hint { color:#8ba49a; font-size:.78rem; margin:.25rem 0 0; }\
-  .how { background:#101815; border:1px solid #24322c; border-radius:6px; padding:.7rem .9rem; font-size:.85rem; margin-top:1rem; }\
+  textarea:focus { outline:2px solid #3fd68a; border-color:#3fd68a; }\
+  .hint { color:#8b968f; font-size:.78rem; margin:.25rem 0 0; }\
+  .how { background:#0a0c0b; border:1px solid #242a27; border-radius:6px; padding:.7rem .9rem; font-size:.85rem; margin-top:1rem; }\
   .how ol { margin:.3rem 0 0; padding-left:1.2rem; } .how li { margin-bottom:.25rem; }\
-  code { background:#24322c; padding:.05rem .35rem; border-radius:4px; font-size:.85em; }\
+  code { background:#242a27; padding:.05rem .35rem; border-radius:4px; font-size:.85em; }\
   button { width:100%; margin-top:1rem; padding:.7rem; font-size:1.05rem; font-weight:700;\
-           background:#55b98a; color:#0d1411; border:none; border-radius:6px; cursor:pointer; }\
+           background:#3fd68a; color:#07110c; border:none; border-radius:999px; cursor:pointer; }\
   button:disabled { opacity:.5; cursor:wait; }\
   #status { margin-top:1rem; font-weight:600; min-height:1.4em; white-space:pre-line; }\
-  #status.ok { color:#55b98a; } #status.err { color:#e08a3c; }\
-  #detected { color:#8ba49a; font-size:.85rem; margin-top:.4rem; min-height:1.2em; }\
+  #status.ok { color:#3fd68a; } #status.err { color:#f0857a; }\
+  #detected { color:#8b968f; font-size:.85rem; margin-top:.4rem; min-height:1.2em; }\
   #detected b { color:#d9e4de; }\
 </style></head><body><div class="card">\
 <h1>⚔️ Sim pro loot</h1>\

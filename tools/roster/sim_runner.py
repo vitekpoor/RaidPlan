@@ -36,7 +36,9 @@ Použití (v tools/roster/):
 Online (bez PC): .github/workflows/sims.yml spouští tenhle skript v GitHub Actions
 každou hodinu a na kliknutí (menu Simy → Spustit simy online, tlačítko na hubu).
 Konfigurace přes env: SIM_WEBAPP_URL, SIM_API_TOKEN, SIM_STORAGE_STATE (cesta
-k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE.
+k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE. Místo (nebo vedle)
+uložené session jde použít RAIDBOTS_EMAIL + RAIDBOTS_PASSWORD – když skript zjistí,
+že není přihlášený, přihlásí se e-mailem a heslem na https://www.raidbots.com/auth.
   python sim_runner.py --parallel 3 # max 3 simy najednou (výchozí 10)
   python sim_runner.py --dry-run    # všechno kromě kliknutí na Run (kontrola nastavení)
   python sim_runner.py --row 7      # jen konkrétní řádek listu
@@ -64,6 +66,7 @@ PROFILE_DIR = HERE / ".raidbots_profile"
 LOG_DIR = HERE / "sim_runner_logs"
 
 DROPTIMIZER_URL = "https://www.raidbots.com/simbot/droptimizer"
+AUTH_URL = "https://www.raidbots.com/auth"
 REPORT_RE = re.compile(r"raidbots\.com/simbot/report/([A-Za-z0-9]{10,40})")
 GOLD = "rgb(255, 187, 51)"  # barva rámečku vybraného zdroje / obtížnosti
 
@@ -280,6 +283,28 @@ class Raidbots:
         except Exception:
             pass
         return ok
+
+    def login_with_password(self, email, password):
+        """Přihlášení e-mailem a heslem na https://www.raidbots.com/auth (formulář
+        #loginEmail / #loginPassword / #loginSubmit; stránka má formulář dvakrát – desktop
+        a mobil – proto .first). Vrací True, když je po přihlášení Droptimizer bez LOGIN."""
+        page = self.home
+        page.goto(AUTH_URL, wait_until="domcontentloaded")
+        page.locator("#loginEmail").first.wait_for(state="visible", timeout=20000)
+        page.locator("#loginEmail").first.fill(email)
+        page.locator("#loginPassword").first.fill(password)
+        page.locator("#loginSubmit").first.click()
+        try:
+            page.wait_for_url(lambda u: "/auth" not in u, timeout=20000)
+        except Exception:
+            # zůstali jsme na /auth – vypsat důvod (špatné heslo apod.)
+            body = self.text(page)
+            m = re.search(r"(?im)^.*(invalid|incorrect|error|wrong|not found|too many).*$", body)
+            log("Raidbots login se nepovedl" + (f": {m.group(0).strip()}" if m else " (stránka zůstala na /auth)."))
+            self.screenshot(page, "login-failed")
+            return False
+        page.wait_for_timeout(1500)
+        return self.logged_in()
 
     @staticmethod
     def settle(page, ms=1500):
@@ -554,7 +579,7 @@ class Raidbots:
 def cmd_login(cfg, export=None):
     rb = Raidbots(cfg, headless=False)
     try:
-        rb.home.goto("https://www.raidbots.com/auth", wait_until="domcontentloaded")
+        rb.home.goto(AUTH_URL, wait_until="domcontentloaded")
         print("V otevřeném okně se přihlas do Raidbots (Premium účet).")
         print("Případně si v Droptimizeru nastav Simulation Options (Patchwerk, 1 boss, 5 min, High Precision) – pamatují se.")
         input("Až budeš hotový, stiskni Enter tady v konzoli… ")
@@ -698,7 +723,15 @@ def cmd_run(cfg, args):
     active = []
     try:
         if todo and not rb.logged_in():
-            log("Pozor: v Raidbots nejsi přihlášený (běží to bez Premium – pomalejší fronta a jen 1 sim). Přihlášení: python sim_runner.py login")
+            email, password = os.environ.get("RAIDBOTS_EMAIL", "").strip(), os.environ.get("RAIDBOTS_PASSWORD", "")
+            if email and password:
+                log("V Raidbots nejsi přihlášený – přihlašuji e-mailem a heslem (RAIDBOTS_EMAIL)…")
+                if rb.login_with_password(email, password):
+                    log("Přihlášení do Raidbots: OK")
+                else:
+                    log("Pozor: přihlášení e-mailem selhalo – simy poběží bez Premium (pomalejší fronta, jen 1 sim).")
+            else:
+                log("Pozor: v Raidbots nejsi přihlášený (běží to bez Premium – pomalejší fronta a jen 1 sim). Přihlášení: python sim_runner.py login, nebo env RAIDBOTS_EMAIL + RAIDBOTS_PASSWORD")
         for row in healers:
             log(f"▶ {row['character']} ({row['spec']}) – řádek {row['row']} – healer → QE Live")
             results[rkey(row)] = qe_row(rb, api, row, args.dry_run)
