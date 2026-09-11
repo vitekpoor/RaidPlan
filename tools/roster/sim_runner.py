@@ -26,10 +26,17 @@ zkusí znovu automaticky.
 Prohlížeč používá vlastní trvalý profil (.raidbots_profile/), takže
 přihlášení do Raidbots (Premium) i nastavení Droptimizeru se pamatují.
 
-Použití (v Roster/):
+Použití (v tools/roster/):
   python sim_runner.py setup        # uloží URL web appu + token (menu Simy → Token pro sim_runner.py…)
   python sim_runner.py login        # otevře prohlížeč, přihlas se do Raidbots, pak Enter
+  python sim_runner.py login --export   # …a navíc uloží přihlášení do raidbots_state.json (secret pro GitHub Actions)
+  python sim_runner.py pending      # jen vypíše, kolik řádků čeká
   python sim_runner.py              # zpracuje frontu
+
+Online (bez PC): .github/workflows/sims.yml spouští tenhle skript v GitHub Actions
+každou hodinu a na kliknutí (menu Simy → Spustit simy online, tlačítko na hubu).
+Konfigurace přes env: SIM_WEBAPP_URL, SIM_API_TOKEN, SIM_STORAGE_STATE (cesta
+k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE.
   python sim_runner.py --parallel 3 # max 3 simy najednou (výchozí 10)
   python sim_runner.py --dry-run    # všechno kromě kliknutí na Run (kontrola nastavení)
   python sim_runner.py --row 7      # jen konkrétní řádek listu
@@ -125,6 +132,10 @@ def load_config():
         cfg.update(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
     cfg["webapp_url"] = os.environ.get("SIM_WEBAPP_URL", cfg["webapp_url"])
     cfg["token"] = os.environ.get("SIM_API_TOKEN", cfg["token"])
+    if os.environ.get("SIM_PARALLEL", "").strip().isdigit():
+        cfg["parallel"] = int(os.environ["SIM_PARALLEL"])
+    if os.environ.get("SIM_UPGRADE", "").strip():
+        cfg["upgrade"] = os.environ["SIM_UPGRADE"].strip()
     return cfg
 
 
@@ -208,20 +219,34 @@ class SheetApi:
 class Raidbots:
     """Jedno Chromium s trvalým profilem; každý sim běží ve vlastním panelu (page)."""
 
-    def __init__(self, cfg, headless=False):
+    def __init__(self, cfg, headless=False, storage_state=None):
+        """storage_state = cesta k JSON z `login --export` (GitHub Actions: cookies + localStorage
+        místo trvalého profilu). Bez něj se použije trvalý profil .raidbots_profile/."""
         from playwright.sync_api import sync_playwright
         self.cfg = cfg
         self._pw = sync_playwright().start()
-        PROFILE_DIR.mkdir(exist_ok=True)
-        self.ctx = self._pw.chromium.launch_persistent_context(
-            str(PROFILE_DIR), headless=headless, viewport={"width": 1280, "height": 1800},
-            args=["--disable-blink-features=AutomationControlled"])
+        self._browser = None
+        args = ["--disable-blink-features=AutomationControlled"]
+        viewport = {"width": 1280, "height": 1800}
+        if storage_state:
+            self._browser = self._pw.chromium.launch(headless=headless, args=args)
+            self.ctx = self._browser.new_context(storage_state=storage_state, viewport=viewport)
+        else:
+            PROFILE_DIR.mkdir(exist_ok=True)
+            self.ctx = self._pw.chromium.launch_persistent_context(
+                str(PROFILE_DIR), headless=headless, viewport=viewport, args=args)
         self.ctx.set_default_timeout(30000)
         self.home = self.ctx.pages[0] if self.ctx.pages else self.ctx.new_page()
+
+    def export_state(self, path):
+        """Uloží cookies + localStorage (přihlášení Raidbots, nastavení Droptimizeru) do JSON."""
+        self.ctx.storage_state(path=str(path))
 
     def close(self):
         try:
             self.ctx.close()
+            if self._browser:
+                self._browser.close()
         finally:
             self._pw.stop()
 
@@ -524,7 +549,7 @@ class Raidbots:
 
 # ------------------------------------------------------------------- main ----
 
-def cmd_login(cfg):
+def cmd_login(cfg, export=None):
     rb = Raidbots(cfg, headless=False)
     try:
         rb.home.goto("https://www.raidbots.com/auth", wait_until="domcontentloaded")
@@ -533,8 +558,25 @@ def cmd_login(cfg):
         input("Až budeš hotový, stiskni Enter tady v konzoli… ")
         ok = rb.logged_in()
         print("Přihlášení: OK" if ok else "Pozor: stránka stále ukazuje LOGIN – nejsi přihlášený.")
+        if export:
+            rb.export_state(export)
+            print(f"\nPřihlášení uloženo do {export}.")
+            print("Pro GitHub Actions: obsah souboru vlož do secretu RAIDBOTS_STORAGE_STATE")
+            print(f"(repo → Settings → Secrets and variables → Actions). Soubor je v .gitignore, necommituj ho.")
     finally:
         rb.close()
+
+
+def cmd_pending(cfg):
+    """Jen spočítá frontu (GitHub Actions: přeskočí instalaci Chromia, když není co dělat)."""
+    api = SheetApi(cfg)
+    rows = api.queue()
+    n = len(rows)
+    print(f"Ve frontě: {n}" + (": " + ", ".join(f"{r['character']} ({r['spec']})" for r in rows) if n else ""))
+    out = os.environ.get("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a", encoding="utf-8") as f:
+            f.write(f"count={n}\n")
 
 
 def rkey(row):
@@ -647,7 +689,10 @@ def cmd_run(cfg, args):
         return
 
     parallel = max(1, args.parallel or int(cfg.get("parallel", 10)))
-    rb = Raidbots(cfg, headless=args.headless)
+    state = args.storage_state or os.environ.get("SIM_STORAGE_STATE") or None
+    if state and not Path(state).is_file():
+        sys.exit(f"Soubor s přihlášením Raidbots neexistuje: {state}")
+    rb = Raidbots(cfg, headless=args.headless, storage_state=state)
     active = []
     try:
         if todo and not rb.logged_in():
@@ -716,8 +761,11 @@ def cmd_run(cfg, args):
 
 def main():
     ap = argparse.ArgumentParser(description="Raidbots Droptimizer runner pro Sim frontu")
-    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "login"])
+    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "login", "pending"])
     ap.add_argument("--parallel", type=int, help="kolik simů najednou, každý ve vlastním panelu (výchozí z configu, 10)")
+    ap.add_argument("--storage-state", metavar="FILE", help="JSON s přihlášením Raidbots z `login --export` (jinak env SIM_STORAGE_STATE / trvalý profil)")
+    ap.add_argument("--export", nargs="?", const=str(HERE / "raidbots_state.json"), metavar="FILE",
+                    help="(login) po přihlášení uložit cookies/localStorage do souboru pro GitHub Actions")
     ap.add_argument("--dry-run", action="store_true", help="vše kromě kliknutí na Run Droptimizer")
     ap.add_argument("--headless", action="store_true", help="bez okna prohlížeče")
     ap.add_argument("--row", type=int, help="zpracovat jen řádek listu N")
@@ -728,7 +776,9 @@ def main():
     if args.command == "setup":
         cmd_setup(cfg)
     elif args.command == "login":
-        cmd_login(cfg)
+        cmd_login(cfg, args.export)
+    elif args.command == "pending":
+        cmd_pending(cfg)
     else:
         cmd_run(cfg, args)
 

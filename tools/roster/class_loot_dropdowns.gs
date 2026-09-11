@@ -1300,6 +1300,7 @@ function doGet(e) {
     .replace("__TYPES__", JSON.stringify(ABSENCE_TYPES))
     .replace("__MAXDAYS__", String(ABS_MAX_DAYS));
   return HtmlService.createHtmlOutput(html)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL) // vložené na hlavní stránce guildy (GitHub Pages)
     .setTitle("Hlášení absence")
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
@@ -1417,7 +1418,7 @@ var BOSS_PLANS = [
   ["08", "Ula'tek",      "https://raidplan.io/plan/v3u4qp9jugsdyzys", "boss-8"],
   ["09", "Nymrissa",     "https://raidplan.io/plan/g4skqtr53vrsx467", "boss-9"]
 ];
-var GUIDE_URL = "https://vitekpoor.github.io/RaidPlan/";
+var GUIDE_URL = "https://vitekpoor.github.io/RaidPlan/raid.html"; // taktiky; kořen webu je rozcestník (staré odkazy …/#boss-N přesměruje)
 var LINEUP_ABSENT_BG = "#E06666";
 var LINEUP_LATE_BG = "#F6B26B";
 var LINEUP_UNKNOWN_BG = "#DDDDDD";
@@ -1658,8 +1659,8 @@ function applyClassDropdowns() {
 var SIM_SHEET_NAME = "Sim fronta";
 var SIM_HEADER = ["Čas", "Postava", "Spec", "SimC string", "Report URL", "Stav", "Poznámka", "wowaudit ID"];
 var SIM_COL = { time: 1, character: 2, spec: 3, simc: 4, report: 5, status: 6, note: 7, id: 8 };
-var SIM_STATUS = { pending: "⏳ čeká na sim", running: "🔄 simuluje", done: "✅ ve wowaudit", error: "⚠ chyba", dropped: "❌ zahozeno" };
-var SIM_STATUS_BG = { "⏳ čeká na sim": "#FFF2CC", "🔄 simuluje": "#CFE2F3", "✅ ve wowaudit": "#D9EAD3", "⚠ chyba": "#F4CCCC", "❌ zahozeno": "#EFEFEF" };
+var SIM_STATUS = { pending: "⏳ čeká na sim", running: "🔄 simuluje", done: "✅ hotovo", error: "⚠ chyba", dropped: "❌ zahozeno" };
+var SIM_STATUS_BG = { "⏳ čeká na sim": "#FFF2CC", "🔄 simuluje": "#CFE2F3", "✅ hotovo": "#D9EAD3", "✅ ve wowaudit": "#D9EAD3", "⚠ chyba": "#F4CCCC", "❌ zahozeno": "#EFEFEF" };
 var SIM_MAX_SIMC = 200000;         // pojistka na velikost vstupu (SimC export má ~10–20 kB)
 
 var WOWAUDIT_API = "https://api.wowaudit.com/v1";
@@ -1667,6 +1668,7 @@ var WOWAUDIT_KEY_PROP = "WOWAUDIT_API_KEY";
 var WOWAUDIT_CHARS_CACHE = "wowaudit_characters_v1";
 var WOWAUDIT_CHARS_TTL = 6 * 3600;  // CacheService maximum
 var WOWAUDIT_REPLACE_MANUAL = false; // true = sim přepíše ruční úpravy hráče ve wowaudit
+var WOWAUDIT_UPLOAD = true;          // false = do wowaudit neposílat (stránka Simy bere data z listu "Sim výsledky")
 
 var RAIDBOTS_DROPTIMIZER_URL = "https://www.raidbots.com/simbot/droptimizer";
 var SIM_RAIDBOTS_STEPS = [
@@ -1799,6 +1801,10 @@ function onOpen() {
       .addSeparator()
       .addItem("Vytvořit list Sim výsledky", "buildSimResultsSheet")
       .addItem("Načíst výsledky ze všech hotových reportů", "rebuildSimResults")
+      .addSeparator()
+      .addItem("Spustit simy online (GitHub)", "runSimsOnline")
+      .addItem("Nastavit GitHub token…", "setGithubToken")
+      .addItem("Nastavit heslo pro web tlačítko…", "setSimRunPassword")
       .addToUi();
   } catch (err) { /* bez UI (trigger/web) */ }
 }
@@ -1861,6 +1867,7 @@ function raidbotsReportId_(s) {
 
 function simFormPage_() {
   return HtmlService.createHtmlOutput(SIM_FORM_HTML_)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL) // vložené na hlavní stránce guildy (GitHub Pages)
     .setTitle("Sim pro loot")
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
@@ -1902,7 +1909,7 @@ function submitSimWeb(data) {
     sh.getRange(r, SIM_COL.status).setBackground(SIM_STATUS_BG[SIM_STATUS.pending]);
     var waiting = countPendingSims_(sh);
     return { ok: true, message: "✅ Uloženo: " + ch.name + " (" + p.spec + "). Ve frontě čeká " + waiting +
-      (waiting === 1 ? " sim." : waiting < 5 ? " simy." : " simů.") + " Raid leader sim spustí a výsledek uvidíš ve wowaudit." };
+      (waiting === 1 ? " sim." : waiting < 5 ? " simy." : " simů.") + " Sim proběhne automaticky (nejpozději do hodiny) a upgrady uvidíš na stránce Simy." };
   } catch (err) {
     return { ok: false, message: "⚠ Chyba: " + err.message };
   } finally {
@@ -1952,40 +1959,68 @@ function setSimStatus_(sh, row, status, note) {
 /* ---------- nahrání reportu do wowaudit ---------- */
 
 /**
- * Nahraje Raidbots report z řádku fronty do wowaudit pro postavu v řádku.
- * Vrací { ok, message }. Používá dialog i onEdit trigger.
+ * Zpracuje report z řádku fronty: primárně zapíše výsledky do listu
+ * "Sim výsledky" (čte ho stránka Simy), sekundárně (WOWAUDIT_UPLOAD) ho zkusí
+ * nahrát do wowaudit. Řádek je ✅, když se povedlo aspoň jedno.
+ * Vrací { ok, message }. Používá dialog, onEdit trigger i sim_runner (simapi done).
  */
 function uploadSimReport_(sh, row, reportUrl) {
   var vals = sh.getRange(row, 1, 1, SIM_HEADER.length).getValues()[0];
   var character = String(vals[SIM_COL.character - 1] || "");
+  var spec = String(vals[SIM_COL.spec - 1] || "");
   var charId = Number(vals[SIM_COL.id - 1]);
   var link = parseReportLink_(reportUrl);
   if (!link) { setSimStatus_(sh, row, SIM_STATUS.error, "Neplatný odkaz na report (Raidbots / QE Live): " + reportUrl); return { ok: false, message: "⚠ Neplatný odkaz – vlož odkaz na Raidbots Droptimizer nebo QE Live Upgrade Finder report." }; }
-  var reportId = link.id;
-  if (!charId) {
-    // řádek bez ID (např. ručně vložený) – dohledej podle jména
-    var chars = wowauditCharacters_(false);
-    chars.forEach(function (c) { if (simNameKey_(c.name) === simNameKey_(character)) charId = c.id; });
-    if (!charId) { setSimStatus_(sh, row, SIM_STATUS.error, "Postava není ve wowaudit"); return { ok: false, message: "⚠ Postava „" + character + "“ není ve wowaudit." }; }
-    sh.getRange(row, SIM_COL.id).setValue(charId);
+  sh.getRange(row, SIM_COL.report).setValue(link.url);
+
+  // 1) primární cíl: list "Sim výsledky" (čte ho stránka Simy)
+  var stored = storeSimResults_(character, spec, link);
+
+  // 2) wowaudit jen jako bonus – s "Upgrade up to" reporty odmítá ("no matching droptimizer configuration")
+  var wa = { ok: false, skipped: true, message: "vypnuto" };
+  if (WOWAUDIT_UPLOAD) {
+    try {
+      if (!charId) {
+        var chars = wowauditCharacters_(false);
+        chars.forEach(function (c) { if (simNameKey_(c.name) === simNameKey_(character)) charId = c.id; });
+        if (charId) sh.getRange(row, SIM_COL.id).setValue(charId);
+      }
+      if (!charId) wa = { ok: false, skipped: false, message: "postava není ve wowaudit" };
+      else wa = wowauditUploadReport_(charId, link.id);
+    } catch (err) { wa = { ok: false, skipped: false, message: String(err && err.message || err) }; }
   }
+
+  var when = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "d.M. H:mm");
+  var notes = [when + (link.kind === "qe" ? " QE Live" : " Raidbots")];
+  notes.push(stored.ok ? "výsledky: " + stored.message : "výsledky se nenačetly: " + stored.message);
+  notes.push(wa.skipped ? "wowaudit vypnuto" : (wa.ok ? "wowaudit nahráno" : "wowaudit odmítl: " + wa.message));
+  var ok = stored.ok || wa.ok;
+  setSimStatus_(sh, row, ok ? SIM_STATUS.done : SIM_STATUS.error, notes.join(" · "));
+  var msg = ok
+    ? "✅ " + character + ": " + (stored.ok ? stored.message + " ve výsledcích" : "výsledky se nenačetly") + (wa.skipped ? "" : (wa.ok ? ", wowaudit OK" : ", wowaudit odmítl"))
+    : "⚠ " + character + ": " + stored.message + (wa.skipped ? "" : "; wowaudit: " + wa.message);
+  return { ok: ok, message: msg };
+}
+
+/** POST /v1/wishlists – vrací { ok, skipped:false, message }. */
+function wowauditUploadReport_(charId, reportId) {
   var r = wowauditFetch_("/wishlists", "post", {
     report_id: reportId, character_id: charId,
     replace_manual_edits: WOWAUDIT_REPLACE_MANUAL, clear_conduits: false
   });
-  var url = link.url;
-  if (r.code === 200 && r.json && r.json.created) {
-    sh.getRange(row, SIM_COL.report).setValue(url);
-    var stored = storeSimResults_(character, String(vals[SIM_COL.spec - 1] || ""), link);
-    setSimStatus_(sh, row, SIM_STATUS.done, "nahráno " + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "d.M. H:mm") +
-      (link.kind === "qe" ? " (QE Live)" : "") +
-      (stored.ok ? ", výsledky: " + stored.message : ", výsledky se nenačetly: " + stored.message));
-    return { ok: true, message: "✅ " + character + " nahráno do wowaudit" + (link.kind === "qe" ? " (QE Live)." : ".") };
+  if (r.code === 200 && r.json && r.json.created) return { ok: true, skipped: false, message: "nahráno" };
+  var msg = "";
+  if (r.json && typeof r.json === "object") {
+    msg = String(r.json.message || r.json.error || "");
+    if (!msg) {
+      // tvar {"created":false,"base":["…"],"team":["…"]}
+      var parts = [];
+      Object.keys(r.json).forEach(function (k) { if (Array.isArray(r.json[k])) parts.push(r.json[k].join(", ")); });
+      msg = parts.join("; ");
+    }
   }
-  var msg = r.json && (r.json.message || r.json.error) ? String(r.json.message || r.json.error) : r.body.slice(0, 200);
-  sh.getRange(row, SIM_COL.report).setValue(url);
-  setSimStatus_(sh, row, SIM_STATUS.error, "wowaudit HTTP " + r.code + ": " + msg);
-  return { ok: false, message: "⚠ wowaudit odmítl report (HTTP " + r.code + "): " + msg };
+  if (!msg) msg = r.body.slice(0, 200);
+  return { ok: false, skipped: false, message: "HTTP " + r.code + " " + msg };
 }
 
 /** Handler instalovatelného onEdit triggeru – vložení odkazu do sloupce Report URL. */
@@ -2182,7 +2217,7 @@ var SIM_FORM_HTML_ = '<!DOCTYPE html>\
   #detected b { color:#d9e4de; }\
 </style></head><body><div class="card">\
 <h1>⚔️ Sim pro loot</h1>\
-<p class="hint">Vlož sem celý text z <code>/simc</code>. Postavu poznáme automaticky, Raidbots spustí raid leader a upgrady uvidíš ve wowaudit.</p>\
+<p class="hint">Vlož sem celý text z <code>/simc</code>. Postavu poznáme automaticky, sim proběhne sám (Droptimizer / QE Live, itemy jako plně upgradnuté) a upgrady uvidíš na stránce Simy.</p>\
 <textarea id="simc" placeholder="Sem vlož SimC string (Ctrl+V)…" spellcheck="false" autofocus></textarea>\
 <div id="detected"></div>\
 <button id="send">Odeslat</button>\
@@ -2463,19 +2498,119 @@ function rebuildSimResults() {
   var done = 0, failed = [];
   if (last >= 2) {
     var vals = sh.getRange(2, 1, last - 1, SIM_HEADER.length).getValues();
-    // pro každou postavu jen poslední ✅ řádek
+    // pro každou postavu poslední řádek, který má odkaz na report (✅ i ⚠ – např. wowaudit odmítl,
+    // ale sim proběhl); zahozené řádky se ignorují
     var latest = {};
-    vals.forEach(function (v) {
-      if (String(v[SIM_COL.status - 1]) !== SIM_STATUS.done) return;
-      latest[simNameKey_(v[SIM_COL.character - 1])] = v;
+    vals.forEach(function (v, i) {
+      var status = String(v[SIM_COL.status - 1]);
+      if (status === SIM_STATUS.dropped || status === SIM_STATUS.pending || status === SIM_STATUS.running) return;
+      if (!parseReportLink_(v[SIM_COL.report - 1])) return;
+      latest[simNameKey_(v[SIM_COL.character - 1])] = { v: v, row: i + 2, status: status };
     });
     Object.keys(latest).forEach(function (k) {
-      var v = latest[k];
-      var link = parseReportLink_(v[SIM_COL.report - 1]);
-      if (!link) { failed.push(v[SIM_COL.character - 1] + " (neplatný odkaz)"); return; }
-      var r = storeSimResults_(String(v[SIM_COL.character - 1]), String(v[SIM_COL.spec - 1]), link);
-      if (r.ok) done++; else failed.push(v[SIM_COL.character - 1] + " (" + r.message + ")");
+      var e = latest[k], v = e.v;
+      var character = String(v[SIM_COL.character - 1]);
+      var r;
+      if (e.status.indexOf("✅") === 0) {
+        r = storeSimResults_(character, String(v[SIM_COL.spec - 1]), parseReportLink_(v[SIM_COL.report - 1]));
+      } else {
+        r = uploadSimReport_(sh, e.row, String(v[SIM_COL.report - 1]));   // opraví i stav řádku
+      }
+      if (r.ok) done++; else failed.push(character + " (" + r.message + ")");
     });
   }
   SpreadsheetApp.getUi().alert("Výsledky načteny pro " + done + " postav." + (failed.length ? "\nSelhalo: " + failed.join(", ") : ""));
+}
+
+// ================== SPUŠTĚNÍ SIMŮ ONLINE (GitHub Actions) ==================
+//
+// sim_runner.py běží i v GitHub Actions (.github/workflows/sims.yml): podle
+// plánu každou hodinu a na vyžádání. Na vyžádání ho spustí:
+//   - menu Simy → "Spustit simy online (GitHub)", nebo
+//   - tlačítko na hlavní stránce (hub) chráněné heslem raid leadera →
+//     POST na web app { p: "runsims", pw: "…" } (doPost) → workflow_dispatch.
+// Jednorázově: setGithubToken() (fine-grained PAT jen na tento repo,
+// oprávnění Actions: read & write) a setSimRunPassword().
+
+var GITHUB_REPO = "vitekpoor/RaidPlan";
+var GITHUB_WORKFLOW = "sims.yml";
+var GITHUB_BRANCH = "main";
+var GITHUB_TOKEN_PROP = "GITHUB_TOKEN";
+var SIM_RUN_PASSWORD_PROP = "SIM_RUN_PASSWORD";
+var SIM_RUN_COOLDOWN_SEC = 120;
+
+function setGithubToken() {
+  var ui = SpreadsheetApp.getUi();
+  var res = ui.prompt("GitHub token pro spouštění simů",
+    "Vlož fine-grained personal access token (repo " + GITHUB_REPO + ", Actions: Read and write). Uloží se do Script Properties.",
+    ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  var t = res.getResponseText().trim();
+  if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(t)) { ui.alert("To nevypadá jako GitHub token (github_pat_… / ghp_…)."); return; }
+  PropertiesService.getScriptProperties().setProperty(GITHUB_TOKEN_PROP, t);
+  ui.alert("Token uložen.");
+}
+
+function setSimRunPassword() {
+  var ui = SpreadsheetApp.getUi();
+  var res = ui.prompt("Heslo pro tlačítko „Spustit simy“ na webu",
+    "Heslo, které zadá raid leader na hlavní stránce. Uloží se do Script Properties.", ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  var pw = res.getResponseText().trim();
+  if (pw.length < 4) { ui.alert("Moc krátké heslo."); return; }
+  PropertiesService.getScriptProperties().setProperty(SIM_RUN_PASSWORD_PROP, pw);
+  ui.alert("Heslo uloženo.");
+}
+
+/** workflow_dispatch přes GitHub API. Vrací { ok, message }. */
+function triggerSimRunner_(reason) {
+  var token = PropertiesService.getScriptProperties().getProperty(GITHUB_TOKEN_PROP);
+  if (!token) return { ok: false, message: "chybí GitHub token (menu Simy → Nastavit GitHub token…)" };
+  var resp = UrlFetchApp.fetch("https://api.github.com/repos/" + GITHUB_REPO + "/actions/workflows/" + GITHUB_WORKFLOW + "/dispatches", {
+    method: "post", contentType: "application/json", muteHttpExceptions: true,
+    headers: { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+    payload: JSON.stringify({ ref: GITHUB_BRANCH, inputs: { reason: String(reason || "manual").slice(0, 80) } })
+  });
+  var code = resp.getResponseCode();
+  if (code === 204) return { ok: true, message: "GitHub Actions spuštěn – simy doběhnou za pár minut, výsledky se objeví na stránce Simy." };
+  return { ok: false, message: "GitHub API HTTP " + code + ": " + resp.getContentText().slice(0, 200) };
+}
+
+/** Společná logika pro menu i web: fronta prázdná → nespouštět; cooldown proti dvojkliku. */
+function runSimsOnline_(reason) {
+  var sh = simSheet_();
+  var pending = sh ? countPendingSims_(sh) : 0;
+  if (!pending) return { ok: true, message: "Fronta je prázdná – není co simovat." };
+  var cache = CacheService.getScriptCache();
+  if (cache.get("simrun_last")) return { ok: true, message: "Simy už byly spuštěny před chvílí – počkej, výsledky dorazí." };
+  var r = triggerSimRunner_(reason);
+  if (r.ok) { cache.put("simrun_last", "1", SIM_RUN_COOLDOWN_SEC); r.message = pending + " ve frontě. " + r.message; }
+  return r;
+}
+
+/** Menu Simy → Spustit simy online (GitHub). */
+function runSimsOnline() {
+  var r = runSimsOnline_("sheets-menu");
+  SpreadsheetApp.getUi().alert(r.message);
+}
+
+/**
+ * POST z hlavní stránky: tělo JSON { p: "runsims", pw: "heslo" } (text/plain,
+ * aby prohlížeč nedělal preflight). Odpověď JSON { ok, message }.
+ */
+function doPost(e) {
+  var body = {};
+  try { body = JSON.parse((e && e.postData && e.postData.contents) || "{}"); } catch (err) { body = {}; }
+  var params = (e && e.parameter) || {};
+  var p = String(body.p || params.p || "");
+  if (p !== "runsims") return simApiJson_({ ok: false, message: "neznámý požadavek" });
+  var want = PropertiesService.getScriptProperties().getProperty(SIM_RUN_PASSWORD_PROP);
+  var pw = String(body.pw || params.pw || "");
+  if (!want) return simApiJson_({ ok: false, message: "heslo není nastavené (menu Simy → Nastavit heslo…)" });
+  if (pw !== want) {
+    Utilities.sleep(800);
+    return simApiJson_({ ok: false, message: "špatné heslo" });
+  }
+  try { return simApiJson_(runSimsOnline_("web-hub")); }
+  catch (err) { return simApiJson_({ ok: false, message: String(err && err.message || err) }); }
 }

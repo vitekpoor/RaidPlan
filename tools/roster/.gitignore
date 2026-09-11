@@ -11,3 +11,6 @@ wowaudit_*.json
 .raidbots_profile/
 sim_runner.config.json
 sim_runner_logs/
+
+# Raidbots login export for GitHub Actions (secret RAIDBOTS_STORAGE_STATE) - never commit
+raidbots_state.json

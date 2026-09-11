@@ -153,7 +153,7 @@ they are listed at the bottom under 🔎 CHECK THE SHEET.
 This folder is deployed from the **RaidPlan** repository: the workflow file
 lives at `RaidPlan/.github/workflows/weekly.yml` (GitHub only runs workflows
 from that path on the default branch) and calls
-`python raid-attendance/attendance.py`. The secret `DISCORD_WEBHOOK_URL` is
+`python tools/attendance/attendance.py`. The secret `DISCORD_WEBHOOK_URL` is
 set on that repository. To move the bot to a repository of its own, copy this
 folder there, put `weekly.yml` under `.github/workflows/`, and drop the
-`raid-attendance/` prefix from the two paths in it.
+`tools/attendance/` prefix from the two paths in it.

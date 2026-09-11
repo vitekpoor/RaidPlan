@@ -1,0 +1,90 @@
+name: Sim queue (Raidbots / QE Live)
+
+# Zpracuje frontu "Sim fronta" z Google Sheets: pro každou postavu pustí
+# Raidbots Droptimizer (DPS/tank) nebo QE Live (healer) a výsledky nahlásí
+# zpět do tabulky (list "Sim výsledky" -> stránka Simy). Stejný skript jako
+# lokálně: tools/roster/sim_runner.py.
+#
+# Secrets (Settings -> Secrets and variables -> Actions):
+#   SIM_WEBAPP_URL          .../exec adresa Apps Script web appu
+#   SIM_API_TOKEN           token (menu Simy -> Token pro sim_runner.py…)
+#   RAIDBOTS_STORAGE_STATE  obsah souboru z `python sim_runner.py login --export`
+#                           (přihlášení do Raidbots Premium; bez něj běží jako free účet)
+
+on:
+  schedule:
+    - cron: "17 * * * *"          # každou hodinu
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Kdo/co spustil (jen do logu)"
+        type: string
+        default: "manual"
+      parallel:
+        description: "Kolik simů najednou (prázdné = z configu / 10)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sim-queue
+  cancel-in-progress: false
+
+jobs:
+  sims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      SIM_WEBAPP_URL: ${{ secrets.SIM_WEBAPP_URL }}
+      SIM_API_TOKEN: ${{ secrets.SIM_API_TOKEN }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install requests
+        run: pip install requests
+
+      # Levná kontrola fronty před instalací Chromia (ušetří ~1 min při prázdné frontě)
+      - name: Check queue
+        id: queue
+        run: python tools/roster/sim_runner.py pending
+
+      - name: Install Playwright + Chromium
+        if: steps.queue.outputs.count != '0'
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Restore Raidbots login
+        if: steps.queue.outputs.count != '0'
+        env:
+          RAIDBOTS_STORAGE_STATE: ${{ secrets.RAIDBOTS_STORAGE_STATE }}
+        run: |
+          if [ -n "$RAIDBOTS_STORAGE_STATE" ]; then
+            printf '%s' "$RAIDBOTS_STORAGE_STATE" > "$RUNNER_TEMP/raidbots_state.json"
+            echo "SIM_STORAGE_STATE=$RUNNER_TEMP/raidbots_state.json" >> "$GITHUB_ENV"
+            echo "Raidbots session restored."
+          else
+            echo "::warning::RAIDBOTS_STORAGE_STATE secret není nastavený – Raidbots poběží jako free účet (1 sim, pomalá fronta)."
+          fi
+
+      - name: Run sims
+        if: steps.queue.outputs.count != '0'
+        env:
+          SIM_PARALLEL: ${{ inputs.parallel }}
+        run: python tools/roster/sim_runner.py --headless
+
+      - name: Upload debug screenshots
+        if: always() && steps.queue.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-runner-logs
+          path: tools/roster/sim_runner_logs/
+          if-no-files-found: ignore
+          retention-days: 7

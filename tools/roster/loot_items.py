@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-loot_items.py – vytvoří raidplan/loot_items.json: loot tabulka aktuální raid
+loot_items.py – vytvoří web/loot_items.json: loot tabulka aktuální raid
 sezóny (itemy + bossové) z veřejných dat Raidbots. Stránka loot.html podle ní
 doplňuje název, slot a bosse k itemům z QE Live reportů (ty mají jen ID) a řadí
 bosse ve správném pořadí.
@@ -8,7 +8,7 @@ bosse ve správném pořadí.
 Zdroj: https://www.raidbots.com/static/data/live/equippable-items.json (~50 MB,
 stahuje se jen při spuštění tohoto skriptu – výstup je malý a commituje se).
 
-Použití:  python loot_items.py            (v Roster/)
+Použití:  python loot_items.py            (v tools/roster/)
 Spouštět po změně sezóny / přidání raidu (INSTANCES níže).
 """
 
@@ -19,7 +19,7 @@ from pathlib import Path
 import requests
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE.parent / "raidplan" / "loot_items.json"
+OUT = HERE.parent.parent / "web" / "loot_items.json"
 SRC = "https://www.raidbots.com/static/data/live/equippable-items.json"
 
 # instance id -> název; pořadí bossů = pořadí v raid guide (bossnav)
