@@ -9,7 +9,7 @@ if errorlevel 1 goto :end
 
 rem stage only the raid guide (this folder + the published root index.html);
 rem Roster\ is managed separately and is never published by this script
-git add -A -- . ..\index.html ..\.gitignore
+git add -A -- . ..\index.html ..\loot.html ..\.gitignore
 
 rem exit if there is nothing new to commit
 git diff --cached --quiet

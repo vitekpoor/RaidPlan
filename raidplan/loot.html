@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<!-- ZDROJ stránky Loot simy. build.bat ji kopíruje do kořene repa jako loot.html
+     (s cestou raidplan/loot_items.json). Data čte živě z Google Sheets, list
+     "Sim výsledky" (plní ho Apps Script po každém simu), přes gviz CSV. -->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loot simy – Eternal Shadows</title>
+<style>
+*,*::before,*::after { box-sizing: border-box; }
+html,body { margin: 0; padding: 0; }
+img,svg { max-width: 100%; }
+:root {
+  --ground: #0c1210; --surface: #131b18; --surface2: #18231f; --line: #24322c;
+  --ink: #d9e4de; --muted: #8ba49a; --jade: #55b98a; --gold: #c9a24b;
+  --tank: #6f9fd8; --heal: #5cb87c; --dps: #d4796a; --mythic: #e08a3c; --callout-bg: #16241e;
+  --neg: #7d8b85;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #eef2ef; --surface: #ffffff; --surface2: #f4f7f4; --line: #d5ded8;
+    --ink: #1a2420; --muted: #5c6f67; --jade: #2e8663; --gold: #96742a;
+    --tank: #2e64a8; --heal: #2c7d4f; --dps: #b04a3a; --mythic: #a85f1c; --callout-bg: #e6efe9;
+    --neg: #8a9994;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #eef2ef; --surface: #ffffff; --surface2: #f4f7f4; --line: #d5ded8;
+  --ink: #1a2420; --muted: #5c6f67; --jade: #2e8663; --gold: #96742a;
+  --tank: #2e64a8; --heal: #2c7d4f; --dps: #b04a3a; --mythic: #a85f1c; --callout-bg: #e6efe9;
+  --neg: #8a9994;
+}
+body { background: var(--ground); color: var(--ink); font-family: "Segoe UI", -apple-system, sans-serif; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 1.2rem 1.2rem 3rem; }
+header .eyebrow { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .14em; margin: 0 0 .3rem; }
+h1 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 500; font-size: 2rem; margin: 0 0 .4rem; color: var(--gold); }
+h2 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 500; font-size: 1.35rem; margin: 1.6rem 0 .6rem; color: var(--jade); }
+.lead { color: var(--muted); margin: 0 0 1rem; font-size: .92rem; }
+.mono { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+a { color: var(--jade); }
+
+.bossnav {
+  position: sticky; top: 0; z-index: 10; background: var(--ground);
+  display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 0 .75rem; align-items: center;
+  border-bottom: 1px solid var(--line); margin-bottom: .8rem;
+}
+.bossnav a, .bossnav button {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: .28rem .8rem; font-size: .82rem; color: var(--ink); cursor: pointer;
+  text-decoration: none; white-space: nowrap; font-family: inherit;
+}
+.bossnav a:hover, .bossnav button:hover { border-color: var(--jade); }
+.bossnav .active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
+.bossnav a.home { border-color: var(--gold); }
+.bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
+.bossnav .grow { flex: 1; }
+
+.controls { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; margin: 0 0 1rem; font-size: .86rem; color: var(--muted); }
+.controls label { display: inline-flex; align-items: center; gap: .35rem; }
+.controls input[type=number], .controls input[type=search] {
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: .25rem .5rem; font: inherit;
+}
+.controls input[type=number] { width: 4.5rem; }
+.controls input[type=search] { width: 12rem; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { background: var(--surface); color: var(--ink); border: 0; padding: .25rem .75rem; cursor: pointer; font: inherit; font-size: .82rem; }
+.seg button.active { background: var(--callout-bg); color: var(--jade); }
+.status { color: var(--muted); font-size: .82rem; }
+.status.err { color: var(--dps); }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted);
+     padding: .55rem .8rem; border-bottom: 1px solid var(--line); background: var(--surface2); white-space: nowrap; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--ink); }
+th .arrow { opacity: .6; margin-left: .25rem; }
+td { padding: .45rem .8rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+td.num { text-align: right; white-space: nowrap; }
+th.num { text-align: right; }
+
+.card { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 0 0 1rem; overflow: hidden; }
+.card > summary, .card .cardhead { list-style: none; cursor: pointer; padding: .7rem .9rem; display: flex; flex-wrap: wrap; gap: .4rem .9rem; align-items: baseline; background: var(--surface2); }
+.card > summary::-webkit-details-marker { display: none; }
+.card .name { font-weight: 600; font-size: 1.02rem; }
+.card .meta { color: var(--muted); font-size: .8rem; }
+.card .tablewrap { border: 0; border-radius: 0; }
+.badge { display: inline-block; border-radius: 999px; padding: .05rem .55rem; font-size: .72rem; border: 1px solid var(--line); color: var(--muted); }
+.badge.dps { color: var(--dps); border-color: var(--dps); }
+.badge.heal { color: var(--heal); border-color: var(--heal); }
+.badge.boss { color: var(--gold); border-color: var(--gold); }
+.item { display: inline-flex; align-items: center; gap: .45rem; }
+.item img { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); }
+.item a { color: var(--ink); text-decoration: none; }
+.item a:hover { text-decoration: underline; }
+.slot { color: var(--muted); font-size: .78rem; }
+
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+.chip { display: inline-flex; align-items: center; gap: .35rem; border-radius: 999px; padding: .08rem .6rem; font-size: .8rem;
+        border: 1px solid var(--line); background: var(--surface2); white-space: nowrap; }
+.chip .v { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+.up4 { border-color: var(--jade); color: var(--jade); background: color-mix(in srgb, var(--jade) 18%, var(--surface2)); }
+.up3 { border-color: var(--jade); color: var(--jade); }
+.up2 { border-color: var(--gold); color: var(--gold); }
+.up1 { color: var(--ink); }
+.up0 { color: var(--neg); }
+.val { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; font-weight: 600; }
+.val.up4, .val.up3 { color: var(--jade); }
+.val.up2 { color: var(--gold); }
+.val.up0 { color: var(--neg); font-weight: 400; }
+.hint { color: var(--muted); font-size: .8rem; }
+.bosshead { display: flex; align-items: baseline; gap: .6rem; margin: 1.4rem 0 .5rem; }
+.bosshead .num { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .12em; }
+.empty { color: var(--muted); font-style: italic; padding: .6rem .9rem; }
+footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; color: var(--muted); font-size: .8rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="eyebrow">Eternal Shadows · Midnight sezóna 2 · Mythic</p>
+  <h1>Loot simy</h1>
+  <p class="lead">Upgrady z Raidbots Droptimizeru (DPS) a QE Live (healeři) pro každou postavu – itemy počítané jako plně upgradnuté (Myth 6/6),
+     takže i lidem s vytočeným kusem ukáže, jestli se jim boss item vyplatí. Data se berou živě z listu „Sim výsledky“, poslední sim postavy vždy nahrazuje starší.</p>
+</header>
+
+<nav class="bossnav">
+  <a href="index.html" class="home">← Raid guide</a>
+  <span class="sep" aria-hidden="true"></span>
+  <button data-view="players" class="active">Podle hráče</button>
+  <button data-view="bosses">Podle bosse</button>
+  <button data-view="items">Podle itemu</button>
+  <span class="grow"></span>
+  <span class="status" id="status">Načítám…</span>
+</nav>
+
+<div class="controls">
+  <span class="seg" id="unitseg">
+    <button data-unit="pct" class="active">% upgrade</button>
+    <button data-unit="abs">číslo (DPS / HPS)</button>
+  </span>
+  <label>min. upgrade <input type="number" id="minv" value="0.5" step="0.1" min="-100"> <span id="minunit">%</span></label>
+  <label><input type="checkbox" id="showneg"> zobrazit i zhoršení</label>
+  <label>hledat <input type="search" id="q" placeholder="hráč / item / boss"></label>
+</div>
+
+<div id="view"></div>
+
+<footer>
+  <p>Zdroje: <a href="https://www.raidbots.com/simbot/droptimizer">Raidbots Droptimizer</a> (Patchwerk, 1 cíl, 5 min, Smart Sim high precision, Upgrade up to Myth 6/6) a
+  <a href="https://questionablyepic.com/live/upgradefinder">QE Live Upgrade Finder</a> (Raid Mythic, plný upgrade). Procenta healerů (HPS skóre z QE) a DPS nejsou navzájem srovnatelná – porovnávej v rámci role.
+  Sim si každý pošle přes formulář „Sim pro loot“; raid leader frontu spustí jedním klikem.</p>
+</footer>
+</div>
+
+<script>
+(function () {
+  var SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI";
+  var SHEET_TAB = "Sim výsledky";
+  var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(SHEET_TAB);
+  var ITEMS_URL = "loot_items.json";
+  var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
+  var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
+                  legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
+                  one_hand: "1H zbraň", two_hand: "2H zbraň", ranged: "ranged", token: "tier token", relic: "relic" };
+  var SPEC_CLASS = { blood: "deathknight", frost: "", unholy: "deathknight", havoc: "demonhunter", vengeance: "demonhunter", devourer: "demonhunter",
+                     balance: "druid", feral: "druid", guardian: "druid", restoration: "", devastation: "evoker", preservation: "evoker",
+                     augmentation: "evoker", beast_mastery: "hunter", marksmanship: "hunter", survival: "hunter", arcane: "mage", fire: "mage",
+                     brewmaster: "monk", mistweaver: "monk", windwalker: "monk", holy: "", protection: "", retribution: "paladin",
+                     discipline: "priest", shadow: "priest", assassination: "rogue", outlaw: "rogue", subtlety: "rogue", elemental: "shaman",
+                     enhancement: "shaman", affliction: "warlock", demonology: "warlock", destruction: "warlock", arms: "warrior", fury: "warrior" };
+  var CLASS_COLOR = { deathknight: "#C41E3A", demonhunter: "#A330C9", druid: "#FF7C0A", evoker: "#33937F", hunter: "#AAD372", mage: "#3FC7EB",
+                      monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
+
+  var $ = function (s) { return document.querySelector(s); };
+  var state = { view: "players", unit: "pct", rows: [], items: {}, bosses: [], sort: { key: "diff", dir: -1 } };
+  try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function num(s) { if (s == null || s === "") return null; var v = parseFloat(String(s).replace(/\s/g, "").replace(",", ".")); return isNaN(v) ? null : v; }
+  function parseCsv(text) {
+    var rows = [], row = [], field = "", i = 0, q = false;
+    while (i < text.length) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
+        else field += c;
+      } else if (c === '"') q = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(field); rows.push(row); row = []; field = ""; }
+      else field += c;
+      i++;
+    }
+    if (field !== "" || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+  function parseDate(s) {
+    // "11.9.2026 10:22" nebo "11.9.2026 10:22:03"
+    var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/.exec(String(s || "").trim());
+    if (!m) return null;
+    return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
+  }
+  function fmtDate(d) { return d ? d.getDate() + "." + (d.getMonth() + 1) + ". " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0") : ""; }
+
+  function load() {
+    var status = $("#status");
+    Promise.all([
+      fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); }),
+      fetch(ITEMS_URL).then(function (r) { return r.ok ? r.json() : { items: {}, bosses: [] }; })
+    ]).then(function (res) {
+      var table = parseCsv(res[0]);
+      var head = table.shift() || [];
+      var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
+      if (idx["Postava"] == null || idx["Rozdíl %"] == null) throw new Error("list „" + SHEET_TAB + "“ nemá očekávané sloupce (existuje?)");
+      var items = res[1].items || {}, bosses = res[1].bosses || [];
+      var bossById = {}; bosses.forEach(function (b) { bossById[String(b.id)] = b; });
+      state.items = items; state.bosses = bosses; state.bossById = bossById;
+      state.rows = table.filter(function (r) { return r[idx["Postava"]]; }).map(function (r) {
+        var itemId = String(num(r[idx["Item ID"]]) || "");
+        var lib = items[itemId] || {};
+        var bossId = num(r[idx["Boss ID"]]);
+        var bossIds = bossId != null ? [bossId] : (lib.bosses || []);
+        var spec = String(r[idx["Spec"]] || "").toLowerCase();
+        var src = String(r[idx["Zdroj"]] || "");
+        return {
+          player: r[idx["Postava"]], spec: spec, role: HEALER_SPECS[spec] ? "heal" : "dps",
+          src: src, unit: /QE/i.test(src) ? "HPS" : "DPS",
+          report: r[idx["Report"]], time: parseDate(r[idx["Čas"]]),
+          bossIds: bossIds, boss: r[idx["Boss"]] || (bossIds.length && bossById[String(bossIds[0])] ? bossById[String(bossIds[0])].name : ""),
+          itemId: itemId, item: r[idx["Item"]] || lib.name || ("#" + itemId), icon: lib.icon || "",
+          slot: r[idx["Slot"]] || lib.slot || "", ilvl: num(r[idx["ilvl"]]),
+          base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]])
+        };
+      });
+      var latest = null; state.rows.forEach(function (r) { if (r.time && (!latest || r.time > latest)) latest = r.time; });
+      var players = {}; state.rows.forEach(function (r) { players[r.player] = 1; });
+      status.textContent = Object.keys(players).length + " postav · " + state.rows.length + " řádků" + (latest ? " · aktualizováno " + fmtDate(latest) : "");
+      status.className = "status";
+      render();
+    }).catch(function (err) {
+      status.textContent = "Nepodařilo se načíst data: " + err.message;
+      status.className = "status err";
+      $("#view").innerHTML = '<p class="empty">Zkontroluj, že list „' + esc(SHEET_TAB) + '“ existuje a tabulka je sdílená pro čtení.</p>';
+    });
+  }
+
+  // ---- helpers for values ----
+  function metric(r) { return state.unit === "pct" ? r.pct : r.diff; }
+  function fmtVal(r) {
+    var v = metric(r); if (v == null) return "–";
+    var s = state.unit === "pct" ? (v > 0 ? "+" : "") + v.toFixed(2) + " %" : (v > 0 ? "+" : "") + Math.round(v).toLocaleString("cs-CZ");
+    return s;
+  }
+  function cls(r) {
+    var p = r.pct == null ? 0 : r.pct;
+    return p >= 5 ? "up4" : p >= 2 ? "up3" : p >= 1 ? "up2" : p > 0 ? "up1" : "up0";
+  }
+  function passes(r) {
+    var min = num($("#minv").value); if (min == null) min = 0;
+    var v = metric(r); if (v == null) return false;
+    if (!$("#showneg").checked && v <= 0) return false;
+    if (v < min && !($("#showneg").checked && v <= 0)) return false;
+    var q = $("#q").value.trim().toLowerCase();
+    if (q && (r.player + " " + r.item + " " + r.boss + " " + r.spec).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }
+  function itemHtml(r) {
+    var icon = r.icon ? '<img src="https://wow.zamimg.com/images/wow/icons/small/' + esc(r.icon) + '.jpg" alt="" loading="lazy">' : "";
+    var slot = r.slot ? '<span class="slot">' + esc(SLOT_CZ[r.slot] || r.slot) + (r.ilvl ? " · " + r.ilvl : "") + "</span>" : (r.ilvl ? '<span class="slot">' + r.ilvl + "</span>" : "");
+    return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(r.itemId) + '" target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + "</span>";
+  }
+  function playerHtml(r) {
+    var color = CLASS_COLOR[SPEC_CLASS[r.spec] || ""] || "";
+    return '<span style="' + (color ? "color:" + color : "") + '">' + esc(r.player) + "</span>";
+  }
+  function roleBadge(r) { return '<span class="badge ' + r.role + '">' + esc(r.spec.replace(/_/g, " ")) + " · " + r.unit + "</span>"; }
+
+  // ---- views ----
+  function renderPlayers() {
+    var by = {};
+    state.rows.forEach(function (r) { (by[r.player] = by[r.player] || { rows: [], any: r }).rows.push(r); });
+    var names = Object.keys(by).sort(function (a, b) { return a.localeCompare(b, "cs"); });
+    var html = "";
+    names.forEach(function (n) {
+      var g = by[n], rows = g.rows.filter(passes).sort(function (a, b) { return (metric(b) || 0) - (metric(a) || 0); });
+      var a = g.any;
+      html += '<details class="card" open><summary><span class="name">' + playerHtml(a) + "</span> " + roleBadge(a) +
+        '<span class="meta">' + esc(a.src) + (a.time ? " · " + fmtDate(a.time) : "") + (a.report ? ' · <a href="' + esc(a.report) + '" target="_blank" rel="noopener">report</a>' : "") +
+        (a.base != null ? ' · základ <span class="mono">' + Math.round(a.base).toLocaleString("cs-CZ") + "</span> " + a.unit : "") + "</span>" +
+        '<span class="meta">' + rows.length + " upgradů</span></summary>";
+      if (!rows.length) html += '<p class="empty">Nic nad zvolený limit.</p>';
+      else {
+        html += '<div class="tablewrap"><table><thead><tr><th>Boss</th><th>Item</th><th class="num">Upgrade</th></tr></thead><tbody>';
+        rows.forEach(function (r) {
+          html += "<tr><td>" + esc(r.boss || "?") + "</td><td>" + itemHtml(r) + '</td><td class="num"><span class="val ' + cls(r) + '">' + fmtVal(r) + "</span></td></tr>";
+        });
+        html += "</tbody></table></div>";
+      }
+      html += "</details>";
+    });
+    return html || '<p class="empty">Zatím žádné simy.</p>';
+  }
+
+  function renderBosses() {
+    var order = state.bosses.length ? state.bosses : [];
+    var byBoss = {};
+    state.rows.filter(passes).forEach(function (r) {
+      var ids = r.bossIds.length ? r.bossIds : ["?"];
+      ids.forEach(function (id) { var k = String(id); (byBoss[k] = byBoss[k] || {}); (byBoss[k][r.itemId] = byBoss[k][r.itemId] || []).push(r); });
+    });
+    var keys = order.map(function (b) { return String(b.id); });
+    Object.keys(byBoss).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });
+    var html = "";
+    keys.forEach(function (k) {
+      var b = state.bossById[k]; var items = byBoss[k];
+      var title = b ? b.name : (k === "?" ? "Neznámý boss" : "Boss " + k);
+      html += '<div class="bosshead"><span class="num">' + esc(b ? b.num : "") + "</span><h2 style=\"margin:0\">" + esc(title) + "</h2>" +
+        '<span class="hint">' + (items ? Object.keys(items).length + " itemů se zájemci" : "nikdo nic") + "</span></div>";
+      if (!items) return;
+      var list = Object.keys(items).map(function (iid) {
+        var rs = items[iid].sort(function (x, y) { return (metric(y) || 0) - (metric(x) || 0); });
+        return { iid: iid, rs: rs, top: metric(rs[0]) || 0 };
+      }).sort(function (x, y) { return y.top - x.top; });
+      html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Zájemci (seřazeno podle upgradu)</th></tr></thead><tbody>';
+      list.forEach(function (e) {
+        html += "<tr><td>" + itemHtml(e.rs[0]) + '</td><td><div class="chips">' + e.rs.map(function (r) {
+          return '<span class="chip ' + cls(r) + '" title="' + esc(r.spec + " · " + r.src) + '">' + playerHtml(r) + ' <span class="v">' + fmtVal(r) + "</span></span>";
+        }).join("") + "</div></td></tr>";
+      });
+      html += "</tbody></table></div>";
+    });
+    return html || '<p class="empty">Zatím žádné simy.</p>';
+  }
+
+  function renderItems() {
+    var rows = state.rows.filter(passes);
+    var s = state.sort;
+    rows.sort(function (a, b) {
+      var va = a[s.key], vb = b[s.key];
+      if (s.key === "diff") { va = metric(a) || 0; vb = metric(b) || 0; }
+      if (typeof va === "number" || typeof vb === "number") return ((va || 0) - (vb || 0)) * s.dir;
+      return String(va || "").localeCompare(String(vb || ""), "cs") * s.dir;
+    });
+    var cols = [["item", "Item"], ["boss", "Boss"], ["player", "Hráč"], ["spec", "Spec"], ["ilvl", "ilvl"], ["diff", "Upgrade"]];
+    var html = '<div class="tablewrap"><table><thead><tr>' + cols.map(function (c) {
+      var num = c[0] === "diff" || c[0] === "ilvl";
+      return '<th class="sortable' + (num ? " num" : "") + '" data-key="' + c[0] + '">' + c[1] + (s.key === c[0] ? '<span class="arrow">' + (s.dir < 0 ? "▼" : "▲") + "</span>" : "") + "</th>";
+    }).join("") + "</tr></thead><tbody>";
+    rows.forEach(function (r) {
+      html += "<tr><td>" + itemHtml(r) + "</td><td>" + esc(r.boss || "?") + "</td><td>" + playerHtml(r) + "</td><td>" + roleBadge(r) +
+        '</td><td class="num mono">' + (r.ilvl || "") + '</td><td class="num"><span class="val ' + cls(r) + '">' + fmtVal(r) + "</span></td></tr>";
+    });
+    html += "</tbody></table></div>";
+    return rows.length ? html : '<p class="empty">Nic nad zvolený limit.</p>';
+  }
+
+  function render() {
+    $("#minunit").textContent = state.unit === "pct" ? "%" : "(DPS / HPS)";
+    var v = $("#view");
+    v.innerHTML = state.view === "players" ? renderPlayers() : state.view === "bosses" ? renderBosses() : renderItems();
+    v.querySelectorAll("th.sortable").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var k = th.getAttribute("data-key");
+        if (state.sort.key === k) state.sort.dir *= -1; else state.sort = { key: k, dir: k === "diff" || k === "ilvl" ? -1 : 1 };
+        render();
+      });
+    });
+  }
+
+  document.querySelectorAll(".bossnav button[data-view]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      state.view = b.getAttribute("data-view");
+      document.querySelectorAll(".bossnav button[data-view]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      render();
+    });
+  });
+  document.querySelectorAll("#unitseg button").forEach(function (b) {
+    if (b.getAttribute("data-unit") === state.unit) { document.querySelectorAll("#unitseg button").forEach(function (x) { x.classList.remove("active"); }); b.classList.add("active"); }
+    b.addEventListener("click", function () {
+      state.unit = b.getAttribute("data-unit");
+      try { localStorage.setItem("lootUnit", state.unit); } catch (e) {}
+      document.querySelectorAll("#unitseg button").forEach(function (x) { x.classList.toggle("active", x === b); });
+      // rozumný výchozí limit pro dané jednotky
+      var mv = $("#minv"); if (state.unit === "pct" && num(mv.value) > 50) mv.value = "0.5"; if (state.unit === "abs" && num(mv.value) < 50) mv.value = "0";
+      render();
+    });
+  });
+  ["#minv", "#showneg", "#q"].forEach(function (s) { $(s).addEventListener("input", render); $(s).addEventListener("change", render); });
+  load();
+})();
+</script>
+</body>
+</html>

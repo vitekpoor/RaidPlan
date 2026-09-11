@@ -18,4 +18,10 @@ type parts\tail.html >> venomous-abyss.html
 powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\index.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0venomous-abyss.html') -replace '(boss_2_marks|sszorak_addon_0\d)\.png', 'raidplan/$0'), (New-Object System.Text.UTF8Encoding $false))"
 if errorlevel 1 (echo ERROR: failed to write ..\index.html & exit /b 1)
 
-echo Built venomous-abyss.html + ..\index.html from parts\ and bosses\.
+rem loot.html (Loot simy) is a standalone page; the root copy loads loot_items.json from raidplan\
+if exist loot.html (
+  powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\loot.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0loot.html') -replace '\"loot_items\.json\"', '\"raidplan/loot_items.json\"'), (New-Object System.Text.UTF8Encoding $false))"
+  if errorlevel 1 (echo ERROR: failed to write ..\loot.html & exit /b 1)
+)
+
+echo Built venomous-abyss.html + ..\index.html (+ ..\loot.html) from parts\ and bosses\.

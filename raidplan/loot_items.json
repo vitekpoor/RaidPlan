@@ -1,0 +1,1910 @@
+{
+ "instances": {
+  "1320": "The Venomous Abyss",
+  "1317": "The Tidebound Grotto"
+ },
+ "bosses": [
+  {
+   "id": 2888,
+   "name": "Nek'zali the Soulcoiler",
+   "num": "I",
+   "instance": 1320
+  },
+  {
+   "id": 2874,
+   "name": "Entombed Sentinels",
+   "num": "II",
+   "instance": 1320
+  },
+  {
+   "id": 2882,
+   "name": "Vashnik the Malignant",
+   "num": "III",
+   "instance": 1320
+  },
+  {
+   "id": 2894,
+   "name": "The Lost Explorers",
+   "num": "IV",
+   "instance": 1320
+  },
+  {
+   "id": 2871,
+   "name": "Sszorak",
+   "num": "V",
+   "instance": 1320
+  },
+  {
+   "id": 2887,
+   "name": "The Twin Fangs",
+   "num": "VI",
+   "instance": 1320
+  },
+  {
+   "id": 2883,
+   "name": "The Coiled Altar",
+   "num": "VII",
+   "instance": 1320
+  },
+  {
+   "id": 2895,
+   "name": "Ula'tek",
+   "num": "VIII",
+   "instance": 1320
+  },
+  {
+   "id": -97,
+   "name": "Trash",
+   "num": "T",
+   "instance": 1320
+  },
+  {
+   "id": 2849,
+   "name": "Nymrissa Wavecaller",
+   "num": "Lair",
+   "instance": 1317
+  }
+ ],
+ "items": {
+  "268196": {
+   "name": "Venom-Slashed Scuteward",
+   "icon": "inv_shield_1h_ulatek_d_01",
+   "slot": "off_hand",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "268197": {
+   "name": "Spine of the Hissing Abyss",
+   "icon": "inv_offhand_1h_ulatek_d_01",
+   "slot": "off_hand",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "268198": {
+   "name": "Caustic Keeper-Crusher",
+   "icon": "inv_mace_2h_ulatek_d_01",
+   "slot": "two_hand",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "268199": {
+   "name": "Tidepiercer's Bubble Popper",
+   "icon": "inv_staff_2h_ulatek_d_01",
+   "slot": "two_hand",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268200": {
+   "name": "Gebbo's Backup Blaster",
+   "icon": "inv_firearm_2h_ulatek_d_01",
+   "slot": "ranged",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "268201": {
+   "name": "Venomous Boneglaive",
+   "icon": "inv_glaive_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "268202": {
+   "name": "Jaw of the Shackled Goddess",
+   "icon": "inv_sword_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "268203": {
+   "name": "Hexing Spiritrender",
+   "icon": "inv_knife_1h_ulatek_d_02",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268204": {
+   "name": "Ancient Construct's Venomshiv",
+   "icon": "inv_knife_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "268205": {
+   "name": "Venomancer's Winged Channeler",
+   "icon": "inv_staff_2h_ulatek_d_02",
+   "slot": "two_hand",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "268206": {
+   "name": "Slithering Savage's Gavel",
+   "icon": "inv_mace_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "268207": {
+   "name": "Caustic Repose Greatbow",
+   "icon": "inv_bow_1h_ulatek_d_01",
+   "slot": "ranged",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "268208": {
+   "name": "Strongblood's Ceremonial Cleaver",
+   "icon": "inv_axe_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268209": {
+   "name": "Aman'muso, Warlord's Vengeance",
+   "icon": "inv_axe_1h_ulatek_d_01",
+   "slot": "main_hand",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268210": {
+   "name": "Malevolent Spiritcudgel",
+   "icon": "inv_mace_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "268211": {
+   "name": "Baleful Hexblade",
+   "icon": "inv_sword_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268213": {
+   "name": "Maze-roa, Warlord's Fury",
+   "icon": "inv_axe_2h_ulatek_d_01",
+   "slot": "two_hand",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268214": {
+   "name": "Malignant Toothed Edge",
+   "icon": "inv_sword_2h_ulatek_d_01",
+   "slot": "two_hand",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "268215": {
+   "name": "Abyssal Broodfiend's Bardiche",
+   "icon": "inv_polearm_2h_ulatek_d_01",
+   "slot": "two_hand",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "268216": {
+   "name": "Cursed Reliquary Cincture",
+   "icon": "inv_belt_mail_raidevokerulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268217": {
+   "name": "Rising Tide Wristguards",
+   "icon": "inv_bracer_mail_raidhunterulatek_d_01",
+   "slot": "wrist",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268218": {
+   "name": "Nek'zali's Spiritwalkers",
+   "icon": "inv_boot_cloth_raidpriestulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268219": {
+   "name": "Shadow Hunter's Warmask",
+   "icon": "inv_helm_leather_raidrogueulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "268220": {
+   "name": "Scaleplate Strangulators",
+   "icon": "inv_glove_plate_raidpaladinulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "268221": {
+   "name": "Tidebound Sorcereress's Robes",
+   "icon": "inv_robe_cloth_raidwarlockulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268222": {
+   "name": "Reckless Spirit Breastplate",
+   "icon": "inv_chest_plate_raidwarriorulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268223": {
+   "name": "Ophidian Fangmail",
+   "icon": "inv_chest_mail_raidhunterulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "268224": {
+   "name": "Venom Warden's Greaves",
+   "icon": "inv_pant_plate_raidwarriorulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "268225": {
+   "name": "Coiled Hex Legguards",
+   "icon": "inv_pant_leather_raidmonkulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268226": {
+   "name": "Swelling Sea Spaulders",
+   "icon": "inv_shoulder_plate_raidpaladinulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268227": {
+   "name": "Unpossessed Skullsash",
+   "icon": "inv_belt_leather_raidrogueulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "268228": {
+   "name": "Venom-Singed Cuffs",
+   "icon": "inv_bracer_cloth_raidmageulatek_d_01",
+   "slot": "wrist",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "268229": {
+   "name": "Skullguard of the Risen Sacrifice",
+   "icon": "inv_helm_plate_raiddeathknightulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268230": {
+   "name": "Crown of the Eternal Fang",
+   "icon": "inv_helm_mail_raidshamanulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268231": {
+   "name": "Soulslither Spaulders",
+   "icon": "inv_shoulder_mail_raidshamanulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268232": {
+   "name": "Cincture of the Abyssal Grotto",
+   "icon": "inv_belt_cloth_raidmageulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268233": {
+   "name": "Ferocious Scaleboots",
+   "icon": "inv_boot_mail_raidhunterulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "268234": {
+   "name": "Ruthless Slaughtergrips",
+   "icon": "inv_glove_leather_raiddemonhunterulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "268235": {
+   "name": "Vestment of the Awakening",
+   "icon": "inv_robe_leather_raiddruidulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268236": {
+   "name": "Initiate's Sacrificial Tights",
+   "icon": "inv_pant_cloth_raidpriestulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268237": {
+   "name": "Cuisses of the Uncoiled Union",
+   "icon": "inv_pant_mail_raidevokerulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268238": {
+   "name": "Grips of Swirling Fury",
+   "icon": "inv_glove_mail_raidevokerulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268239": {
+   "name": "Shellbound Bracers",
+   "icon": "inv_bracer_plate_raiddeathknightulatek_d_01",
+   "slot": "wrist",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "268240": {
+   "name": "Restless Spirit Shackles",
+   "icon": "inv_bracer_leather_raiddruidulatek_d_01",
+   "slot": "wrist",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268241": {
+   "name": "Ornaments of the Eternal Coil",
+   "icon": "inv_shoulder_cloth_raidmageulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "268242": {
+   "name": "Errant Scrollsage's Hood",
+   "icon": "inv_helm_cloth_raidpriestulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "268243": {
+   "name": "Grasps of the Eternal Shadow",
+   "icon": "inv_glove_cloth_raidwarlockulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268244": {
+   "name": "Forgotten Grotto Girdle",
+   "icon": "inv_belt_plate_raiddeathknightulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268245": {
+   "name": "Entombed Cultist's Sabatons",
+   "icon": "inv_boot_plate_raidwarriorulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268246": {
+   "name": "Frothing Venom Spaulders",
+   "icon": "inv_shoulder_leather_raiddemonhunterulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "268247": {
+   "name": "Breakwater Boots",
+   "icon": "inv_boot_leather_raiddemonhunterulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268248": {
+   "name": "Amani Summoning Shawl",
+   "icon": "inv_cape_leather_raidmonkulatek_d_01",
+   "slot": "back",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "268249": {
+   "name": "Vile Alchemist's Band",
+   "icon": "inv_121_jewelry_ring01_purple",
+   "slot": "finger",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "268250": {
+   "name": "Sentinel's Vitriolic Chain",
+   "icon": "inv_121_jewelry_neck02_green",
+   "slot": "neck",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "268251": {
+   "name": "Amulet of the Twin Fangs",
+   "icon": "inv_121_jewelry_neck01_red",
+   "slot": "neck",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "268252": {
+   "name": "Apex Brute's Claw Ring",
+   "icon": "inv_121_jewelry_ring03_red",
+   "slot": "finger",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "268253": {
+   "name": "Silken Voodoo Drape",
+   "icon": "inv_cape_leather_raidrogueulatek_d_01",
+   "slot": "back",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268254": {
+   "name": "Serpentine Mixing Belt",
+   "icon": "inv_belt_mail_raidshamanulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "268255": {
+   "name": "Cackling Soultreads",
+   "icon": "inv_boot_cloth_raidmageulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268256": {
+   "name": "Sash of the Forlorn Vessel",
+   "icon": "inv_belt_leather_raiddruidulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268257": {
+   "name": "Caustic Chain-Wrapped Sash",
+   "icon": "inv_belt_cloth_raidwarlockulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "268258": {
+   "name": "Boots of the Reckless Wayfarer",
+   "icon": "inv_boot_mail_raidevokerulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "268259": {
+   "name": "Girdle of Toxic Regret",
+   "icon": "inv_belt_plate_raidpaladinulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "268260": {
+   "name": "Scaled Fiend's Warboots",
+   "icon": "inv_boot_plate_raidpaladinulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "268261": {
+   "name": "Bespittled Slitherslippers",
+   "icon": "inv_boot_leather_raidmonkulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "268262": {
+   "name": "Bubblefin Splash Guard",
+   "icon": "inv_shield_1h_ulatek_d_01",
+   "slot": "off_hand",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268263": {
+   "name": "Frostscale's Mystic Frond",
+   "icon": "inv_offhand_1h_ulatek_d_01",
+   "slot": "off_hand",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "268264": {
+   "name": "Ravenous Feaster's Fang",
+   "icon": "inv_knife_1h_ulatek_d_02",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "268265": {
+   "name": "Aqirbane Reliquary",
+   "icon": "inv_121_jewelry_neck03_green",
+   "slot": "neck",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "268266": {
+   "name": "Alluring Bubbleband",
+   "icon": "inv_70_raid_ring8c",
+   "slot": "finger",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "270160": {
+   "name": "First Mate's Shellward",
+   "icon": "inv_cape_special_turtleshell_c_02",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "270161": {
+   "name": "Fang of Umbral Malignance",
+   "icon": "inv_121_trinket_raid_ulatek_fang_purple",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "270162": {
+   "name": "Soulcoiler Ritual Vessel",
+   "icon": "inv_121_trinket_raid_ulatek_ritualvessel",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "270163": {
+   "name": "Sszorak's Ferocity",
+   "icon": "inv_121_trinket_raid_ulatek_ulatekclaw",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "270164": {
+   "name": "Gebbo's Bottomless Bag",
+   "icon": "inv_10_tailoring_bag1_color2",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "270165": {
+   "name": "Keeper's Seething Core",
+   "icon": "inv_121_trinket_raid_ulatek_golemhearts_green",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "270166": {
+   "name": "Vashnik's Sanguine Rancor",
+   "icon": "inv_11_0_raid_gruesomesyringe_blue",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "270167": {
+   "name": "Wavecaller's Seastone",
+   "icon": "inv_tradeskillitem_sorcererswater",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2849
+   ]
+  },
+  "270168": {
+   "name": "Font of Venomous Rage",
+   "icon": "inv_10_dungeonjewelry_dragon_trinket_3djardintrophy_green",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "270169": {
+   "name": "Hex Lord's Dooming Idol",
+   "icon": "inv_archaeology_orcclans_crackedidol",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "270170": {
+   "name": "Vexhul's Everflowing Gland",
+   "icon": "inv_11_0_misc_organmass_color3",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "270171": {
+   "name": "Preternatural Antivenom",
+   "icon": "inv_11_0_dungeon_tentaclevial_green",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "270173": {
+   "name": "Zul'jin's Guillotine Technique",
+   "icon": "inv_121_trinket_raid_ulatek_trolltablet",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2883
+   ]
+  },
+  "270174": {
+   "name": "Idol of the Howling Nexus",
+   "icon": "inv_jewelcrafting_jadeserpent",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "270175": {
+   "name": "Voracious Heart of Ula'tek",
+   "icon": "inv_121_trinket_raid_ulatek_heart",
+   "slot": "trinket",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "270909": {
+   "name": "Slumbering Coil Curio",
+   "icon": "rogue_paralytic_poison",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "270910": {
+   "name": "Venomwoven Idol",
+   "icon": "inv_jewelcrafting_azureserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "270911": {
+   "name": "Venomcured Idol",
+   "icon": "inv_jewelcrafting_purpleserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "270912": {
+   "name": "Venomcast Idol",
+   "icon": "inv_jewelcrafting_goldenserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "270913": {
+   "name": "Venomforged Idol",
+   "icon": "inv_jewelcrafting_rubyserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2874
+   ]
+  },
+  "270914": {
+   "name": "Venomwoven Effigy",
+   "icon": "inv_jewelcrafting_azureserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "270915": {
+   "name": "Venomcured Effigy",
+   "icon": "inv_jewelcrafting_purpleserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "270916": {
+   "name": "Venomcast Effigy",
+   "icon": "inv_jewelcrafting_goldenserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "270917": {
+   "name": "Venomforged Effigy",
+   "icon": "inv_jewelcrafting_rubyserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2887
+   ]
+  },
+  "270918": {
+   "name": "Venomwoven Relic",
+   "icon": "inv_jewelcrafting_azureserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "270919": {
+   "name": "Venomcured Relic",
+   "icon": "inv_jewelcrafting_purpleserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "270920": {
+   "name": "Venomcast Relic",
+   "icon": "inv_jewelcrafting_goldenserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "270921": {
+   "name": "Venomforged Relic",
+   "icon": "inv_jewelcrafting_rubyserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2871
+   ]
+  },
+  "270922": {
+   "name": "Venomwoven Remnant",
+   "icon": "inv_jewelcrafting_azureserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "270923": {
+   "name": "Venomcured Remnant",
+   "icon": "inv_jewelcrafting_purpleserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "270924": {
+   "name": "Venomcast Remnant",
+   "icon": "inv_jewelcrafting_goldenserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "270925": {
+   "name": "Venomforged Remnant",
+   "icon": "inv_jewelcrafting_rubyserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2894
+   ]
+  },
+  "270926": {
+   "name": "Venomwoven Icon",
+   "icon": "inv_jewelcrafting_azureserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "270927": {
+   "name": "Venomcured Icon",
+   "icon": "inv_jewelcrafting_purpleserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "270928": {
+   "name": "Venomcast Icon",
+   "icon": "inv_jewelcrafting_goldenserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "270929": {
+   "name": "Venomforged Icon",
+   "icon": "inv_jewelcrafting_rubyserpent",
+   "slot": "token",
+   "quality": 4,
+   "bosses": [
+    2882
+   ]
+  },
+  "270930": {
+   "name": "Tomb-Creeper's Claw",
+   "icon": "inv_hand_1h_ulatek_d_01",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2888
+   ]
+  },
+  "271092": {
+   "name": "Jan'thrazet, the Soul Fang",
+   "icon": "inv_knife_1h_ulatekfang_d_01_spirit",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "271093": {
+   "name": "Zatha'tek, Breath of Corruption",
+   "icon": "inv_knife_1h_ulatekfang_d_01_poison",
+   "slot": "one_hand",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "271434": {
+   "name": "Venom Rite Mantle",
+   "icon": "inv_shoulder_cloth_raidpriestulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271435": {
+   "name": "Slippers of the Hissing Cult",
+   "icon": "inv_boot_cloth_raidwarlockulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271436": {
+   "name": "Slitherscale Girdle",
+   "icon": "inv_belt_leather_raiddemonhunterulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271438": {
+   "name": "Temple Delver's Mystic Helm",
+   "icon": "inv_helm_leather_raidmonkulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271440": {
+   "name": "Greaves of the Noxious Depths",
+   "icon": "inv_boot_mail_raidshamanulatek_d_01",
+   "slot": "feet",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271441": {
+   "name": "Crushing Coiler Coif",
+   "icon": "inv_helm_mail_raidhunterulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271444": {
+   "name": "Pauldrons of the Forgotten Sacrifice",
+   "icon": "inv_shoulder_plate_raiddeathknightulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271445": {
+   "name": "Fanged Brute's Greatbelt",
+   "icon": "inv_belt_plate_raidwarriorulatek_d_01",
+   "slot": "waist",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271454": {
+   "name": "Raging Pauldrons of the Jade Warlord",
+   "icon": "inv_shoulder_plate_raidwarriorulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271455": {
+   "name": "Greaves of the Jade Warlord",
+   "icon": "inv_pant_plate_raidwarriorulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271456": {
+   "name": "Tempered Horns of the Jade Warlord",
+   "icon": "inv_helm_plate_raidwarriorulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271457": {
+   "name": "Jeweled Gauntlets of the Jade Warlord",
+   "icon": "inv_glove_plate_raidwarriorulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271459": {
+   "name": "Cuirass of the Jade Warlord",
+   "icon": "inv_chest_plate_raidwarriorulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271463": {
+   "name": "Pauldrons of the Consecrated Flame",
+   "icon": "inv_shoulder_plate_raidpaladinulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271464": {
+   "name": "Greaves of the Consecrated Flame",
+   "icon": "inv_pant_plate_raidpaladinulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271465": {
+   "name": "Warhelm of the Consecrated Flame",
+   "icon": "inv_helm_plate_raidpaladinulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271466": {
+   "name": "Gauntlets of the Consecrated Flame",
+   "icon": "inv_glove_plate_raidpaladinulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271468": {
+   "name": "Bulwark of the Consecrated Flame",
+   "icon": "inv_chest_plate_raidpaladinulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271472": {
+   "name": "Baleful Grave-Knight's Gibbets",
+   "icon": "inv_shoulder_plate_raiddeathknightulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271473": {
+   "name": "Baleful Grave-Knight's Greaves",
+   "icon": "inv_pant_plate_raiddeathknightulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271474": {
+   "name": "Baleful Grave-Knight's Casque",
+   "icon": "inv_helm_plate_raiddeathknightulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271475": {
+   "name": "Baleful Grave-Knight's Deathgrips",
+   "icon": "inv_glove_plate_raiddeathknightulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271477": {
+   "name": "Baleful Grave-Knight's Breastplate",
+   "icon": "inv_chest_plate_raiddeathknightulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271481": {
+   "name": "Hissing Mantle of the Ophidian Oracle",
+   "icon": "inv_shoulder_mail_raidshamanulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271482": {
+   "name": "Leggings of the Ophidian Oracle",
+   "icon": "inv_pant_mail_raidshamanulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271483": {
+   "name": "Serpent Crown of the Ophidian Oracle",
+   "icon": "inv_helm_mail_raidshamanulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271484": {
+   "name": "Hexing Grips of the Ophidian Oracle",
+   "icon": "inv_glove_mail_raidshamanulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271486": {
+   "name": "Fanged Raiment of the Ophidian Oracle",
+   "icon": "inv_robe_mail_raidshamanulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271490": {
+   "name": "Jaws of the Skulking Viper",
+   "icon": "inv_shoulder_mail_raidhunterulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271491": {
+   "name": "Skulking Viper's Coiled Legwraps",
+   "icon": "inv_pant_mail_raidhunterulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271492": {
+   "name": "Skulking Viper's Weeping Fangs",
+   "icon": "inv_helm_mail_raidhunterulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271493": {
+   "name": "Skulking Viper's Hidepiercers",
+   "icon": "inv_glove_mail_raidhunterulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271495": {
+   "name": "Skulking Viper's Scuteplate",
+   "icon": "inv_chest_mail_raidhunterulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271499": {
+   "name": "Calamitous Echo's Sundered Peaks",
+   "icon": "inv_shoulder_mail_raidevokerulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271500": {
+   "name": "Earthen Pillars of Calamity",
+   "icon": "inv_pant_mail_raidevokerulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271501": {
+   "name": "Calamitous Echo's Magmashapers",
+   "icon": "inv_helm_mail_raidevokerulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271502": {
+   "name": "Calamitous Echo's Ebon Greathorns",
+   "icon": "inv_glove_mail_raidevokerulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271504": {
+   "name": "Searing Caldera of Calamity",
+   "icon": "inv_chest_mail_raidevokerulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271508": {
+   "name": "Chosen Bloodslayer's Voodoo Guards",
+   "icon": "inv_shoulder_leather_raidrogueulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271509": {
+   "name": "Chosen Bloodslayer's Reinforced Pants",
+   "icon": "inv_pant_leather_raidrogueulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271510": {
+   "name": "Chosen Bloodslayer's Spirit Shroud",
+   "icon": "inv_helm_leather_raidrogueulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271511": {
+   "name": "Chosen Bloodslayer's Fanged Grips",
+   "icon": "inv_glove_leather_raidrogueulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271513": {
+   "name": "Chosen Bloodslayer's Banded Poncho",
+   "icon": "inv_chest_leather_raidrogueulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271517": {
+   "name": "Tassels of the Monkey King",
+   "icon": "inv_shoulder_leather_raidmonkulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271518": {
+   "name": "Pantaloons of the Monkey King",
+   "icon": "inv_pant_leather_raidmonkulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271519": {
+   "name": "Monkey King's Unyielding Visage",
+   "icon": "inv_helm_leather_raidmonkulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271520": {
+   "name": "Monkey King's Fighting Fists",
+   "icon": "inv_glove_leather_raidmonkulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271522": {
+   "name": "Battle Gi of the Monkey King",
+   "icon": "inv_chest_leather_raidmonkulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271526": {
+   "name": "Enigmatic Dreamwatcher's Plumage",
+   "icon": "inv_shoulder_leather_raiddruidulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271527": {
+   "name": "Enigmatic Dreamwatcher's Leggings",
+   "icon": "inv_pant_leather_raiddruidulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271528": {
+   "name": "Enigmatic Dreamwatcher's Somnolent Stare",
+   "icon": "inv_helm_leather_raiddruidulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271529": {
+   "name": "Enigmatic Dreamwatcher's Gauntlets",
+   "icon": "inv_glove_leather_raiddruidulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271531": {
+   "name": "Enigmatic Dreamwatcher's Lunar Raiment",
+   "icon": "inv_robe_leather_raiddruidulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271535": {
+   "name": "Abyssal Doomhound's Jaws",
+   "icon": "inv_shoulder_leather_raiddemonhunterulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271536": {
+   "name": "Abyssal Doomhound's Legwraps",
+   "icon": "inv_pant_leather_raiddemonhunterulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271537": {
+   "name": "Abyssal Doomhound's Relentless Stare",
+   "icon": "inv_helm_leather_raiddemonhunterulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271538": {
+   "name": "Abyssal Doomhound's Studded Gauntlets",
+   "icon": "inv_glove_leather_raiddemonhunterulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271540": {
+   "name": "Abyssal Doomhound's Coreguard",
+   "icon": "inv_chest_leather_raiddemonhunterulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271544": {
+   "name": "Spires of the Damned Necrolyte",
+   "icon": "inv_shoulder_cloth_raidwarlockulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271545": {
+   "name": "Damned Necrolyte's Leg Bindings",
+   "icon": "inv_pant_cloth_raidwarlockulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271546": {
+   "name": "Skull of the Damned Necrolyte",
+   "icon": "inv_helm_cloth_raidwarlockulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271547": {
+   "name": "Damned Necrolyte's Charred Grasps",
+   "icon": "inv_glove_cloth_raidwarlockulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271549": {
+   "name": "Damned Necrolyte's Rattling Robes",
+   "icon": "inv_robe_cloth_raidwarlockulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271553": {
+   "name": "Cosmic Penitent's Echoing Screams",
+   "icon": "inv_shoulder_cloth_raidpriestulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271554": {
+   "name": "Enveloping Legwraps of the Cosmic Penitent",
+   "icon": "inv_pant_cloth_raidpriestulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271555": {
+   "name": "Cosmic Penitent's Truesight",
+   "icon": "inv_helm_cloth_raidpriestulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271556": {
+   "name": "Cosmic Penitent's Celestial Grips",
+   "icon": "inv_glove_cloth_raidpriestulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271558": {
+   "name": "Cosmic Penitent's Eclipsing Robes",
+   "icon": "inv_robe_cloth_raidpriestulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271562": {
+   "name": "Primal Leywarden's Manaflux",
+   "icon": "inv_shoulder_cloth_raidmageulatek_d_01",
+   "slot": "shoulder",
+   "quality": 4,
+   "bosses": [
+    2894,
+    2895
+   ],
+   "tier": true
+  },
+  "271563": {
+   "name": "Primal Leywarden's Tailored Legwraps",
+   "icon": "inv_pant_cloth_raidmageulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2871,
+    2895
+   ],
+   "tier": true
+  },
+  "271564": {
+   "name": "Crown of the Primal Leywarden",
+   "icon": "inv_helm_cloth_raidmageulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2887,
+    2895
+   ],
+   "tier": true
+  },
+  "271565": {
+   "name": "Primal Leywarden's Manashapers",
+   "icon": "inv_glove_cloth_raidmageulatek_d_01",
+   "slot": "hands",
+   "quality": 4,
+   "bosses": [
+    2874,
+    2895
+   ],
+   "tier": true
+  },
+  "271567": {
+   "name": "Crest of the Primal Leywarden",
+   "icon": "inv_robe_cloth_raidmageulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2882,
+    2895
+   ],
+   "tier": true
+  },
+  "271638": {
+   "name": "Bound Serpent's Jade Eye",
+   "icon": "inv_121_jewelry_neck01_green",
+   "slot": "neck",
+   "quality": 4,
+   "bosses": [
+    -97
+   ]
+  },
+  "271874": {
+   "name": "Venomkeeper's Horrific Cowl",
+   "icon": "inv_helm_cloth_raidwarlockulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "271875": {
+   "name": "Gaze of the Coiled Watcher",
+   "icon": "inv_helm_leather_raiddruidulatek_d_01",
+   "slot": "head",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "271876": {
+   "name": "Awoken Dreadfang Cuirass",
+   "icon": "inv_chest_mail_raidevokerulatek_d_01",
+   "slot": "chest",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "271878": {
+   "name": "Chausses of Unbound Rancor",
+   "icon": "inv_pant_plate_raiddeathknightulatek_d_01",
+   "slot": "legs",
+   "quality": 4,
+   "bosses": [
+    2895
+   ]
+  },
+  "275937": {
+   "name": "Hex Lord's Visage",
+   "icon": "inv_helm_armor_hexlordmalacrass_d_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    2883
+   ]
+  },
+  "275938": {
+   "name": "Hex Lord's Gaze",
+   "icon": "inv_helm_armor_hexlordmalacrass_d_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    2883
+   ]
+  },
+  "281227": {
+   "name": "Soulcoiler's Rush'kah",
+   "icon": "inv_helm_armor_hextrollpriestess_d_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    2888
+   ]
+  }
+ }
+}
