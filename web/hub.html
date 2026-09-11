@@ -79,6 +79,14 @@ a { color: var(--jade); }
 .frame { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .frame iframe { display: block; width: 100%; height: 680px; border: 0; background: transparent; }
 .framenote { color: var(--muted); font-size: .8rem; margin: .5rem 0 0; }
+.leader { margin-top: 1.4rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: .9rem 1rem; font-size: .9rem; display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; align-items: center; }
+.leader > div { flex: 1 1 22rem; color: var(--muted); }
+.leader strong { color: var(--ink); }
+.leader form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.leader input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: .4rem .6rem; font: inherit; width: 9rem; }
+.leader button { background: var(--callout-bg); color: var(--jade); border: 1px solid var(--jade); border-radius: 999px; padding: .4rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
+.leader button:disabled { opacity: .6; cursor: wait; }
+.leader .framenote { margin: 0; flex-basis: 100%; }
 footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; color: var(--muted); font-size: .82rem; }
 </style>
 </head>
@@ -158,6 +166,17 @@ footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.2
   </div>
   <div class="frame"><iframe data-src="__WEBAPP__?p=sim" title="Formulář SimC" loading="lazy"></iframe></div>
   <p class="framenote">Nezobrazuje se formulář? <a href="__WEBAPP__?p=sim" target="_blank" rel="noopener">Otevři ho ve vlastním okně ↗</a></p>
+
+  <div class="leader">
+    <div>
+      <strong>Pro raid leadera:</strong> fronta se simuje automaticky každou hodinu (GitHub Actions). Nechceš čekat? Zadej heslo a spusť ji hned.
+    </div>
+    <form id="runsims">
+      <input type="password" id="runpw" placeholder="heslo" autocomplete="current-password" required>
+      <button type="submit">Spustit simy teď</button>
+      <span id="runmsg" class="framenote"></span>
+    </form>
+  </div>
 </section>
 
 <footer>
@@ -190,6 +209,19 @@ footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.2
   }
   window.addEventListener("hashchange", route);
   route();
+
+  // tlačítko raid leadera: POST { p: "runsims", pw } na web app -> GitHub Actions workflow_dispatch
+  var form = document.getElementById("runsims");
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var btn = form.querySelector("button"), msg = document.getElementById("runmsg"), pw = document.getElementById("runpw");
+    btn.disabled = true; msg.textContent = "Spouštím…";
+    fetch(WEBAPP, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ p: "runsims", pw: pw.value }), redirect: "follow" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { msg.textContent = (j.ok ? "✅ " : "⚠ ") + (j.message || ""); if (j.ok) pw.value = ""; })
+      .catch(function (err) { msg.textContent = "⚠ Nepodařilo se spojit s web appem: " + err.message; })
+      .then(function () { btn.disabled = false; });
+  });
 })();
 </script>
 </body>
