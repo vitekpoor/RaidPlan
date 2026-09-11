@@ -36,7 +36,7 @@
     var isLair = (h === 'boss-9');
     document.getElementById('page-title').textContent = isLair ? 'The Tidebound Grotto' : 'The Venomous Abyss';
     document.getElementById('page-eyebrow').textContent = isLair ? 'Midnight · Patch 12.1 · Lair boss 2. sezóny' : 'Midnight · Patch 12.1 · Raid 2. sezóny';
-    document.title = isLair ? 'The Tidebound Grotto' : 'The Venomous Abyss';
+    document.title = (isLair ? 'The Tidebound Grotto' : 'The Venomous Abyss') + ' · Eternal Shadows';
     home.forEach(function (el) { el.style.display = 'none'; });
     bosses.forEach(function (el, i) {
       el.style.display = (h === 'boss-' + (i + 1)) ? '' : 'none';

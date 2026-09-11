@@ -127,7 +127,8 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
 </header>
 
 <nav class="bossnav">
-  <a href="index.html" class="home">← Raid guide</a>
+  <a href="index.html" class="home">← Hlavní stránka</a>
+  <a href="raid.html">Raid taktiky</a>
   <span class="sep" aria-hidden="true"></span>
   <button data-view="players" class="active">Podle hráče</button>
   <button data-view="bosses">Podle bosse</button>
@@ -160,7 +161,7 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
   var SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI";
   var SHEET_TAB = "Sim výsledky";
   var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(SHEET_TAB);
-  var ITEMS_URL = "raidplan/loot_items.json";
+  var ITEMS_URL = "web/loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
   var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
                   legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
@@ -269,7 +270,9 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
   function itemHtml(r) {
     var icon = r.icon ? '<img src="https://wow.zamimg.com/images/wow/icons/small/' + esc(r.icon) + '.jpg" alt="" loading="lazy">' : "";
     var slot = r.slot ? '<span class="slot">' + esc(SLOT_CZ[r.slot] || r.slot) + (r.ilvl ? " · " + r.ilvl : "") + "</span>" : (r.ilvl ? '<span class="slot">' + r.ilvl + "</span>" : "");
-    return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(r.itemId) + '" target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + "</span>";
+    // data-wowhead doplní tooltip (Wowhead Power) o zvolený ilvl, aby staty odpovídaly nasimovanému kusu
+    var wh = r.ilvl ? ' data-wowhead="item=' + esc(r.itemId) + '&ilvl=' + esc(r.ilvl) + '"' : "";
+    return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(r.itemId) + '"' + wh + ' target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + "</span>";
   }
   function playerHtml(r) {
     var color = CLASS_COLOR[SPEC_CLASS[r.spec] || ""] || "";
@@ -391,5 +394,8 @@ footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem;
   load();
 })();
 </script>
+<!-- Wowhead tooltipy (název, staty, efekty jako ve hře) při hoveru na item; odkazy zůstávají naše, jen bez přebarvení -->
+<script>var whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false, iconSize: "small" };</script>
+<script src="https://wow.zamimg.com/js/tooltips.js" defer></script>
 </body>
 </html>

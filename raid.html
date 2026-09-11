@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<!-- GENEROVANÝ SOUBOR - needituj venomous-abyss.html ani index.html přímo!
+     Zdroje jsou parts\head.html, bosses\*.html a parts\tail.html.
+     Po úpravě spusť build.bat (nebo publish.bat, který builduje sám). -->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raid taktiky · Eternal Shadows</title>
+<style>
+/* minimal reset (normally added by the artifact host) */
+*,*::before,*::after { box-sizing: border-box; }
+html,body { margin: 0; padding: 0; }
+img,svg { max-width: 100%; }
+</style>
+<style>
+:root {
+  --ground: #0c1210;
+  --surface: #131b18;
+  --surface2: #18231f;
+  --line: #24322c;
+  --ink: #d9e4de;
+  --muted: #8ba49a;
+  --jade: #55b98a;
+  --gold: #c9a24b;
+  --tank: #6f9fd8;
+  --heal: #5cb87c;
+  --dps: #d4796a;
+  --mythic: #e08a3c;
+  --callout-bg: #16241e;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #eef2ef;
+    --surface: #ffffff;
+    --surface2: #f4f7f4;
+    --line: #d5ded8;
+    --ink: #1a2420;
+    --muted: #5c6f67;
+    --jade: #2e8663;
+    --gold: #96742a;
+    --tank: #2e64a8;
+    --heal: #2c7d4f;
+    --dps: #b04a3a;
+    --mythic: #a85f1c;
+    --callout-bg: #e6efe9;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #eef2ef;
+  --surface: #ffffff;
+  --surface2: #f4f7f4;
+  --line: #d5ded8;
+  --ink: #1a2420;
+  --muted: #5c6f67;
+  --jade: #2e8663;
+  --gold: #96742a;
+  --tank: #2e64a8;
+  --heal: #2c7d4f;
+  --dps: #b04a3a;
+  --mythic: #a85f1c;
+  --callout-bg: #e6efe9;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "Segoe UI", -apple-system, sans-serif;
+  line-height: 1.55;
+  margin: 0;
+  padding: 0 1.25rem 4rem;
+}
+.wrap { max-width: 62rem; margin: 0 auto; }
+.mono { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+
+header { padding: 3.5rem 0 2rem; border-bottom: 1px solid var(--line); }
+.eyebrow {
+  text-transform: uppercase; letter-spacing: .18em; font-size: .72rem;
+  color: var(--gold); font-weight: 600; margin: 0 0 .6rem;
+}
+h1 {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 600;
+  margin: 0 0 .5rem; letter-spacing: .01em; text-wrap: balance;
+}
+
+h2 {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.5rem; font-weight: 600; margin: 3rem 0 1rem; text-wrap: balance;
+}
+.path { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .85rem; }
+.path .node {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: .3rem .85rem; white-space: nowrap;
+}
+.path .branch { display: flex; flex-direction: column; gap: .4rem; }
+.path .arrow { color: var(--muted); }
+.path .final { border-color: var(--gold); color: var(--gold); }
+.pathnote { color: var(--muted); font-size: .85rem; margin-top: .75rem; }
+
+.killorder {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .75rem;
+  margin: 0 0 1.25rem;
+}
+.killorder .ko-label {
+  flex-basis: 100%; color: var(--muted); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em;
+}
+.killorder .ko-node {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.35rem; font-weight: 700; letter-spacing: .06em;
+  background: var(--callout-bg); border: 2px solid var(--jade); color: var(--jade);
+  border-radius: 999px; padding: .45rem 1.4rem; white-space: nowrap;
+}
+.killorder .ko-arrow { color: var(--muted); font-size: 1.5rem; }
+
+.boss {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  margin: 1.5rem 0; padding: 1.5rem 1.75rem 1.75rem;
+}
+.boss-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.boss-num {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  color: var(--gold); font-size: 1.1rem;
+}
+.boss h3 {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.45rem; font-weight: 600; margin: 0; text-wrap: balance;
+}
+.boss .tag { color: var(--muted); font-size: .8rem; margin-left: auto; }
+.rplink {
+  font-size: .74rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--jade); text-decoration: none; border: 1px solid var(--jade);
+  border-radius: 999px; padding: .15rem .7rem; white-space: nowrap;
+}
+.rplink:hover { background: var(--callout-bg); }
+.callout {
+  background: var(--callout-bg); border-left: 3px solid var(--jade);
+  padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
+  font-size: .93rem;
+}
+.ability {
+  border-left: 3px solid var(--jade); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 .9rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.ability .hc-label {
+  display: block; color: var(--jade); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.ability ul { margin: 0; padding-left: 1.1rem; }
+.ability li { margin-bottom: .3rem; }
+.ability li::marker { color: var(--jade); }
+.ability li strong { color: var(--jade); font-weight: 600; }
+figure.shot { margin: -0.35rem 0 1.25rem; }
+figure.shot img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; display: block; }
+figure.shot figcaption { color: var(--muted); font-size: .8rem; margin-top: .35rem; }
+.hc {
+  border-left: 3px solid var(--gold); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.hc .hc-label {
+  display: block; color: var(--gold); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.hc ul { margin: 0; padding-left: 1.1rem; }
+.hc li { margin-bottom: .2rem; }
+.mythic {
+  border-left: 3px solid var(--mythic); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.mythic .mythic-label {
+  display: block; color: var(--mythic); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.mythic ul { margin: 0; padding-left: 1.1rem; }
+.mythic li { margin-bottom: .2rem; }
+.mythic li::marker { color: var(--mythic); }
+.mythic li strong { color: var(--mythic); font-weight: 600; }
+/* WoW macro block: each command on its own line (newlines in the markup are
+   kept, indentation is collapsed) */
+code {
+  display: block; white-space: pre-line;
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: .84em;
+  background: var(--callout-bg); border: 1px solid var(--line);
+  border-left: 3px solid var(--gold); border-radius: 0 4px 4px 0;
+  color: var(--gold); padding: .45rem .75rem; margin: .35rem 0 .45rem;
+  overflow-x: auto;
+}
+.callout strong { color: var(--jade); }
+/* Kick rotation block: template macro + per-player macros in two columns */
+.macros {
+  border-left: 3px solid var(--gold); background: var(--surface2);
+  padding: .6rem 1rem .7rem; margin: 0 0 1.25rem; font-size: .88rem;
+  border-radius: 0 4px 4px 0;
+}
+.macros .macros-label {
+  display: block; color: var(--gold); font-weight: 700; text-transform: uppercase;
+  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+}
+.macros p { margin: 0 0 .4rem; }
+.macros-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0 1.25rem; margin-top: .5rem; }
+.macros-side h4 {
+  margin: 0 0 .4rem; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .14em; font-weight: 700; color: var(--dps);
+}
+.macros-side ol { margin: 0; padding-left: 1.3rem; }
+.macros-side li { margin-bottom: .45rem; }
+.macros-side li::marker { color: var(--gold); font-weight: 700; }
+.macros-side li strong { color: var(--ink); font-weight: 600; }
+.macros-side .next { color: var(--muted); font-size: .82rem; }
+.macros-side code { margin: .25rem 0 0; }
+.movement {
+  background: var(--callout-bg); border-left: 3px solid var(--tank);
+  padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
+  font-size: .93rem;
+}
+.movement strong { color: var(--tank); }
+.movement ol { margin: .45rem 0 .55rem; padding-left: 1.5rem; }
+.movement li { margin-bottom: .3rem; }
+.movement li::marker { color: var(--tank); font-weight: 700; }
+.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+.role h4 {
+  margin: 0 0 .4rem; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .14em; font-weight: 700;
+}
+.role.tank h4 { color: var(--tank); }
+.role.heal h4 { color: var(--heal); }
+.role.dps h4 { color: var(--dps); }
+.role ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
+.role li { margin-bottom: .35rem; }
+.posn { font-size: .88rem; color: var(--muted); margin: 1.1rem 0 0; }
+.guides { margin-top: 1.4rem; }
+.guides .guides-note { margin: 0 0 .6rem; font-size: .88rem; color: var(--muted); }
+.guides td { white-space: nowrap; }
+.guides .rplink { font-size: .68rem; }
+.guides .muted { color: var(--muted); font-size: .82rem; white-space: normal; }
+.posn strong { color: var(--ink); font-weight: 600; }
+
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; background: var(--surface); }
+th {
+  text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .12em;
+  color: var(--muted); padding: .6rem .9rem; border-bottom: 1px solid var(--line);
+  background: var(--surface2);
+}
+td { padding: .55rem .9rem; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: none; }
+
+.bossnav {
+  position: sticky; top: 0; z-index: 10; background: var(--ground);
+  display: flex; flex-wrap: wrap; gap: .4rem; padding: .7rem 0 .75rem;
+  border-bottom: 1px solid var(--line); margin-bottom: .5rem;
+}
+.bossnav a {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: .28rem .8rem; font-size: .82rem; color: var(--ink);
+  text-decoration: none; white-space: nowrap;
+}
+.bossnav a:hover { border-color: var(--jade); }
+.bossnav a.active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
+.bossnav a.home { border-color: var(--gold); }
+.bossnav a.home.active { color: var(--gold); background: var(--surface2); }
+.bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
+.bossnav a.lair { border-color: var(--gold); }
+.bossnav a.lair:hover { border-color: var(--gold); }
+.bossnav a.lair.active { border-color: var(--gold); color: var(--gold); background: var(--surface2); }
+footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
+footer p { color: var(--muted); font-size: .82rem; }
+footer a { color: var(--jade); }
+a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow" id="page-eyebrow">Midnight · Patch 12.1 · Raid 2. sezóny</p>
+  <h1 id="page-title">The Venomous Abyss</h1>
+  </header>
+
+<nav class="bossnav">
+  <a href="index.html" class="home">← Hlavní stránka</a>
+  <span class="sep" aria-hidden="true"></span>
+  <a href="#boss-1">I · Nek'zali</a>
+  <a href="#boss-2">II · Sentinels</a>
+  <a href="#boss-3">III · Vashnik</a>
+  <a href="#boss-4">IV · Explorers</a>
+  <a href="#boss-5">V · Sszorak</a>
+  <a href="#boss-6">VI · Twin Fangs</a>
+  <a href="#boss-7">VII · Coiled Altar</a>
+  <a href="#boss-8">VIII · Ula'tek</a>
+  <span class="sep" aria-hidden="true"></span>
+  <a href="#boss-9" class="lair">Lair · Nymrissa</a>
+  <span class="sep" aria-hidden="true"></span>
+  <a href="loot.html" class="home" title="Upgrady z Raidbots / QE Live simů podle hráče a bosse">Loot simy</a>
+</nav>
+
+
+<div class="view-home">
+<h2>Postup raidem</h2>
+<div class="path">
+  <span class="node">Nek'zali the Soulcoiler</span>
+  <span class="arrow">→</span>
+  <span class="branch">
+    <span class="node">Entombed Sentinels → Vashnik</span>
+    <span class="node">Lost Explorers → Sszorak</span>
+  </span>
+  <span class="arrow">→</span>
+  <span class="node">The Twin Fangs</span>
+  <span class="arrow">→</span>
+  <span class="node">The Coiled Altar</span>
+  <span class="arrow">→</span>
+  <span class="node final">Ula'tek</span>
+</div>
+<p class="pathnote">Raid se po Nek'zali větví: obě dvojice křídel můžete vyčistit v libovolném pořadí podle složení raidu a pak se cesty spojí u Twin Fangs.</p>
+</div>
+
+
+<section class="boss">
+  <div class="boss-head"><span class="boss-num">I</span>
+    <h3>Nek'zali the Soulcoiler</h3><a class="rplink" href="https://raidplan.io/plan/egs7gyaq69pg7xhs" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Add-cleave · P1 → intermission → P2 · 2T/4H</span>
+  </div>
+  <p class="callout"><strong>Overview:</strong> Soulcoil Well je studna uprostřed, do které nesmí dojít Addy (Restless
+    Amani). Addy se spawnujou z rakví po obvodu — mají magic shield (štít jde zničit jenom magií!!!) Dokud je štít
+    aktivní, addy
+    mají fixate do studny uprostřed. Když se štít probije, addy mají klasické aggro. Každý add, který dojde do studny,
+    dá
+    bossovi <strong>5 energie + na HC debuff (Ritual Burn) - NECHCEŠ ADDU VE STUDNI A ANI HRÁČE!!! (každá mrtvola ve
+      studni je stejný efekt);
+      na 100 energie boss enrage</strong>. Průběh: P1 → intermission při 50 energie (ideálně bosse stáhnout pod 50% hp)
+    - Ritual of
+    Awakening, 2× Echo of Jawae → P2 BL (Uncoiling — energie od 0).</p>
+  <p class="movement"><strong>Movement: </strong>BL na P2. Boss se na startu drží kousek od studny, raid za ním. S
+    Barrage jde tank dopiče od raidu, nikdo nestojí před bossem. Boss se tahá tam, kde se spawne nejvíce addek. Na
+    mythic se při spawnu
+    addek navíc spawne addka "ve studni". Grupa 5 hráčů (1 heal, 4 dps - idealne melee) se musí postavit do studny a
+    nechat se vtáhnout. Studna v tu dobu bude mít animaci rukou, které lezou ze studny. Grupu ve studni to portne do
+    jiné instance a zabíjí addku. Addka je jednoduchá, jenom castí cast, kterej se kickne a dodguje se věcem okolo. Bude
+    určena kick rotace. Při mezifázi se boss natáhne na aktivní velkou addu a funguje to stejně jako s bossem - adda se
+    tahá na malé addky. Navíc je zde Hungering Pyre - aktivní tank soak. Všechna melee a healeři se postaví do tank
+    soaku. Tank musí se soakem jít na co nejvíce mrtvol. Soak mrtvoli pálí. Kdokoliv kdo nebyl v soaku (rangedka)
+    dostanou personal debuff (červené kolečko) a musí s ním jít na zbylé mrtvoli. Mrtvola co se nespálí se probudí a
+    bude mít naštvaná.</p>
+  </p>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Soulcoil Ignition</strong> — 5x po sobě provolá abilitu Soulcoil Rite. (tzn. dá 25 energie bossovi,
+        jebne to AOE dmg do raidu a na HC to aplikuje Ritual Burn 5x stacků)</li>
+      <li><strong>Soulcoil Rite</strong> — Dá 5 energie bossovi a jebne AOE dmg. Na HC to aplikuje navíc stack Ritual
+        Burn.</li>
+      <li><strong>Ritual Burn</strong> — Debuff aplikovaný na hráče, který zvyšuje poškození od dalších útoků bosse. 15%
+        za stack.</li>
+      <li><strong>Essence Rend</strong> — Magic debuff který je dispelovatelný. Jdeš s ním ke kraji místnosti. Při
+        dispelu tě jebne po hlavě a nechá sračku na zemi. Jestli bude nějaká sračka mimo kraj tak si tě najdu a
+        vykastruju. Na HC při castu Invoke se sračky začnou hejbat.</li>
+      <li><strong>Possession Barrage</strong> — Spektrální projektily letí na tanka. Tank musí jít dopiče od raidu a
+        raid musí bejt za bossem. Je to proxy dmg, takže čím dál tím líp. Na HC ti každej hit dá stack Hollowing Strike.
+      </li>
+      <li><strong>Hollowing Strikes</strong> — Tank debuff boss autoattackem. 5% heal redukce za stack.</li>
+      <li><strong>Hungering Pyre</strong> — Tank soak - musíš s tím jít na mrtvé addky, ono je to spálí. Soakujou
+        melečka. Kdo to nesoukne dostane Slithering Flame. Slithering Flame je personální kolečko a musíš s tím jít
+        spálit addky co ještě nejsou spálený. Tzn. dostanou ho všechny rangedka (respketive každej kdo nebyl v tank
+        souku). </li>
+      <li><strong>Uncoiled Rage</strong> — enrage</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li>Soulcoil Ignition a Invoke nově aplikují i Ritual Burn.</li>
+      <li>Restless Amani po smrti nechávají Vessel of Awakening (mrtvoly) — v intermission se pálí přes Hungering Pyre a
+        Slithering Flame.</li>
+      <li>Každé echo z Possession Barrage aplikuje zasaženému hráči Hollowed.</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Mythicu</span>
+    <ul>
+      <li>Spawnuje se addka v jiné instanci. Jsou stanoveny dvě grupy po 5 hráčích (heal + 4x dps), které při spawnu
+        addek vlezou do studny uprostřed a nechají se tak teleportovat k addce. Addka se musí kickovat a dodgovat věci
+        okolo.</li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Bosse směrem ke vchodu - kousek od studny, čelem od raidu — koukáš do prava od vchodu - tam budeš běhat s
+          baráží.</li>
+        <li>Každej hit ti stackuje healing debuff. Na začátku chceš tauntnout kolem 4 stacků, protože dostaneš barrage.
+          Pak taunt na cd. Pokud jsi paladin tak na to ser a pošli tam imunitu, ez.</li>
+        <li>Possession Barrage: 4 spektrální projektily letí na tanka a dmg klesá se vzdáleností — aktivní tank odbíhá
+          30+ yd dopiče; nikdo nesmí stát mezi bossem a tankem.</li>
+        <li>Volný tank sbírá addy se zlomeným štítem a odtahuje je od studny; v intermission se Echo of Jawae tankuje na
+          značce X, druhé na skullu. Reálně s adkou budeš chodit tam kde je nejvíc addek, stejně jako s bossem v p1 a p2
+        </li>
+        <li>Hungering Pyre: aktivní tank soakuje na hromadě mrtvol addů chvíli po začátku mezifáze. Buď na to ready.
+          Miniboss musíš nabrat po dokončení castu.</li>
+        <li>NEPODCEŇUJ HEALING DEBUFF - V P2 TO BOLÍ, NE ŽE TAM CHCIPNEŠ.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Soulcoil Ignition = AOE + padající swirly — raid do něj musí jít s 0 stacky Ritual Burn; heal cooldown.</li>
+        <li>Essence Rend: zasažené nejdřív přitáhne ke středu, pak odhodí s 15s DoTem — odnést nakraj a tam dispelnout
+          nebo nechat vytikat. Dělá to dmg když to tiká; vznikne <em>trvalá</em> kaluž.</li>
+        <li>P2: Uncoiling dává stálý celoraidový dmg a Invoke dává stacky debuffu — cooldowny, BL, enjoy.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Ranged s magic damage: priorita je lámat štíty nových addů.</li>
+        <li>CC (rooty, trapy, novy) na vzdálené addy, dokud nemají zlomený štít; DK stahují addy na bosse (grip) nebo
+          tank tantuje probité. Ideální stav je mít je zabite u sebe aby se pak dali pálit.</li>
+        <li>Intermission: kill 2× Echo of Jawae po jednom - aktivní je vždy jeden co začně castit Soul Transfer -
+          channeluje 15 s (můžeš v tom stát a vyběhnout jenom na ten finish castu); melee soakují tanka alá Hungering
+          Pyre na hromadě mrtvol, kdo nesoakne (ranged), dostane Slithering Flame a položí ho na zbylé mrtvoly.
+          <strong>Nespálené mrtvoly ožijí jako posílené addy a já vás nakopu doprdele.</strong>
+        </li>
+        <li>P2: LUST a cooldowny hned na startu; boss musí zemřít před 100 energie. Je to chaoz, priorita jsou ale pořád
+          addky, nemůžou dojít doprostřed.</li>
+      </ul>
+    </div>
+  </div>
+</section><section class="boss">
+  <div class="boss-head"><span class="boss-num">II</span>
+    <h3>Entombed Sentinels</h3><a class="rplink" href="https://raidplan.io/plan/xtxvjvkrhxhh2bfs" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank"
+      rel="noopener">Sestava ↗</a><span class="tag">Dva golemy · rotace stran · tier: hands</span>
+  </div>
+  <p class="callout">Raid se dělí dvě grupy - na zelenou (Breath of Ula'tek) a červenou (Blood of Ula'tek) skupinu.
+    Bossové jsou min 40y od sebe jinak mají 99% reduction. Na 100 energie přijde Vitriolic Stasis: bossové jdou do
+    středu, na 30 s mají 99% DR a slabší se dohealuje na úroveň silnějšího — HP se tedy dorovnává samo. V mezifázi je
+    minihra spojování hráčů (viz. obrazek). Každej hráč nad sebe dostane marku se zelenými kuličky, které jsou spojené.
+    Může jich být 1 až 3. Hledáš hráče tak, aby zelené kuličky byly dohromady 4 (tzn. pokud máš nad hlavou 3 zelené
+    kuličky tak hledáš někoho kdo má jednu zelenou kuličky etc.). Pokud to někomu nedošlo tak boss je imunní na dmg v
+    mezifázi protože je u sebe. TAKŽE SI DEJ PRE-SPREAD A MÁŠ 30s ČASU NA TO TO ZAHRÁT. NA HC ŠPATNÉ SPOJENÍ JEBNE MEGA
+    SRAČKU POD VÁS, POKUD NĚJAKOU UVIDÍM (RENDLIKU) TAK VAS POJEBU. Po každé Stasis si <strong>obě skupiny i tanky
+      vymění strany</strong> a cyklus se opakuje do killu. LUST na pull.</p>
+  <figure class="shot"><a href="web/boss_2_marks.png" target="_blank" rel="noopener"><img src="web/boss_2_marks.png"
+        alt="Helical Toxins - marky se zelenymi kulickami nad hraci" loading="lazy"></a>
+    <figcaption>Helical Toxins během Vitriolic Stasis: počet zelených kuliček nad hlavou (1–3) — spojuj se s hráčem tak,
+      aby součet byl přesně 4. Klikni pro plnou velikost.</figcaption>
+  </figure>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Ula'tek's Dominance</strong> — bossové blízko sebe = 99% damage reduction — držet ≥40 yd od sebe.</li>
+      <li><strong>Empowering Slam</strong> — tank buster od Breath (green). Hit jako kráva, stackuje — resetne se až
+        výměnou bossů při mezifázi.</li>
+      <li><strong>Bloodvenom Injection</strong> — tank buster od Blood (red). Hit jako kráva + shadow DoT; po vypršení
+        debuffu spadne velká kaluž (dle stacků z dotky a dle souknutých lidí, ideálně kolem 5 lidí soak a healeri
+        dispelovat hrace aby sračka na zemi byla co nejmenší) — před vypršením dojdi co nejvíc na stranu.</li>
+      <li><strong>Living Venom</strong> — na HC každá jedová mechanika od Breath vystřelí zpátky k bossovi — nestůj v
+        lajně mezi zelenou malou sračkou na zemi a bossem. Může to bejt až v africe, bacha na to.</li>
+      <li><strong>Toxic Droplets</strong> — malé blob addy, umírají sešlápnutím (1 hráč = 1 orb + malý DoT) - prostě
+        souk malé zelené sračky na zemi. Po sešlápnutí z nich letí Living Venom zpět k bossovi.</li>
+      <li><strong>Venom Coagulation</strong> — velký add — tiká do celého raidu každé 2s, dokud žije. VŠICHNI ZELENÍ
+        INSTA SWITCH ADDA. KDO POJEDE BOSSE DOSTANE POJEB</li>
+      <li><strong>Blighted Blood</strong> — dispelovatelný debuff; když vyprší sám, nechá kaluž — healeri dispelovat
+        brzy a často (hráč u kraje) - nechceme sračky na zemi.</li>
+      <li><strong>Unstable Miasma</strong> — soak celé červené skupiny (sólo = smrt). Soakeři dostanou Clinging Murk →
+        malé kaluže po vypršení — soak si předpozicuj tam, kam chceš kaluže položit - kraj. Ideálně kolem 5 lidí na
+        soak, aby byla co nejmenší sračka.</li>
+      <li><strong>Vitriolic Stasis</strong> — intermission na 100 energie: bossové do středu, 99% DR na 30s, slabší se
+        dohealuje. Pak výměna stran skupin i tanků.</li>
+      <li><strong>Helical Toxins</strong> — 4 orby nad hlavou (část zelených) — spáruj se s přesně jedním hráčem na
+        součet přesně 4 zelených. Na HC tě kolize přes 4 stacky rovnou zabije. Pokud te nezabije tak to udelam ja.</li>
+      <li><strong>Cultivated Burst</strong> — trest za špatný pár: letální výbuch + velká kaluž — odnést do punishment
+        rohu (immunita přežije).</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li><strong>Breath of Ula'tek</strong>: každá jedová mechanika po spawnu vystřelí zpět k bossovi a poškodí hráče v dráze (Living
+        Venom).</li>
+      <li><strong>Blood of Ula'tek</strong>: blood debuff při aplikaci nechává krvavou kaluž — čím víc stacků, tím větší.</li>
+      <li><strong>Intermission</strong>: kolize, po které bys měl víc než 4 stacky, tě rovnou zabije (na Normalu jen knockback).</li>
+    </ul>
+  </div>
+  <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Shifting Protovenom</strong> - Vashnik se spawne a dá debuffy na 8 hráčů - vypadá to že preferuje strany (debuffy na
+        hráčích z bossů). Jsou to takové červené kolečka kolem sebe. Musíš se spojit s dalším červeným kolečkem. NESMÍŠ
+        HITNOUT NIKOHO JINÉHO JINAK BUMBÁC. Tzn. všichni uhnou lidem s debuffem aby se mohli spojit.</li>
+      <li>Pokud dostaneš dvacet stacků debuffy z bosse (Mark of Acid / Blood) => insta nebíčko.</li>
+      <li><strong>Mezifáze</strong> - zelené marky nad hlavou po pár vteřinách zmizí a nevidíš je u ostatních.
+        <ul>
+          <li>2: běžíš pod bosse.</li>
+          <li>1: skáčeš na místě a pinguješ se. Macro:
+            <code>/ping [@player] On my way
+              /say [square] 1 [square]</code>
+          </li>
+          <li>3: běžíš na lidi co mají ping nad hlavou a SKÁČOU.</li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Empowering Slam (green) - Každej tank buster si boss stackuje buff na zvyšení phys dmg, takže tě bude jebat
+          doprdele celou dobu, buď na to rdy.</li>
+        <li>Bloodvenom Injection (red) rampují ~15 % za slam a resetují se jen novým targetem — na vlastní straně není s
+          kým swapovat, proto se tanky mění výměnou stran při intermission.</li>
+        <li>Bloodvenom Injection (red) TI SPADNE AŽ BUDEŠ TANKOVAT DRUHÉHO BOSSE. JAKMILE DEBUFF SPADNE TAK VYSERE OBŘÍ
+          SRAČKU. BĚŽ S TÍM DOPIČE, VYCHÁZÍ TO HNED PO MEZIFÁZI KDYŽ BĚŽÍŽ NA POZICI.
+          Dávej bacha na to že pokud tu sračku dropneš na existující červenou sračku, tak ona se pohne z ní. Takže
+          ideálně chceš najít místo někde mezi existujícími sračky a jebnout to tam, aby se nepohlad pryč do středu.
+        </li>
+        <li>Spawne se zelená addka => jdeš na ní s bossem (není tankovatelná). Zároveň zkus posoukovat co nejvíc
+          zelenejch sraček na zemi.</li>
+        <li>Jsi tank, odnášej sračky co nejblíž k ostatním sračkám a soukuj zelené sračky když budou overlap v těch
+          červených sračkách.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Unstable Miasma samotného hráče zabije — celá červená skupina (ideálně jenom 5 lidí) ho stackem splituje a
+          pak společně odejde na určený drop spot pro následné kaluže.</li>
+        <li>Blood Venom po vypršení či dispelu pokládá kaluž — dispelovat, až je hráč u zdi; červená strana proto
+          startuje v rohu.</li>
+        <li>Toxic Droplets dávají malý DoT za orb — počítat s tím v healu zelené strany.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Zelená: Toxic Droplets vybuchují po 16 s — sešlapat, jeden orb na jednoho hráče (žádné hrdinské soaky tří
+          orbů). Venom Coagulation (zelený blob pulzující do raidu) je okamžitá priorita celé skupiny.</li>
+        <li>Zelená: Living Venom — zelené linky letí ven a po chvíli se <em>vracejí k bossovi</em>; BACHA na zpáteční
+          cestu.</li>
+        <li>Intermission: Helical Toxins — 4 orby nad hlavou, část zelených. Spáruj se s přesně jedním hráčem tak, aby
+          součet zelených byl přesně 4 (1+3, 2+2). Času je DOST a bossové jsou immune. HLAVNĚ PRE-SPREAD před mezifází.
+        </li>
+        <li>Chybný pár = Cultivated Burst (letální výbuch + velká kaluž) — odnést do punishment rohu; silný personál
+          nebo immunita to přežije.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="posn"><strong>Pozicování:</strong> green skupina u trojúhelníku na západním okraji, red skupina startuje v
+    SV rohu (kaluže ke zdi) a po intermission tankuje na X na východě; punishment roh pro Cultivated Burst je SZ. Pozice
+    v RaidPlanu jsou přenesené z Method diagramů.</p>
+</section><section class="boss">
+  <div class="boss-head"><span class="boss-num">III</span>
+    <h3>Vashnik the Malignant</h3><a class="rplink" href="https://raidplan.io/plan/q8pqzrw3vf5p3q6c" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank"
+      rel="noopener">Sestava ↗</a><span class="tag">Jedna fáze · rotace fontán · tier: chest</span>
+  </div>
+  <div class="callout"><strong>Overview:</strong> Tři fontány (Blood, Shadow, Fire) + boss energy bar. Při 100 energy -
+    Imbibe - pije ze
+    <strong>dvou nejbližších</strong> fontán. Každá fontána dá bossovi debuff (pokus se aktivuje stejná fontána, boss
+    dostane stack). Tzn. každý přesun dá druhej stack. Výchozí rotace:
+    <strong>Fire+Shadow → Shadow+Blood → Blood+Fire → repeat</strong>
+    (Fire je nejtěžší, takže začít tam aby neměla dva stacky.). Každá aktivní fontána spawne addy a má svoje infekce
+    (Adaptive Infection) na
+    random hráče.
+    <br /><strong>Fontány:</strong>
+    <ul>
+      <li>Fire - spawnuje addy které pulzujou a při smrti dají debuff, takže JE NECHCEŠ ZABÍT NAJEDNOUT (jsou dvě a jdou
+        gripovat, ccčkovat, cokoliv). Při startu zabijem obě najednou, protože je blko.</li>
+      <li>Shadow - spawnuje miliardu malejch addek, které se splošní - stačí pár AOE lidí co to udělá - boss zatím může
+        bejt jidne.</li>
+      <li>Blood - spawne addku která nejde CC a po smrti se rozděluje. Full focus - boss je vedle ni vždy.</li>
+    </ul>
+    <strong>Infekce:</strong>
+    <ul>
+      <li>Fire - dispel debuff na random hráčích - 2 assign healeři co to budou dispelovat. Bacha na dispel BĚHEM IMBIDE
+        -
+        BIG AOE.</li>
+      <li>Shadow - spawnuješ fialové kolečka pod nohy při chůzu, jdi s tim od bosse.</li>
+      <li>Blood - heal absorb = pod bosse, musí soakovat lidi - prostě stack na sebe a prohealovat.</li>
+    </ul>
+    Boss má soft enrage, takže stačí hrát mechaniky.
+  </div>
+  <p class="movement">
+    <strong>Movement:</strong> BL na pull. Fight začíná mezi Shadow a Fire fontánou. Boss se tankuje u Shadow fontány,
+    blízko spawnu addů. Fire addky se gripnou k bossovi (oboje najednou).
+    Potom se pomalu přesouváme k Blood fontáně, kde se tankuje boss a spawnuje Blood add. Melečka blástí Blood addku a
+    rangedka + 2 healeři jdou na Shadow addky.
+    Potom se boss přesune VEDLE SHADOW FONTÁNY tak, aby byla blíž Fire fontána. Full focus Blood addku (má 2 stacky) a
+    druid / drak / wl / etc půjdou rootnout Fire addky.
+    Až se zabije Blood add, tak se přesouváme k Fire fontáně - zabijou se fire addky (POSTUPNĚ) - a potom zase znova
+    dokola - akorát se musí zabíjet fire postupně.
+  </p>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Imbibe</strong> — boss se napije ze 2 nejbližších fontán: buff na 2 min + spawn addů podle fontán (1
+        Blood add — CC immune, splituje se; 2 Fire addy — explodují při smrti (nezabit najednou, jdou gripovat, cc,
+        etc...); 5
+        Shadow addů — sračky na zemi po killu).</li>
+      <li><strong>Dripping Fangs</strong> — tank buster: jeba jak sviňa + magic DoT + 100 % increased physical na 32s —
+        defku na hit, hard swap po každém castu.</li>
+      <li><strong>Malignant Catalyst</strong> — (HC) raid dmg + spawn Catalytic Bile — ZELENÉ SOAKY - 1 hráč stačí.</li>
+      <li><strong>Adaptive Infection</strong> — debuffy podle aktivních fontán: Siphoning (velký heal absorb — vysaješ
+        HP od okolních hráčů), Stygian (kaluže pod nohama — spread), Exploding (dispel = raid hit — postupně 2 assign
+        healeři - bacha na Imbide).</li>
+      <li><strong>Malignant Burst</strong> — stackující debuff na raid, když add dojde do prostředního poolu — TO SE ALE
+        NESTANE RIGHT???</li>
+      <li><strong>Hardened Venom</strong> — add živý 60s = CC immune sprinter. „Necháme na později“ NEEXISTUJE.</li>
+      <li><strong>Hardened Tumor</strong> — štít poison adda — sundává se zásahem Plague Wave. Malé adky na zemi sejmeš
+        zelenýma čárama co jdou z tebe do kříže.</li>
+      <li><strong>Splitting Clot</strong> — blood add se při smrti dělí na menší kusy — počítat a dorážet.</li>
+      <li><strong>Caustic Surge</strong> — (HC) fire addy při smrti explodují a nechávají stackující debuff — proto
+        nikdy nezabít oba naráz.</li>
+      <li><strong>Umbral Ejection</strong> — swirlies od shadow addů — uhýbat, kruhy pokládat cíleně.</li>
+      <li><strong>Plague Froth</strong> — vystřelí Plague Wave do světových stran (kříž). Dostane to 5 hráčů a je to 2x
+        meti Imbide castem, tzn. celkem 10x4 vln.</li>
+      <li><strong>Toxic Vapor</strong> — soft enrage — stoupá s každým Imbibe navíc, permanentní raid dmg do konce
+        pullu.</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li>Vashnik nově castí Malignant Catalyst — celoraidový dmg + spawn Catalytic Bile k soaknutí (zelené souky).</li>
+      <li>Blood add už nejde gripnout.</li>
+      <li>Exploze Fire adda při smrti nechává na raidu stackující debuff (proto stagger killy).</li>
+    </ul>
+  </div>
+  <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Malignant Totem</strong> — navázáno na Imbide - po každém Imbide se objeví totemy na zemi dvou
+        aktivovaných fontán. Zničí se pomocí <strong>Plague Wave</strong> - musíš namířit vlnu na ně. Nedělají nic ale
+        při dalším castu Imbide bouchnou - wipe. Jeden stack prej jde prohealovat, nazor? </li>
+      <li>Burning Venom addky jsou 3 (na HC 2) - červené addky.</li>
+      <li>Exploding Infection - dmg rampuje dokud není dispelnutej.</li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Jeden tank má za úkol fyzicky dovést bosse ke správné dvojici fontán před každým Imbibe — a rotaci volat
+          nahlas. Jedno špatné napití se dá přežít; rozjetá rotace znamená triple-buff fontánu a wipe.</li>
+        <li>Tank co není aktivní může Fire addky gripnout dopiče aby neumřeli najednou. Na začátku je to jedno, bude
+          BLko - se prohealuje.</li>
+        <li>Při dalším kole Fire tankuj bosse dál od altáře a grip jednu addku po druhé - jestli umřou najednou někdy v
+          3 minutě na dvou stackách a wajpnem tak facka.</li>
+        <li>Dripping Fangs: hard swap každý cast — 100% physical amp se nedá tankovat dvakrát. Swap až ti padne debuff.
+          Ideálně posledních 5s si presni defku a swap po tom.</li>
+        <li>Pokud lidi s heal absorbem nebudou vyjebaní a stoupnou si vedle sebe, tak aby se kolečka uprostřed
+          překrývala, tak si stoupni doprostřed do obou kruhů.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Assign 2 healeři na dispel Fire Infekce - bacha na Imbide.</li>
+        <li>Assign 2 healeři na přesun na Shadow fontánu při rotaci Shadow + Blood.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>ADD > BOSS.</li>
+        <li>Blood: full focus - rozdělí se při killu na menší addky.</li>
+        <li>Shadow: pár heavy AOE dps jde od bosse je zabít. Boss může být jinde v tu chvíli.</li>
+        <li>Fire: nejnebezpečnější pár — pulzují do raidu a při smrti pokládají stackující výbuch. CC jeden, nuke druhý,
+          prvního dorazit až spadne debuff — nikdy nesmí zemřít oba naráz. Při BLku můžem zabít oba.</li>
+        <li>Malignant Catalyst: zelené soaky, alespoň jeden hráč vevnitř. Pre-spread před abilitou, můžou bejt daleko od
+          bosse.</li>
+      </ul>
+    </div>
+  </div>
+</section><section class="boss">
+  <div class="boss-head"><span class="boss-num">IV</span>
+    <h3>The Lost Explorers</h3><a class="rplink" href="https://raidplan.io/plan/w22burzhsdzwbhf4" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Tři želvy · fish enrage clock · tier: shoulders</span>
+  </div>
+  <p class="callout"><strong>Joby: </strong>Otvírat bedny kvůli rybám (otevřeš přechodem přes bednu - bacha dá ti stack
+    bleedu), zahrát aktivní ultimátu, hlídat United Defense (na HC nesmí bejt 3 želvy u sebe) a zabít všechny tři želvy
+    najednou. Mor'zahi nabíjí energii — na 100 castí Final Ascension a jediný interrupt je nakrmit nějakou želvu rybou z
+    bedny (Disgusting Fish). Resetne se mu energie a nakrmená želva dostane svoji ultimátku. <strong>Ryby jsou přesně
+      tři</strong> — čtvrtá nepřerušená Ascension je hard enrage, do té doby musí být všechny želvy mrtvé. Feed zároveň
+    želvě zapne její ultimátu.</p>
+  <div class="killorder">
+    <span class="ko-label">Pořadí krmení / ultimát</span>
+    <span class="ko-node">GEBO</span>
+    <span class="ko-arrow">→</span>
+    <span class="ko-node">IKU</span>
+    <span class="ko-arrow">→</span>
+    <span class="ko-node">NAMA</span>
+  </div>
+  <p class="movement"><strong>Movement: </strong>Začíná se na Gebbo + Name. Iku se tankuje naproti. Blástí se Gebbo.
+    První ryba se nakrmí Gebbo => v tu dobu se swapuje na Nama + Iku. Blástí se Iku. Houbička se nabejtí na marku, bomba
+    jde na druhou stranu (2x po sobě). Po druhém zkoku se swapuje na Iku + Gebbo (podle procent). Další se krmí Iku.
+    Lidi s červeným kruhem jdou podélně na okraj místnosti, lidi s modrýma jdou ve vnitřku místnosti. KOLEČKA SE NESMÍ
+    PŘEKRÝVAT JINAK WIPE. Poslední krmíme Nama. Při nakrmení switch Iku na Namu. Gebbo bude sám. Frontály do řady před
+    Namu - celý raid soakuje a nechává se odhodit do dalšího soaku za sebou (2x po sobě). Bossové se dobijou podle
+    procent, nejspíše ranged switch na Gebba, uvidíme. </p>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>United Defense / Aura of Unity</strong> — (Nama) - želvy u sebe = immune; na Namě smí být tankován jen
+        jeden boss zároveň. Nama má nejvíc HP → melee cleave přes Namu. JE TO HC MECHANIKA, TZN. NA NORMAL STACK A
+        BLAST.</li>
+      <li><strong>Throw Junk</strong> — Gebbo hází bedny — musí se sebrat přeběhem přes ně - bacha dá ti stack bleedu. V
+        jedné bedně je ryba (Grab Fish).</li>
+      <li><strong>Grab Fish</strong> — extra action button — nakrmení bosse resetne energii Mor'zahiho (použít ~na 95
+        energie, v melee u bosse). Jen 3 ryby celkem, 4. Ascension = enrage.</li>
+      <li><strong>Icebound Flames</strong> — kickovatelný cast Iku (~2–3×/min) — rotace 2–3 casterů, může pomoct i
+        aktivní tank.</li>
+      <li><strong>Shell Spin</strong> — Nama frontal — 3 krunýře na MELEE hráče; MELLE BAITÍ PRYČ Z PLATFORMY. JESTLI
+        UVIDIM KRUNÝŘ V RAIDU TAK DOSTANETE POJEB.</li>
+      <li><strong>Shredding Shards</strong> — Iku tank debuff: DoT + 50 % increased magic dmg za stack na 80 s — swap
+        každý cast (~1/min).</li>
+      <li><strong>Steady Strikes</strong> — Nama tank debuff: +4 % physical za stack na 60 s — spadne přirozeně, když
+        tankuješ Iku.</li>
+      <li><strong>Blink Nova</strong> — Iku blinkne na náhodného ranged hráče, je to proxy dmg — odejdi od raidu před
+        směrem před bosse.</li>
+      <li><strong>Mighty Thud</strong> — Nama ultimáta: 3 soaky, skáče na ně podle vzdálenosti, 3× po sobě (9 soaků);
+        30s debuff → první set má na třetí čisto. 1 soak melee + 2 ranged, nepřekrývat, nesmí být prázdný => raid hit.
+      </li>
+      <li><strong>Frostfire Volley</strong> — Iku ultimáta: sady fire/frost debuffů + sračky na zemi. Očisti se
+        šlápnutím do OPAČNÉHO sračky na zemi. Vyčištění dělá raid dmg, čistit postupně.</li>
+      <li><strong>Explosive Surprise</strong> — Gebbova ultimáta: bomba na kraj (na HC nechává Spreading Flames - GIGA
+        SRAČKA NA ZEMI) - dál od houby. Bomba udělá vlnu - přeskoč přes houbu (Bouncy Mushroom - naskoč těsně před vlnou
+        jako grupa jinak houba zmizí!!!) nebo blink/leap/imunity.</li>
+      <li><strong>Empowered Ascension</strong> — enrage — 4. Final Ascension bez ryby. Do té doby všechny tři želvy
+        mrtvé, společně (death enrage přeživších).</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li>Explosive Surprise (Gebbova bomba) nově nechává velkou plochu Spreading Flames.</li>
+      <li>United Defense (Nama).</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Mythicu</span>
+    <ul>
+      <li>Krabička dává celému raidu bleed - sbírat postupně.</li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>United Defense: želvy blízko sebe = všechny immune. Dvě lze držet v cleave (Iku+Nama).</li>
+        <li>Dva swapy: Shredding Shards na Iku tankovi a Steady Strikes na Nama tankovi — obojí rampuje, měňte, jakmile
+          to začne bolet.</li>
+        <li>První tank buster dostaneš od Nama - zvýšený phys dmg do tebe. Swap je při Shredding Shards (Iku) - dostaneš
+          7 hitů a pak swap. Tzn. swap až po abilitě, když máš 7 stacků.
+          HLAVNĚ SI NEREFRESHNI PHYS DEBUFF Z NAMA VOLE, JINAK POJEBEŠ </li>
+        <li>Bosse taháš po kružnici a snažíš se bejt směrem ven, protože frontál krunýřů (Nama) se bejtí na tanky a
+          melečka. Jsi pořád naproti Gebbovi, taháš to podle něj (30y).</li>
+        <li>Pokud máš imunitu na výbuch kterej se přeskakuje houbičkou tak vemeš Namu a nejdeš skákat, protože se
+          přiblížíš s bossem ke gebbovi a bude redukce. Snažse Namu držet dál a skipovat ability imunitou.</li>
+        <li>Bude potřeba bosse prohazovat po "mezifazich" aby se dmgovali všichni. Musíme dořešit pak, začne se na Iku +
+          Name, potom Nama + Gebbo a td. Podle hpček.</li>
+      </ul>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Box crew sbírá stacky Splinters (bleed) — Evoker dispel a racialy ho čistí; ideálně tam patří hráči s
+          physical resistem.</li>
+        <li>Mighty Thud: tři markované dopady se splitují — prázdná marka = hit do celého raidu; po skocích pozor na
+          Aftershock krátery.</li>
+        <li>Fishy Feedback po každém nakrmení je plánovaný raid hit — mějte na něj heal.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Stálá box crew: každá otevřená bedna odečítá z Relic Rupture (25s raid exploze) a v jedné z nich je ryba.
+        </li>
+        <li>Frostfire Volley (Iku): dvě salvy fire/frost střel — každý zasažený si <em>musí</em> očistit debuff
+          šlápnutím do patche opačného elementu před druhou sadou, jinak Elemental Explosion (frost jde po melee, fire
+          po ranged).</li>
+        <li>Gebbo: bomba z Explosive Surprise na kraj (nechává zmenšující se kaluž); Blast Wave se přeskakuje přes
+          Bouncy Mushroom — naskočit těsně před vlnou (blink/leap/imunita funguje taky).</li>
+        <li>HP všech tří držet vyrovnané — smrt spouští enrage přeživších. Nouzové pořadí: Gebbo → Nama → Iku.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="posn"><strong>Pozicování:</strong> Iku+Nama tankované spolu na západě středu, Gebbo se toulá severně; raid
+    jižně za želvami. Soak skupiny na Mighty Thud v řadě podle vzdálenosti (melee → mixed → range, Nama skáče na
+    nejbližší první). Pozice v RaidPlanu dle Method diagramů.</p>
+</section><section class="boss">
+  <div class="boss-head"><span class="boss-num">V</span>
+    <h3>Sszorak</h3><a class="rplink" href="https://raidplan.io/plan/uaqafdx6g3bp6g79" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282"
+      target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Vítr boss · tier: legs</span>
+  </div>
+  <div class="hc"><span class="hc-label">Addon setup — prerekvizita (Northern Sky Raid Tools)</span>
+    <ul>
+      <li>Před pullem si v <strong>NSRT → Encounter Alerts</strong> vyber bosse <strong>Sszorak</strong> a zapni si
+        <strong>Winds Helper</strong>, <strong>Debuff Targets</strong>, <strong>Marker Map</strong> a <strong>Serpent's
+          Fury</strong>. Pokud je pod Sszorakem nenajdeš, napiš název do vyhledávače.
+      </li>
+      <li>Winds Helper ukazuje pořadí marek pro větry (1–4), Debuff Targets kdo má Venomous Surge a na kterou marku jde,
+        Marker Map je mapka marek na platformě a Serpent's Fury hlásí „Stack Up“. Debuff Targets si posuneš přes
+        kotvu (ikona vpravo nahoře v NSRT okně).</li>
+    </ul>
+    <figure class="shot"><a href="web/sszorak_addon_01.png" target="_blank" rel="noopener"><img src="web/sszorak_addon_01.png"
+          alt="NSRT Encounter Alerts - Sszorak: zapnute Winds Helper, Debuff Targets, Marker Map, Serpent's Fury"
+          loading="lazy"></a>
+      <figcaption>NSRT → Encounter Alerts → Sszorak: zapnout Winds Helper, Debuff Targets, Marker Map a Serpent's Fury.
+        Klikni pro plnou velikost.</figcaption>
+    </figure>
+    <figure class="shot"><a href="web/sszorak_addon_02.png" target="_blank" rel="noopener"><img src="web/sszorak_addon_02.png"
+          alt="Jak vypadaji alerty ve hre: Marker Map, Winds Helper, Debuff Targets, Serpent's Fury Stack Up"
+          loading="lazy"></a>
+      <figcaption>Jak to vypadá ve hře: Marker Map (mapka marek), Winds Helper (pořadí marek 1–4), Debuff Targets
+        (kdo má debuff) a Serpent's Fury „Stack Up“. Pozici Debuff Targets posouváš přes kotvu vpravo nahoře. Klikni pro
+        plnou velikost.</figcaption>
+    </figure>
+  </div>
+  <p class="callout"><strong>Overview (Mythic):</strong> Jedna fáze dokola: Apex Predator (2× Ravage, 2× Mutilate,
+    1× Tempest v random pořadí) → Venomous Surge → Raging Crosswinds, dvakrát, pak intermission (Howling Maelstrom +
+    Dig In) na 100 energie. Dvě soak skupiny po ≥5 (levá/pravá) na Mutilate. Mythic navíc přidává
+    <strong>Serpent's Fury</strong>: boss markne nejvzdálenějšího hráče (červená šipka, typicky hunter) a nabíjí si
+    rage. Jakmile se <strong>14+ lidí stackne do 8 yd</strong> od markovaného, boss castne <strong>To the
+      Slaughter</strong> — charge soak do stacku (333k phys každému) a všem dá <strong>Virulence</strong> (5s DoT +
+    4 šipky ven z tebe = SPREAD, koho trefíš, tomu dáš 833k a další Virulence). Pokud to nestacknete a rage dojde na 100
+    → <strong>Unbound Ferocity</strong> (+500 % dmg, +50 % attack speed) = wipe. Stack se dělá NA CALL (Stack Up -
+    Northern Sky Addon). Raging Crosswinds má na Mythicu 4 směry místo dvou. Ula'tek's Presence tiká do raidu celý
+    fight.
+    LUST na pull (v intermission je dmg amp - cca 1:45).
+  </p>
+  <p class="movement"><strong>Movement (Mythic):</strong> Boss se natáhne na kraj, raid za ním rozdělený na levou a
+    pravou grupu. Zvolený hráč s markou (hunter) stojí u vchodu aby byl co nejdál od bosse. Apex Predator: 2× Ravage =
+    tank frontal pryč z platformy (+ swap), 2× Mutilate = frontal soak na
+    levou / pravou grupu (≥5 lidí, grupy se střídají), 1× Tempest = tornáda od bosse, dodge. Vše v random pořadí.
+    Venomous Surge: 2 hráči s debuffem (NSRT Debuff Targets) jdou na callnutou marku naproti tunelu, který bude foukat
+    (Winds Helper), a tam položí Cyst. Kaluže od bosse zůstávají na zemi → boss se posouvá na druhou stranu platformy -
+    k východu. Raging Crosswinds: bílé kolečko s šipkou, na Mythicu jsou 4 směry — najdi hráče s opačnou šipkou a
+    stoupni si tak, aby se kolečka kryla (nemusíš bejt přesně naproti). Bez kamaráda movement abilita nebo ping na grip.
+    Serpent's Fury: markovaný hráč stojí dál od raidu a čeká na call — až je raid čistý (po Crosswinds / Surge), stackne
+    se do grupy (14+ do 8 yd), boss chargne To the Slaughter, a HNED po hitu se všichni rozprsknou ke krajům tak, aby
+    šipky Virulence nikoho netrefily - viz. raidplan pozice. Po 5s zpátky na pozice. Intermission: pre-stack ve středu,
+    nechat se sfouknout na orb, pak pod bosse na Dig In.</p>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Apex Predator</strong> — tank combo — 5 útoků v náhodném pořadí: 2× Ravage + 2× Mutilate + 1× Tempest
+        - na aktivního tanka.</li>
+      <li><strong>Ravage</strong> — tank frontal, jeba jak sviňa — taunt swap na první cast v každém cyklu, JE TO
+        FRONTAL - MIŘ HO OD RAIDU.</li>
+      <li><strong>Mutilate</strong> — frontal soak: aktivní tank + celá skupina (5+ soakerů, JINAK NEBÍČKO). Infected
+        Gash = +500 % dmg z dalšího Mutilate → skupina levá a pravá. MUSÍŠ TO NAMÍŘIT NA DANOU SKUPINU JE TO
+        FRONTAL.</li>
+      <li><strong>Tempest</strong> — 10 tornád z bosse — DODGE JINAK DEBUFF (POISON DISPEL).</li>
+      <li><strong>Corroding Venom</strong> — auto attack debuff na tanka, +3 % dmg taken za stack — swap kolem 6 stacků.
+      </li>
+      <li><strong>Venomous Surge</strong> — 2 hráči dostanou 10s DoT (na HC navíc kaluže při castu). Po vypršení raid
+        hit s falloffem + spadne Viscous Cyst tam, kde stojíš → MUSÍŠ TO POLOŽIT NA SPRÁVNOU MARKU PROTI SOBĚ.</li>
+      <li><strong>Viscous Cyst</strong> — knockback orb — když fouká vítr tak tě to odhodí proti směru a dá ti movement
+        imunitu na 4s cca. Všichni musí bejt uprostřed na bossovi a nechat se tahat prirozeňě. Po odhození jdeš pod
+        bosse a td. Jsou 4 orby ale jen 3 větry = 1 rezerva (někdo popne po mezifázi).</li>
+      <li><strong>Raging Crosswinds</strong> — dostaneš šipku která směřuje od tebe — chceš si stoupnou před hráče,
+        kterej má opačnou šipku než ty (tzn. šipky směřují na sebe). Vyhodí tě to do vzduchu a kámošova opačná šipka tě
+        vrátí zpátky. Jinak letíš dopředu jak kokot. Funguje na to immunita a td ale nepoužívej to bez domluvy, vyjebeš
+        ostatní.</li>
+      <li><strong>Howling Maelstrom</strong> — intermission (~každé 2 min): tunely foukaj vítr a tlačí raid z platformy
+        — pre-stack ve středu, nechat se sfouknout na orbu, a td...</li>
+      <li><strong>Dig In</strong> — boss +30 % damage taken na 25 s během Maelstromu.
+      </li>
+      <li><strong>Ula'tek's Presence</strong> — ambient raid dmg celý fight.</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li>Venomous Surge nově už během castu spawnuje kaluže na zemi.</li>
+      <li>Infected Gash zvyšuje poškození z dalšího Mutilate o 500 % — soak skupiny se MUSÍ střídat.</li>
+    </ul>
+  </div>
+  <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Serpent's Fury</strong> — dává na pull a potom pokaždé, když se abilita resetne. Markne jednoho hráče
+        (červená šipka nad hlavou), který je nejdál od bosse (hunter). Boss dostane na 100 energie enrage. Energie se mu
+        resetuje tak, že se spustí <strong>To the Slaughter</strong> abilita. Abilita <strong>To the Slaughter</strong>
+        se spustí v momentě, kdy bude minimálně 14 lidí 8 yardů od označeného hráče abilitou Serpent's Fury. Tzn. v
+        momentě, kdy se hráč s červenou šipkou stackne na raid grupu, tak se boss přepne do ability <strong>To the
+          Slaughter</strong>.</li>
+      <li><strong>To the Slaughter</strong> — abilita, která se spustí v momentě, kdy bude minimálně 14 lidí 8 yardů od
+        označeného hráče abilitou Serpent's Fury. Každej hráč dostane 333k phys dmg a aplikuje se na něj
+        <strong>Virulence</strong>.
+      </li>
+      <li><strong>Virulence</strong> — debuff (5s - 125k nature dmg / sec) aplikovaný hráči při soaku ability <strong>To
+          the Slaughter</strong>.
+        Dostaneš 4 šipky, které jdou z tebe a musíš se s tím spreadnout. Pokud někoho hitneš šipkou, tak mu aplikuješ
+        další <strong>Virulence</strong> a dáš mu jebu za 833k nature dmg.</li>
+      <li><strong>Raging Crosswinds</strong> - 4 možnosti směru odhození místo dvou - prostě miř svoji šipku na někoho.
+        Pokud nemáš kamaráda tak použij movement abilitu nebo se pingni na grip (sentinel ping).</li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Pull: boss na startovní pozici na kraji platformy (viz raidplan), raid za ním. Markovaný hunter (Serpent's
+          Fury) stojí u vchodu, aby byl nejdál od bosse.
+        </li>
+        <li>Apex Predator = 5 útoků v náhodném pořadí, všechny frontály jdou na aktivního tanka. Corroding Venom (auto
+          attack) stackuje +3 % dmg taken — swap tak kolem 6 stacků i mimo swapy níže.</li>
+        <li>Ravage = solo tank frontal, na Mythicu jebe ještě víc (vulnerability debuff) → DEFKA, pokud máš na sobě
+          stacky. Taunt swap na druhej Ravage, jde to mid cast, on se na tebe podívá. TOHLE MÍŘÍŠ MIMO RAID / Z
+          PLATFORMY.</li>
+        <li>Mutilate = split frontal na určenou grupu (levá bere první, pravá druhý, ≥5 lidí JINAK NEBÍČKO). Taunt swap
+          na druhej Mutilate, jde to mid cast. Nepotřebuješ defku, je to split. TOHLE MÍŘÍŠ NA GRUPU, KTERÁ JE NA ŘADĚ.
+        </li>
+        <li><strong>Po první sadě abilit</strong> (Apex Predator + Venomous Surge dopadl na zem) přetáhni bosse přes
+          platformu na druhou stranu — k východu. Zahraje se uprostřed odhazování a natáhne se ke kraji. Kaluže zůstanou
+          na startu a vítr v mezifázi je sfoukne pryč. Raid jde za tebou, druhá sada se hraje u východu.</li>
+        <li>To the Slaughter: na call se jako NEAKTIVNÍ TANK stackneš s raidem jako každý (14+ do 8 yd od markovaného), boss chargne do
+          stacku. Po hitu se rozprskni na svoji Virulence pozici (šipky nikoho netrefit).</li>
+        <li>Mezifáze: pre-stack ve středu. Pokud máš movement, můžeš aktivně popovat orby co odhazujou, aby se raid
+          nemusel moc hejbat — musíš proletět středem. Dig In = boss +30 % dmg taken, drž ho tak, aby na něm mohl
+          stát celej raid.</li>
+        <li><strong>Po mezifázi:</strong> raid popne záložní Cyst u východu a odletí zpátky na start. Boss tam jde s
+          tebou — celej cyklus (start → východ) se opakuje.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Mutilate (raid frontal) se splituje: méně než 5 soakerů = nebíčko. Zasažení dostanou 22s DoT (Infected Gash)
+          s +500 % na další Mutilate — proto levá bere první, pravá druhý, nikdo nesmí double-dipnout.</li>
+        <li>Venomous Surge: 2 hráči s těžkým 10s DoTem, kaluže padají už během castu; expirace = raid hit s falloffem
+          dle vzdálenosti — heal na ně, ať dojdou na marku.</li>
+        <li><strong>To the Slaughter</strong> = největší heal window fightu: celej raid dostane naráz 333k phys a k tomu
+          Virulence (5s, 125k nature/s na každém). Pre-HoT před callem "Stack Up", raid CD na hit, domluvit rotaci
+          raid CD per stack. Kdo dostane šipku od kamaráda, má 833k navíc + další Virulence → external, nebo je mrtvej.
+        </li>
+        <li>Unbound Ferocity (rage 100) se nehealí, to je wipe — hlídej, že se stack vůbec sešel.</li>
+        <li>Tempest hit = poison, dispel. Raging Crosswinds má 4 směry, bude víc lidí létat mimo range — spot heal na
+          návrat.</li>
+        <li>Stálý rot z Ula'tek's Presence + pohybové fáze — šetřit mobilní healy na mezifázi. V Dig In se stackneš pod
+          bosse s raidem.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Surge target (NSRT Debuff Targets) dojde na marku <em>naproti</em> tunelu, který bude foukat (Winds Helper
+          1–4, aktivní tunely mají bílé orby, počet orbů = pořadí), a tam nechá Viscous Cyst. 4 orby na 3 větry.</li>
+        <li><strong>Záložní (4.) Cyst jde VŽDY na pozici u východu platformy.</strong> Po mezifázi ho popnete a celej
+          raid odletí zpátky na start, kde začíná další cyklus. Nikam jinam ho nedávej — když ho použijete jako
+          rezervu na chybu, po mezifázi běžíte na start pěšky.</li>
+        <li>Markovaný hráč (Serpent's Fury, typicky hunter): stůj u vchodu co nejdál od bosse a NECHOĎ do raidu, dokud
+          nepřijde call "Stack Up" (NSRT). Pak vběhni do stacku — 14+ lidí do 8 yd od tebe.</li>
+        <li>Ostatní: na call stack na určeném místě (raidplan), boss chargne To the Slaughter, a HNED po hitu spread na
+          svoji Virulence pozici (raidplan). 4 šipky ven z tebe nesmí nikoho trefit — kdo trefí, dá kámošovi 833k a
+          další Virulence. Po 5s zpátky na pozice.</li>
+        <li>Tempest: bloudící tornáda ve stylu L'ura glaive — prostě dodge.</li>
+        <li>Raging Crosswinds: na Mythicu 4 směry — najdi hráče s opačnou šipkou a srazte se ve vzduchu (HITBOX JE
+          CELÝ KRUH, NETŘEBA mířit přesně). Bez kamaráda movement abilita nebo ping na grip. NEPOUŽÍVEJ IMUNITU KDYZ NEMUSIS.</li>
+        <li>Intermission (Dig In): boss bere +30 % dmg — po popnutí orbu máš wind resist - kopni se doprostřed bosse a
+          generuj čísílka. Po mezifázi popnout záložní Cyst u východu → knockback na start.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="role dps guides">
+    <h4>DPS guidy podle specu</h4>
+    <p class="guides-note">Video s kompletním pullem, log top parse na Sszorakovi a Lorrgs ranking (kdy kdo popuje
+      cooldowny). Koukni na svůj spec před progresem.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Class</th><th>Spec</th><th>Video</th><th>Logy</th><th>Lorrgs</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Warlock</strong></td><td>Demonology</td><td><a class="rplink" href="https://www.youtube.com/watch?v=VaKF449tF14" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/CdHq87TfwyWgYjxr?fight=38&amp;type=damage-done&amp;source=17" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/warlock-demonology/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Mage</strong></td><td>Arcane</td><td><a class="rplink" href="https://www.youtube.com/watch?v=tiZ2U6AECWg&amp;list=RDtiZ2U6AECWg&amp;start_radio=1" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/CdHq87TfwyWgYjxr?fight=38&amp;type=damage-done&amp;source=18" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/mage-arcane/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Warrior</strong></td><td>Arms</td><td><a class="rplink" href="https://www.youtube.com/watch?v=0usFKcKDnlo" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/xptPwvXKLGNmkDyJ?fight=23&amp;type=damage-done&amp;source=157" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/warrior-arms/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Hunter</strong></td><td>Beast Mastery</td><td><a class="rplink" href="https://www.youtube.com/watch?v=JPlrvHJ5dUM" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/xptPwvXKLGNmkDyJ?fight=23&amp;type=damage-done&amp;source=15" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/hunter-beastmastery/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Hunter</strong></td><td>Marksmanship</td><td><a class="rplink" href="https://www.youtube.com/watch?v=Kf1kOLr6PRc" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/TdFyZxQ7ArN28KvH?fight=47&amp;type=damage-done" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/hunter-marksmanship/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Rogue</strong></td><td>Subtlety</td><td><a class="rplink" href="https://www.youtube.com/watch?v=FHSSeDz4YfY" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/CdHq87TfwyWgYjxr?fight=38&amp;type=damage-done&amp;source=23" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/rogue-subtlety/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Monk</strong></td><td>Windwalker</td><td><a class="rplink" href="https://www.youtube.com/watch?v=p_BGW8hKkPA" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/T7d4zYaAwbCHGJrg?fight=150&amp;type=damage-done&amp;source=310" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/monk-windwalker/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Paladin</strong></td><td>Retribution</td><td><span class="muted">Kazuálové ještě nedošli na Sszoraka — video zatím není</span></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/QJCpt1nLvYqKG7wF?fight=34&amp;type=damage-done&amp;source=380" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/paladin-retribution/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Shaman</strong></td><td>Elemental</td><td><a class="rplink" href="https://www.youtube.com/watch?v=Ia5fEZkGg5U" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/TdFyZxQ7ArN28KvH?fight=47&amp;type=damage-done&amp;source=395" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/shaman-elemental/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+          <tr><td><strong>Druid</strong></td><td>Balance</td><td><a class="rplink" href="https://www.youtube.com/watch?v=ckNmY_0aU2s" target="_blank" rel="noopener">YouTube ↗</a></td><td><a class="rplink" href="https://www.warcraftlogs.com/reports/JaDnAZk1fvPN8FRm?fight=41&amp;type=damage-done&amp;source=5" target="_blank" rel="noopener">Warcraft Logs ↗</a></td><td><a class="rplink" href="https://lorrgs.io/spec_ranking/druid-balance/sszorak" target="_blank" rel="noopener">Lorrgs ↗</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<section class="boss">
+  <div class="boss-head"><span class="boss-num">VI</span>
+    <h3>The Twin Fangs — Vexhul &amp; Ithraz</h3><a class="rplink" href="https://raidplan.io/plan/u7tdr98jetxpk3sd"
+      target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282"
+      target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Správa debuffů · tier: head</span>
+  </div>
+  <p class="callout"><strong>Overview:</strong> Fixní rotace, 2× za fázi: Blood Torrent + Caustic Deluge (CC bublin +
+    soak zelených orbíků) → Stone Breaker (tank souky) → Venomous Emergence + Rouse the Brood (kill addky uprostřed +
+    KICK rotace na addky po stranách) → Coiling Ichor (červená kolečka na kraj) → Stir the Depths → Ravenous Feast
+    (group soaky po skupinách + Tainted Blood absorb soaky), pak Submerge (mezifáze). Celý fight je o stackách Eternal
+    Venom: každá zelená věc ti dá stack a jediný způsob, jak shodit JEDEN stack, je soak Ravenous Feast (tzn. -1 stack
+    za fázi). Na 10 stacích umíráš a navíc spawneš 3 nové koule na soak. <strong>Hard enrage = třetí Submerge</strong>,
+    kdy bossové castí Caustic Rain — oba musí zemřít dřív, s vyrovnaným HP. Základ: generovat čísla, dodgovat zelené
+    věci, HARD SWITCH ADDKY uprostřed a KICKOVAT addky po stranách. Treshold stacků je 8 — pokud máš 8, už nesoukuješ
+    nic zeleného. Zelené orbíky ber max jeden, vem jenom pokud by měl bouchnout.</p>
+  <div class="macros"><span class="macros-label">Kick rotace — Rouse the Brood (macro)</span>
+    <p>Addky vlevo a vpravo kickuje pevná rotace (RaidPlan, strana 4); addku mezi bossy / u bosse řeší primárně tanci.
+      Každý v rotaci si udělá macro: kick + hláška + ping na dalšího v pořadí. Po posledním jede rotace zase od
+      prvního. Šablona:</p>
+    <code>#showtooltip
+      /cast [PLATER_KICK]
+
+      KICKNUL JSEM, DALSI JE [NEXT_PLAYER_NAME]
+
+      /ping [@NEXT_PLAYER_NAME] 2</code>
+    <div class="macros-grid">
+      <div class="macros-side">
+        <h4>Levá strana</h4>
+        <ol>
+          <li><strong>Akka</strong> <span class="next">→ Irdwy</span>
+            <code>#showtooltip
+              /cast Axe Toss
+
+              KICKNUL JSEM, DALSI JE Irdwy
+
+              /ping [@Irdwy] 2</code>
+          </li>
+          <li><strong>Irdwy</strong> <span class="next">→ Pifta</span>
+            <code>#showtooltip
+              /cast Counterspell
+
+              KICKNUL JSEM, DALSI JE Pifta
+
+              /ping [@Pifta] 2</code>
+          </li>
+          <li><strong>Pifta</strong> <span class="next">→ Rojko</span>
+            <code>#showtooltip
+              /cast Counter Shot
+
+              KICKNUL JSEM, DALSI JE Rojko
+
+              /ping [@Rojko] 2</code>
+          </li>
+          <li><strong>Rojko</strong> <span class="next">→ Hitaro</span>
+            <code>#showtooltip
+              /cast Wind Shear
+
+              KICKNUL JSEM, DALSI JE Hitaro
+
+              /ping [@Hitaro] 2</code>
+          </li>
+          <li><strong>Hitaro</strong> <span class="next">→ Arch</span>
+            <code>#showtooltip
+              /cast Spear Hand Strike
+
+              KICKNUL JSEM, DALSI JE Arch
+
+              /ping [@Arch] 2</code>
+          </li>
+          <li><strong>Arch</strong> <span class="next">→ Akka</span>
+            <code>#showtooltip
+              /cast Kick
+
+              KICKNUL JSEM, DALSI JE Akka
+
+              /ping [@Akka] 2</code>
+          </li>
+        </ol>
+      </div>
+      <div class="macros-side">
+        <h4>Pravá strana</h4>
+        <ol>
+          <li><strong>Meslock</strong> <span class="next">→ Zirael</span>
+            <code>#showtooltip
+              /cast Axe Toss
+
+              KICKNUL JSEM, DALSI JE Zirael
+
+              /ping [@Zirael] 2</code>
+          </li>
+          <li><strong>Zirael</strong> <span class="next">→ Mimik</span>
+            <code>#showtooltip
+              /cast Counterspell
+
+              KICKNUL JSEM, DALSI JE Mimik
+
+              /ping [@Mimik] 2</code>
+          </li>
+          <li><strong>Mimik</strong> <span class="next">→ Nesfe</span>
+            <code>#showtooltip
+              /cast Counter Shot
+
+              KICKNUL JSEM, DALSI JE Nesfe
+
+              /ping [@Nesfe] 2</code>
+          </li>
+          <li><strong>Nesfe</strong> <span class="next">→ Drastic</span>
+            <code>#showtooltip
+              /cast Solar Beam
+
+              KICKNUL JSEM, DALSI JE Drastic
+
+              /ping [@Drastic] 2</code>
+          </li>
+          <li><strong>Drastic</strong> <span class="next">→ Schizoid</span>
+            <code>#showtooltip
+              /cast Rebuke
+
+              KICKNUL JSEM, DALSI JE Schizoid
+
+              /ping [@Schizoid] 2</code>
+          </li>
+          <li><strong>Schizoid</strong> <span class="next">→ Meslock</span>
+            <code>#showtooltip
+              /cast Disrupt
+
+              KICKNUL JSEM, DALSI JE Meslock
+
+              /ping [@Meslock] 2</code>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </div>
+  <div class="movement">
+    <strong>Movement:</strong> Začínáme tam, kde jsou bossové — levý tank Vexhul, pravý tank Ithraz, ranged a healeři
+    vzadu po stranách (levá / pravá strana podle RaidPlanu). Hned na začátku tank Vexhula tauntne i Ithraze a sežere
+    Blood Torrent + Deluge (imunita / defka / external). Pak jede 2× za fázi tahle rotace:
+    <ol>
+      <li>Zelené orbíky spawnou v bublině Barbed Bulwark — assigned CC (viz DPS) bublinu ccčkne, pak si každý vezme
+        MAX JEDEN orb (NESMÍ BOUCHNOUT). Pokud si máš vybrat mezi červenou sračkou na zemi a zelenou vlnou, ber
+        červenou — nedá ti stack.</li>
+      <li>Uprostřed se spawnou addky (Spawn of Vexhul) — hard switch, kill. Zároveň po stranách (levá, pravá a mezi
+        bossy) spawnou Broodlingy, které castí — kick podle rotace výše (levá strana / pravá strana), addku mezi bossy
+        a u bosse řeší primárně tanci.</li>
+      <li>Červené kruhové debufy (Coiling Ichor) — jdeš s tím na VNĚJŠÍ kraj do řady. Vnitřek musí zůstat volný.</li>
+      <li>Ravenous Feast — 3 soaky po sobě, v každém musí být aspoň 4 lidi. Pořadí: 1. PRAVÁ strana + tank Ithraze →
+        2. LEVÁ strana + tank Vexhula → 3. OSTATNÍ (melee). Soak tě odhodí — nech se odhodit směrem na svoji pozici,
+        kde se spawne Tainted Blood (absorb soak) a ten si skupina vysouká. Pokud jsi soaknul jinou než jsi měl, už
+        nikam nelez (umřeš). Když čekáš na svůj soak, dej bacha na zelené vlny do zad (Stir the Depths).</li>
+    </ol>
+    <strong>Mezifáze:</strong> Vexhul nabíjí beam na aktivního tanka — stojíme na cípu, kde jsme. Koukni, kam se točí
+    zelené kuličky kolem bosse: točí se DOPRAVA a druhý boss je vlevo → jdeme rovnou k němu. Točí se DOLEVA a druhý
+    boss je vpravo → jdeme PROTI směru beamu a vracíme se po směru — gejta, speed, cokoliv. Červené kaluže ze Sanguine
+    Storm zůstávají celý fight, tak si jimi nezasviň cestu.
+  </div>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Eternal Venom</strong> — hlavní věc na fightu — vše zelené přidává stack. Na HC smrt na 10 stacích.
+        Treshold je 8 stacků, pak už nechceš soukovat věci.</li>
+      <li><strong>Caustic Deluge</strong> — tank channel, spawn malých zelených orbů (Caustic Globule): musí se
+        soaknout. Soak = +1 stack za orb, nesoaknutá po 10s = +1 stack celému raidu. Na M jsou orby v bublině
+        <strong>Barbed Bulwark</strong> — dokud se bublina neccčkne (stun / incap, displacement nefunguje), orb nejde
+        soaknout. Vem si jeden a nech ostatní, ať se taky snaží. Treshold je 8 stacků, pak už nesoukuješ.
+      </li>
+      <li><strong>Stone Breaker</strong> — 3 tank soaky (takové malé bíle souky u bosse) — soakovat v pořadí, v jakém se
+        objevily! (v tom pořadí do nich boss mlátí); každý stack = Fractured.</li>
+      <li><strong>Venomous Emergence</strong> — 3 addy uprostřed (Spawn of Vexhul). INSTA SWITCH ADDKY!!! Addy dělaj
+        frontal Corrosive Spit - stojíš s frontalem a NEHEJBEŠ SE - ostatní dodge. Za každej cast dostaneš stack, takže
+        addky musí insta zmizet. Ve stejnou chvíli spawnou po stranách Broodlingy (<strong>Rouse the Brood</strong>) —
+        ty se KICKUJOU podle rotace nahoře, nezabíjí se.</li>
+      <li><strong>Coiling Ichor</strong> — červenej kruhovej debuff — kruh se před vypršením zmenšuje, a pak ti dá jebu
+        - defku ke konci debuffu; POLOZ NA VNĚJŠÍ KRAJ MISTNOSTI DO ŘADY BOSSE.</li>
+      <li><strong>Stir the Depths</strong> — zelené vlny od zadní stěny, dip = stack. Feast soak tě odhazuje dozadu,
+        takže když čekáš na svůj soak, měj vlny na očích.</li>
+      <li><strong>Ravenous Feast</strong> — JEDINÝ DROP STACKŮ: 3 exploze po sobě v jednom soaku, každou soakuje jiná
+        skupina (min. 4 lidi, jinak to jebne do celého raidu): 1. PRAVÁ + tank → 2. LEVÁ + tank → 3. OSTATNÍ (melee).
+        Max 1 drop za cast (+800 % Feast dmg na 8s) → nikdo dvakrát. Soak odhazuje — nech se odhodit na svoje místo,
+        kde spawne <strong>Tainted Blood</strong> absorb soak (jak Dimensius P1), skupina si ho vysouká. Celkem 3
+        absorb soaky, jeden za každou explozi.</li>
+      <li><strong>Vile Flood</strong> — intermission laser od Vexhul — směr rotace ukazují orby kolem ní; jdi PROTI
+        rotaci a jakmile začne laser blastit tak jdeš VE SMĚRU ROTACE anebo PROTI pokud je druhý boss na tvé straně.
+      </li>
+      <li><strong>Sanguine Storm</strong> — červené kruhy od Ithraze při mezifázi — dodge; nechávají Congealed Gore
+        (shadow DoT + 60% slow) a na M kaluže zůstávají celý fight. Pokud si musíš vybrat, jestli tě přejde zelená vlna
+        nebo červené kruhy, vyber kruhy.</li>
+      <li><strong>Clotted Bolt / Concentrated Spittle</strong> — tank mimo range — buď u bosse.</li>
+      <li><strong>Submerge / Caustic Rain</strong> — intermission na 100 energie; TŘETÍ Submerge = Caustic Rain, hard
+        enrage — oba bossové mrtví před ním, HP vyrovnané.</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li>Eternal Venom na 10 stacích zabíjí.</li>
+      <li>Soak Ravenous Feast dává +800 % Feast dmg na 8s — max 1 pop na cast.</li>
+      <li>Sanguine Storm nově nechává kaluže: shadow dmg každou vteřinu + 60% slow.</li>
+    </ul>
+  </div>
+  <div class="mythic"><span class="mythic-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Eternal Venom</strong> — na 10 stacích zabíjí + pokud na to umřeš spawneš 3 nové koule na soak.</li>
+      <li><strong>Blood Torrent</strong> — Tank channel - heal absorb. Spawne <strong>Barbed Bulwark</strong>.</li>
+      <li><strong>Barbed Bulwark</strong> - bublina kolem spawnutejch orbů (Caustic Globule) z tank ability
+        <strong>Caustic Deluge</strong> - jako na lastovi. Musí se ccčknout aby zmizela, jinak nejde soak orb.
+        Nefungujou displacement ccs (grip, morph etc.).
+      </li>
+      <li><strong>Rouse the Brood</strong> - mythické addky (Broodling of Ithraz), které se spawnujou kolem bossů (levá,
+        pravá strana a mezi bossema) spolu s Venomous Emergence. Musí se kicknout cast, jinak nebíčko — levou a pravou
+        stranu kickuje pevná rotace (macra nahoře), mezi bossy a u bosse primárně tanci.</li>
+      <li><strong>Ravenous Feast</strong> - 3x soak - 4.6M phys dmg spread. Musí v soaku bejt alespon 4 lidi jinak to
+        jebne do celé grupy. Navíc soak odhazuje => musíš se nechat odhodit směrem na svoje místo, kde bude další soak
+        <strong>Tainted Blood</strong>.
+      </li>
+      <li><strong>Tainted Blood</strong> - absorb soak na zemi (jak dimenzius p1) - musí se vysoukovat jinak bumbác -
+        spawne se absorb soak za každej soak hit z bosse, tzn. celkem 3x absorb soaky.</li>
+      <li><strong>Sanguine Storm</strong> - červené sračky na zemi zůstávají celý fight.</li>
+      <li><strong>Stone Breaker</strong> - tři tank soaky - boss lehce odhazuje při spawnu - bacha melečka na wavy -
+        dejte si timer na to.</li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Tank co tankuje Vexhula tak musí na začátku tauntnout i Ithraze před tím, než dá mytický channel
+          <strong>Blood Torrent</strong>. Tzn. dostaneš oba channely - <strong>Blood Torrent</strong> +
+          <strong>Deluge</strong>. Tohle je imunita / defka / external moment...
+        </li>
+        <li>Jeden tank na levým druhej tank na pravým. Statickej fight. Nechoď od aktivního bosse jinak se nasere!!</li>
+        <li>Vexhul (ten levej) ti insta nejebe tank buster - DANGER DANGER - navíc tě odkopne, takže immunity na
+          movement jestli máš.</li>
+        <li>Druhej tank dostane chvíli po tom Stone Breaker - odhodí tě dopiče a spawne 3 bíle souky u bosse. MUSÍŠ SE
+          DÍVAT V JAKÉM POŘADÍ SE SPAWNOU, V TAKOVÉM POŘADÍ JE BOSS BUDE JEBAT A TY SOUKOVAT. Vždycky jsou tři v lajne
+          vedle sebe - LEFT - MID - RIGHT. Musíš souknout všechny 3, pokud máš krátkou defku tak ji dej late na druhej a
+          tředí soak. Každej soak ti stackuje debuff.</li>
+        <li>Po tank soakách je tank swap.</li>
+        <li>Broodlingy mezi bossy a u bosse (<strong>Rouse the Brood</strong>) kickujete primárně vy — DPS rotace
+          řeší jen levou a pravou stranu.</li>
+        <li>Orb CC: Blinding Light si držte na DRUHÝ set orbů ve fázi (první set řeší DPS CC).</li>
+        <li>Ravenous Feast: tank Ithraze (pravý) soakuje 1. explozi s pravou stranou, tank Vexhula (levý) 2. explozi
+          s levou stranou. Odhodit se nechte na svoji stranu k Tainted Blood soaku.</li>
+        <li>V mezifázi Vexhul baití beam na aktivního tank! stůj na cípu trojúhelníka aby grupa byla vedle tebe. Je to
+          ale rychlé takže to neřeš.</li>
+        <li>V mezifázi se chceš rychle dostat k bossovi jinak na tebe bude hodně moc nasranej.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Pull: tank Vexhula bere Blood Torrent (heal absorb) + Deluge najednou — external / heal absorb prorazit
+          hned na začátku.</li>
+        <li>Venomous Emergence dává celému raidu nevyhnutelný stack — počítejte s rostoucím rotem, jak se stacky
+          přidávají napříč fightem. Pokud bude mít někdo moc stacků oproti ostatním tak ho zjebej.</li>
+        <li>Ravenous Feast: 3 exploze splitují masivní dmg (4.6M phys spread na min. 4 lidi) a hned po nich tři Tainted
+          Blood absorb soaky — každá skupina si vysouká svůj, ať nebumbác.</li>
+        <li>Stir the Depths je čistý raid dmg + zelené vlny (stack za dip).</li>
+        <li>Healeři jsou ve Feast skupinách podle stran: Anal + Giarem PRAVÁ (1. soak), Global + Houdy LEVÁ (2. soak).
+          Giarem má navíc Capacitor Totem na orb CC.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Orb CC (Barbed Bulwark, RaidPlan strana 3). Orby jsou 2× za fázi po ~1 minutě; mezi 2. setem 1. fáze a 1.
+          setem 2. fáze je 1,5 minuty —
+          podle toho plánuj CD.</li>
+        <li>Caustic Globule: každá potřebuje jednoho soakera (1 stack) — nesoaknutá po 10 s dá stack celému raidu. Max
+          jeden orb na hlavu, na 8 stackách už nesoukuješ.</li>
+        <li>Emergence: 3 hadi uprostřed plivou Corrosive Spit linky po náhodných hráčích — INSTA SWITCH. Broodlingy po
+          stranách se NEZABÍJÍ, kickujou se podle rotace nahoře (macro!).</li>
+        <li>Coiling Ichor: červené kruhy pokládají zpomalující kaluže — odnést na vnější kraj vedle sebe a necestovat
+          přes sebe - defku ke konci, poslední tik ti dá jebu.</li>
+        <li>Ravenous Feast skupiny: 1. PRAVÁ → 2. LEVÁ → 3. OSTATNÍ = melee. Max 1 drop stacku na Feast (+800 % debuff),
+          nikdo nesoakuje dvakrát.
+          Po odhození doběhni k Tainted Blood soaku své skupiny.</li>
+      </ul>
+    </div>
+  </div>
+</section><section class="boss">
+  <div class="boss-head"><span class="boss-num">VII</span>
+    <h3>The Coiled Altar</h3><a class="rplink" href="https://raidplan.io/plan/v2p7xuwgtbauzh3k" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Tři fáze · Zul'jan &amp; Malacrass</span>
+  </div>
+  <p class="callout">Tři fáze — Zul'jan => Malacrass => (mezifaze BL) => oba společně.</p>
+  <p class="callout">P1: Zul'jan: na zemi jsou zelené orby - mobilní classy je sbírají a dávají na určené místo
+    (doprostřed). Orb se pickne přechodem přes něj a položí se sám až vytiká debuff, cca pár vteřin. Tank zničí
+    orby frontalem. Každej orb stackuje debuff. Chceš mít kolem 4 na HC, víc už docela bolí.
+    Boss dělá soak - na HC dvě grupy + gate (spawne to obří sračku). Pokud se boss zabije a na zemi jsou aktivní orby
+    tak všechny bouchnou - externaly a defky.</p>
+  <p class="callout">P2: Malacrass: mindcontroll cca 4 hráče - stojí pod bossem a insta vysekat. Mindcontrol hráči chodí
+    k nejbližší hraně platformy, takže chceme stát tak, aby jedna byla nejblíž. Hráči co měli mindcontrol dostanou
+    fixate duchy.
+    Pokud se díváte na něj tak stojí a nehejbe se. Tank frontal je zničí. S fialovýma velkýma kolečkama pryč od raidu.
+    KDYŽ BOUCHNE KOLEČKO TAK SPAWNE TŘI BÍLÉ DUCHY DO TROJÚHELNÍKU KOLEM TEBE - TY MUSÍŠ SOUKNOUT VŠECHNY JINAK JDEŠ DO
+    NEBÍČKA!!!
+    To samé musí udělat tank po frontalu - tank swap. Boss casti AOE a nasadí si absorb - dps absorb a kick. Při absorbu
+    boss spawnuje fialové kolečka na hráče. Melečka se stacknout na tanka a chodí do kola bosse. Rangedka jdou pryč od
+    bosse.
+    Zároveň je na fightu celou dobu addka. Addka se spawnuje po mindcontrollech a boss se natáhne na addku. Tím se lehce
+    zahrajou duchové. Addka casti dlouhej cast, když se kickne tak se addka teleportuje jinam. Addka se může
+    teleportovat jenom ve kvadrantu platformy, kde hrajeme.
+    Je potřeba rotovat late range kick a zabít addu před dalšími mindcontroly. Cast nesmí projít.</p>
+  <p class="callout">Mezifaze: BL a blast Zul'jan - Malacrass je immune. Všichni stack na bosse a sbírat duchy, které
+    lítají do Zul'Jana. Každej sebranej duch udělá aoe dmg. Každej duch co projde healne bosse. Čím méně se boss
+    dohealuje tím méně bude mít hp v p3.</p>
+  <p class="callout">P3: Zul'jan + Malacrass: Big group soak => Tank frontal (zelené orby uprostřed) => Absorb Malacrass
+    => Mindcontrol => Pooly</p>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Toxic Deluge / Coalesced Venom</strong> — spawn orbů — jdou sebrat (debuff Volatile Venom) a přenést;
+        nanosit doprostřed a zničit Severem. Na HC zničené orby dávají stackující DoT — ničit po dávkách.</li>
+      <li><strong>Sever</strong> — Zul'jan frontal na tanka — swap po každém castu a MÍŘIT na nasbírané orby (ničí je).
+      </li>
+      <li><strong>Guillotine</strong> — group soak: půlka raidu, pak 50yd sračka na zemi (Widow's Kiss — gejta ven) a
+        exploze (Widow's Touch). Guillotined = +500 % → groupy se střídají.</li>
+      <li><strong>Axegrinder</strong> — rotující sekery po místnosti — pozor hlavně při vybíhání z Widow's Kiss.</li>
+      <li><strong>Venomfang</strong> — dispelovatelný poison na víc hráčích — shaman cleanse totem to řeší celé.</li>
+      <li><strong>Dreadmarch</strong> — (P2) mind control — jde s hráčem z platformy, zlom absorb štít. Fialová šipka
+        nad hlavou = budeš target => jdeš pod bosse, raid stojí na jedné straně.</li>
+      <li><strong>Unnerving Fixation</strong> — ghost addy (2× za Veil of Twilight) — kite na marku kam přijde tank
+        frontal (Soul Sever); na HC ti při doteku znovu aplikují Dreadmarch.</li>
+      <li><strong>Soul Sever</strong> — Malacrass frontal — swap po castu, mířit na ghosty (zabíjí je); zasaženým dává
+        Gravebound.</li>
+      <li><strong>Gloombomb</strong> — spread debuff na ranged; potom seber 3 Gravebound (soul
+        fragmenty), jinak nebíčko.</li>
+      <li><strong>Eternal Nightfall</strong> — AoE tikání + Suffocating Darkness (heal absorb swirlies) — přeruší se
+        prolomením Veil of Twilight (absorb bosse).</li>
+      <li><strong>Spiritcackle</strong> — (HC) add navíc od Malacrasse — kick + cleave.</li>
+      <li><strong>Soulbinding / Spirit Erasure</strong> — (intermission) Malacrass linkne duši a spawnuje Fragmenty:
+        soak po vlnách (každý soak = +15 % dmg taken na 2s, stackuje); add u bosse = heal 3% HP (Reclaim Essence).
+        Bossové při tom berou +100 % dmg (Ghastly Regeneration).</li>
+      <li><strong>Grim Guillotine / Blighted Sever / Soulbound</strong> — (P3) soaky u kraje (swirlie je letální,
+        falloff pop ne); tank frontal míří na orby/ghosty; Corrupted Toxin = 16 stacků po Defilement → swap. Smrt
+        jednoho bosse = enrage druhého (+100 % každých 5 s) — zabít současně.</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li>Coalesced Venomy zničené Severem nově dávají stackující DoT.</li>
+      <li>Guillotine aplikuje Guillotined — +500 % dmg z další Guillotine, soak skupiny střídat.</li>
+      <li>Unnerving Fixation, která dojde k hráči, znovu aplikuje Dreadmarch.</li>
+      <li>Hex Lord Malacrass v P2 spawnuje navíc Spiritcackle (interrupt add).</li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Offtank v P1 sbíráš orby (spolu s ostatníma) a dáváš je nakopu k sobě pro aktivní tank frontal.</li>
+        <li>Ideálně si bosse tahej tam, kde je nejvíc orbíků. Hlavně po gejtě.</li>
+        <li>Ideálně chceš ZulJana zabít ve středu místnosti, protože se respawne tam, kde umře.</li>
+        <li>Pohyb podle situace a orbů / duchů.</li>
+        <li>V P2 Na Malacrassovi po frontalu z tebe vyletí 3 duchové - musíš je posbírat jinak NEBÍČKO.</li>
+        <li>P3 je insejn. Frontal už dělá jenom Zul'Jan (Malacrass už ho nemá) - takže jedním frontálem zabíjíš duchy i
+          zelené orbíky.</li>
+        <li>Malacrass nedělá boss hity ale střílí do tebe shadow bolty.</li>
+        <li>Movement v P3 je chaoz, na začátku jsi u kraje, vyjebou se MCčka a bude gejta. Po gejte jdeš směrem zpět a
+          hitneš frontalem duchy, které jdou po hráčích co gejtnuli. Zkus toho hitnout co nejvíc.</li>
+        <li>Pamatuje že v P3 po frontalu pořád vyjebneš 3 duchy které musíš souknout.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Poison dispelly.</li>
+        <li>Velké cooldowny si rezervujte na společnou závěrečnou fázi.</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Mobilní DPS hraje zelené orby. Ranged dps kickuje addku. Bossové musí zemřít nastejno. Důležité je mít rdy
+          odpal do BL na mezifázi (4 minuta). Defky na stacky poisonu, soaky, fialové kolečka a mezifázi.</li>
+      </ul>
+    </div>
+  </div>
+</section><section class="boss">
+  <div class="boss-head"><span class="boss-num">VIII</span>
+    <h3>Ula'tek, the Serpent Goddess</h3><a class="rplink" href="https://raidplan.io/plan/v3u4qp9jugsdyzys"
+      target="_blank" rel="noopener">RaidPlan ↗</a><a class="rplink" href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282" target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Finální boss · tři fáze · Slumbering Coil
+      Curio</span>
+  </div>
+  <p class="callout"><strong>Overview: </strong>Boss obsahuje vajíčka na zemi => 3 hráči na pull bosse musí vzít, jinak
+    se vylíhnou a pojebete. Group soak nebo wave od bosse breakne vajíčko na hráči. Vajíčka se breakujou zásadně v group
+    soaku - lidi co je nosí musí dodgovat wavy. Addka z vajíčka castí bolty. V P1 je navíc na kraji platfomy add (ocas
+    bosse), u kter0ho musí bejt jeden tank. Druhej tank tankuje bosse. U ocasu se spawnujou group soaky. Na HC group
+    soak dělá debuf, takže musí bejt 2 grupy. V mezifázi se blastí addka a vajíčka, které aktivuje. Po tom co umře jsou
+    ostatní vajíčka sběratelná a hráči je musí odnést do kotle na začátku. Kotel spawne addky a ty se vemou zpět na
+    platformu s bossem. Jednou za čas cca 2 a 4 minuta boss otevře své srdce => má zvýšený dmg po krátkou dobu (jde
+    přitom cleavovat boss). Pak nastává další mezifáse, kde se soukujou group soaky podél platformy na random spawnech -
+    minihra. V poslední fázi se platforma rozčtvrtí. Raid se rozdělí na 3 skupiny (melee, 2x ranged). 3 hráči dostanou
+    soak => skipiny soakujou. Ranged blástí addky. Na HC navíc za každou platformu dole přilítne addka ze strany => grip
+    pod bosse. Potom ocas roybije jednu platformu a raid se přesouvá dále. Poslední soaky jsou sacrifice.</p>
+  <p class="movement"><strong>Movement: </strong>Jeden tank tankuje bosse, druhej jde na ocas addu. U každé musí bejt
+    tank, jinak nebíčko. Boss spawnuje takové červené vajíčko, do kterého si musí aktivní tank stoupnout, jinak boss
+    bude jebat do celého raidu. Po group soakách se spawne u addky velké AOEčko => tank swap. Dpska dmgujou bosse /
+    ocas, je to jedno, mají shared HP. Když se spawnou vajíčka, musí se všechny sebrat. Hríči co nosí vejce nesmí dostat
+    hit z forntalu => jinak spawnou addku. Addky se spawnou až při group soaku (2 grupy). Kolem 2+ minuty se spawne
+    srdce => BL a blast srdce. Na mezifázi se raid rozdělí na dvě skupiny a gejtne na strany. Blástí adda tam jak je a
+    potom blástí vajíčka, které add aktivuje. Žádné jiné vajíčka nezabíjíš, pokud je add neaktivuje. Až addka umře,
+    poberou se existující vajíčka (musí se sebrat všechny) a donesou se do kotle na začátku. To spawne addky, které se
+    vezmou na platformu k bossovi (použijte svoje movement věci, leap, rescue, jump etc...). Čím dříve se addky splošní,
+    tím dříve přijde boss. Bude se blastit znovu srdce (cca 4:40) a potom je soakovací minihra. Dvě grupy běhají proti
+    sobě a soukujou group soaky. Poslední fáze boss rozdělí platformu na 4 části. Melečka stojí u bosse. Rangedka jdou
+    na platformu doleva od bosse a rozdělí se na dvě grupy. Rangedka blástí addky kolem. Lidi s kolečkem (3x) se postaví
+    na skupiny a nechají se soaknout. Dodguje se přitom wavy a blástí addky, které přiletí z kraj místnosti. Za každou
+    platformu dole přiletí addka navíc. Poslední platforma jsou soaky sacrifice. Na poslední platformě se otevře srdce
+    => pokud nezabijem tak nebíčko. Pokud by poslední platforma měla bouchnout, tak skočte do vody, budete ještě chvíli
+    žít a nezabije vás rozbití platformy.</p>
+  <div class="hc"><span class="hc-label">Nové v Heroicu</span>
+    <ul>
+      <li>Group soak dává dmg => Raid se dělí na 2 groupy.</li>
+    </ul>
+  </div>
+  <div class="roles">
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Tank drží bosse, druhej ocas. U každého musí někdo bejt jinak wipe.</li>
+        <li>Boss spawnuje červené velké vajíčko, do kterého si musí aktivní tank stoupnout, jinak boss bude jebat do
+          celého raidu.</li>
+        <li>Po group soakách se spawne u ocasu velké AOEčko => tank swap.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Enjoy</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>Priorita jsou group soaky a vajíčka na zemi. Na HC můžeš soaknout jenom jednou (2x grupy na soaky). Vajíčko
+          na zemi se nesmí vylíhnout, musíš ho sebrat. Sebrat ho může kdokoli. Nemůžeš s ním ale dostat frontal od
+          bosse, jinak spawneš addku.</li>
+        <li>Mezifáze blástíš addky a až budou mrtvé, každej mobilní si vezme vajíčko a odnese ho do kotle.</li>
+        <li>Když se spawne srdce na bossovi (cca 2:30 a 4:40) odpal v3echno co máš do srdce. Boss jde přitom cleavovat.
+        </li>
+        <li>Poslední fáze melečka pod bosse, rangedka na platformu doleva od bosse. Ranged se rozdělí na 2 grupy vedle
+          sebe. Je to kvůli soukům, 3x hráči dostanou kolečko a soupnou si na grupu. Priorita jsou addky. Na poslendí
+          platformě se otevře srdce.</li>
+      </ul>
+    </div>
+  </div>
+</section><section class="boss">
+  <div class="boss-head"><span class="boss-num">Lair</span>
+    <h3>Nymrissa Wavecaller</h3><a class="rplink" href="https://raidplan.io/plan/g4skqtr53vrsx467" target="_blank"
+      rel="noopener">RaidPlan ↗</a><a class="rplink"
+      href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit?gid=731845282#gid=731845282"
+      target="_blank" rel="noopener">Sestava ↗</a><span class="tag">Tidebound Grotto · jedna fáze dokola · Mythic flex
+      do 25</span>
+  </div>
+  <p class="callout"><strong>Lair boss mimo raid</strong> — Tidebound Grotto, podvodní vchod na Coiled Isle v Atal'Uteku
+    (/way 59.9 66.3, LEADER JDE DOVNITŘ PRVNÍ A NASTAVUJE OBTÍŽNOST). Mythic je flex do 25 lidí.</p>
+  <p class="callout">3 Hráči dostávaj debuff kterej spawnuje bubliny na zem. Měl by to dostávat healer, ranged a melee.
+    Budou se odnášen na marky za raid. Naspawnuješ vedle sebe orbíky, které dělají dmg když je soakneš - dávaj ti stacky
+    a aoe do raidu. Chceš je sebrat všechny - tanci / immunity. Když sebereš orb, jebne to sračku na zem. Sračky na zemi
+    čistí tank frontal (také foukání jak v MOTHERLODE dungu). Pak se spawne velká koule uprostřed a addky na okrajích.
+    Boss se natáhne na nejvíc addek a splošní se. Rangedka jdou ostatní addky. Pokud jedna dvě projdou neřešil bych to.
+    Focus dps jenom na skupinky addek. Na mythic je tam navíc addka Bubblefin Frostscale, která dává 99% redukci všem
+    addám okolo ní - ST addku pak AOE zbytek přes bosse. Po fázi je dodge swirlíků - vždy jen jedno místo na mapě je
+    volné. Celé se to opakuje - 6 minuta je enrage.</p>
+  <p class="callout"><strong>Wipe mechanika:</strong> uprostřed se spawne Alluring Bubble a k ní běží murloci (Bubblefin
+    Shorerunner). Každej murloc, kterej doběhne do bubliny, se transformuje na <strong>Bubblefin Berserker</strong> —
+    ten pulzuje frost AOE do celého raidu každé 3s dokud žije. Pár jich může projít ale musí se switchnout po
+    transformaci. Jedna fáze pořád dokola, žádná mezifáze — soft enrage přes stacky z Abyssal Rain, <strong>hard enrage
+      Unending Tides na 6 MINUTE</strong>.</p>
+  <div class="ability"><span class="hc-label">Ability</span>
+    <ul>
+      <li><strong>Alluring Bubble</strong> — bublina uprostřed, přitahuje murloky. Na konci <strong>Pop!</strong> — raid
+        dmg + knockback. Před Popem si zkontroluj, že za tebou není sračka nebo kraj.</li>
+      <li><strong>Bubblefin Shorerunner</strong> — murloc addy běžící do bubliny — slow, root, grip, knockback, cokoliv.
+        MUSÍ ZEMŘÍT NEŽ DOJDOU K BUBLINĚ UPROSTŘED.</li>
+      <li><strong>Bubblefin Berserker</strong> — murloc co doběhl do bubliny. <strong>Pulsing Tides</strong> = frost AOE
+        do raidu každé 3s dokud žije. Dva a víc naráz = healeři pláčou = wipe. INSTA SWITCH.</li>
+      <li><strong>Bubblefin Frostscale</strong> — (Mythic) deepwater murloc s <strong>Waterfog Shield</strong> — okolní
+        murloci berou o 99 % míň dmg. ABSOLUTNÍ PRIORITA, jinak jenom leštíš šupiny zadarmo. Priorita: Frostscale →
+        Shorerunner → Berserker.</li>
+      <li><strong>Chilling Frost</strong> — frost dmg + slow, nechává <strong>Frost Orby</strong> na pozicích hráčů.
+      </li>
+      <li><strong>Frost Orb</strong> — nesouknutej orb = <strong>Shatter</strong>: mega frost jeba do celého raidu +
+        stackující 30s DoT. Na Mythic navíc i souknutej orb udělá <strong>Frost Burst</strong> — menší hit do všech.
+        Soak dává +15 % Frost Orb dmg na 16s → soakeři se MUSÍ rotovat a soakovat rozestoupení.</li>
+      <li><strong>Lingering Frost</strong> — ledové kaluže po orbech: dmg + klouzání. Pokládat na kraj, MIMO lajny
+        murloků a stack spoty.</li>
+      <li><strong>Water Jet</strong> — beam na tanka: dmg + push + stack (+20 % Water Jet dmg za hit). Zároveň
+        <strong>umývá Lingering Frost</strong> — tank s ním míří přes ledové sračky a čistí místnost.</li>
+      <li><strong>Iceblade Flurry</strong> — tank dmg na Normal/HC — klasická rotace defek.</li>
+      <li><strong>Swirling Whirlpools</strong> — víry jedoucí přes arénu — dodge, nic víc.</li>
+      <li><strong>Abyssal Rain</strong> — channel raid frost dmg + drench DoT. Na HC+ dá bossce stack
+        <strong>Wavecaller's Might</strong> (+5 % frost dmg, stackuje) = soft enrage, každej cast bolí víc.</li>
+      <li><strong>Unending Tides</strong> — hard enrage — opakované katastrofální jeby, dokud nejste mrtví. Není
+        counterplay, prostě zabij dřív.</li>
+    </ul>
+  </div>
+  <div class="hc"><span class="hc-label">Nové v Mythicu</span>
+    <ul>
+      <li><strong>Bubblefin Frostscale</strong> addy s Waterfog Shield (-99 % dmg pro okolní murloky) — kill first.</li>
+      <li><strong>Frost Orb</strong> - navíc <strong>Frost Burst</strong> při soaku - AOE raid damage.</li>
+      <li><strong>Water Jet</strong> na tanka — stackující dmg, používá se na čištění ledu.</li>
+    </ul>
+  </div>
+  <div class="roles">F
+    <div class="role tank">
+      <h4>Tank</h4>
+      <ul>
+        <li>Kontrola murloků: slow / knockback / grip do cesty, ať je DPS stíhá před bublinou.</li>
+        <li>Water Jet: hlídej stacky (+20 % za hit) a miř beam přes Lingering Frost — ty čistíš místnost od ledu.</li>
+        <li>Pop! dělá knockback — nestůj zády ke sračce ani ke kraji.</li>
+      </ul>
+    </div>
+    <div class="role heal">
+      <h4>Healeři</h4>
+      <ul>
+        <li>Abyssal Rain = největší plánovaný raid dmg — cooldowny sem; s Wavecaller's Might stacky každej další bolí
+          víc.</li>
+        <li>Každej živej Berserker = frost pulz do raidu každé 3s — počítej s tím, když jich žije víc.</li>
+        <li>Orb soaky jsou plánovaný dmg do soakerů — mít je topnuté, hlavně na Mythicu (Frost Burst navíc jebe do
+          všech).</li>
+      </ul>
+    </div>
+    <div class="role dps">
+      <h4>DPS</h4>
+      <ul>
+        <li>MURLOC > BOSS. Kdo bude tunelit bossku, dostane pojeb.</li>
+        <li>Mythic priorita: Frostscale (štít) → Shorerunner (před bublinou) → Berserker (insta switch).</li>
+        <li>Určení soakeři na Frost Orby — soakuj rozestoupenej od ostatních a po soaku 16s nesoakuj další (debuff +15
+          %).</li>
+        <li>Whirlpooly a led = dodge; Lingering Frost nechávej tankovi na umytí Water Jetem.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="posn"><strong>Pozicování:</strong> bublina uprostřed — raid drží střed čistej, addy se zabíjejí na cestě do
+    bubliny. Ledové kaluže (Lingering Frost) pokládat ke kraji mimo lajny murloků, tank je průběžně umývá Water Jetem.
+    Před každým Pop! se otoč zády do volného prostoru.</p>
+</section>
+<div class="view-home">
+<h2>Item levely lootu</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Obtížnost</th><th>Boss 1</th><th>Bossové 2–3</th><th>Bossové 4–6</th><th>Bossové 7–8</th></tr></thead>
+  <tbody>
+    <tr><td>Normal</td><td class="mono">292</td><td class="mono">295</td><td class="mono">298</td><td class="mono">302</td></tr>
+    <tr><td>Heroic</td><td class="mono">305</td><td class="mono">308</td><td class="mono">311</td><td class="mono">315</td></tr>
+    <tr><td>Mythic</td><td class="mono">318</td><td class="mono">321</td><td class="mono">324</td><td class="mono">344 (very rare)</td></tr>
+  </tbody>
+</table></div>
+<p class="pathnote">Tokeny Tier 36: Entombed Sentinels (hands), Lost Explorers (shoulders), Vashnik (chest), Sszorak (legs), Twin Fangs (head). Ula'tek dropí flexibilní Slumbering Coil Curio.</p>
+</div>
+
+<footer>
+  <p>Sestaveno 16. 8. 2026 z návodů založených na PTR — po otevření raidu 18. 8. čekejte změny v tuningu. Bossové I–VI aktualizováni podle heroic guidů <a href="https://www.method.gg/guides/the-venomous-abyss">Method.gg</a> a <a href="https://raidstrats.gg">Raidstrats.gg</a> (Consequence US); Coiled Altar a Ula'tek zatím Method guide nemají — jejich sekce vychází z PTR přehledů. Další zdroje:
+  <a href="https://expcarry.com/venomous-abyss-raid-overview-wow-midnight">ExpCarry</a> ·
+  <a href="https://onlyfarms.gg/guides/wow-venomous-abyss-raid-guide/">OnlyFarms</a> ·
+  <a href="https://koroboost.com/guide/midnight-venomous-abyss-raid-guide">KoroBoost</a> ·
+  <a href="https://warcraft.wiki.gg/wiki/Venomous_Abyss">Warcraft Wiki</a> ·
+  <a href="https://www.wowhead.com/guide/midnight/raids/the-venomous-abyss-overview-location-rewards-bosses">Wowhead</a>.
+  Nymrissa Wavecaller (lair) podle <a href="https://www.wowhead.com/guide/midnight/nymrissa-wavecaller-tidebound-grotto-lair-boss-strategy-rewards">Wowhead</a>,
+  <a href="https://skycoach.gg/blog/wow/articles/nymrissa-wavecaller-lair-boss-guide">Skycoach</a> a
+  <a href="https://mythic-store.com/blog/nymrissa-wavecaller-guide-tidebound-grotto-lair-strategy-and-rewards">Mythic Store</a>.</p>
+</footer>
+</div>
+
+<script>
+(function () {
+  var nav = document.querySelectorAll('.bossnav a');
+  var home = document.querySelectorAll('.view-home');
+  var bosses = document.querySelectorAll('section.boss');
+  function route() {
+    var h = location.hash.replace('#', '') || 'boss-1';
+    if (!/^boss-[1-9]$/.test(h)) h = 'boss-1';
+    var isLair = (h === 'boss-9');
+    document.getElementById('page-title').textContent = isLair ? 'The Tidebound Grotto' : 'The Venomous Abyss';
+    document.getElementById('page-eyebrow').textContent = isLair ? 'Midnight · Patch 12.1 · Lair boss 2. sezóny' : 'Midnight · Patch 12.1 · Raid 2. sezóny';
+    document.title = (isLair ? 'The Tidebound Grotto' : 'The Venomous Abyss') + ' · Eternal Shadows';
+    home.forEach(function (el) { el.style.display = 'none'; });
+    bosses.forEach(function (el, i) {
+      el.style.display = (h === 'boss-' + (i + 1)) ? '' : 'none';
+    });
+    nav.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + h);
+    });
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
+  route();
+})();
+</script>
+</body>
+</html>
