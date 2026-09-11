@@ -1,120 +1,111 @@
 <!DOCTYPE html>
 <!-- ZDROJ hlavní stránky (rozcestník). build.bat ji kopíruje do kořene repa jako
-     index.html. Formuláře Omluvenky a SimC jsou vložené (iframe) z Apps Script
-     web appu – ta má setXFrameOptionsMode(ALLOWALL). -->
+     index.html a přepíše cesty assets/ -> web/assets/. Vzhled: assets/css/site.css
+     (odvozeno ze šablony TemplateMo 579 Cyborg Gaming). Formuláře Omluvenky a SimC
+     jsou vložené (iframe) z Apps Script web appu – ta má setXFrameOptionsMode(ALLOWALL). -->
 <html lang="cs">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Eternal Shadows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="web/assets/css/site.css">
 <style>
-*,*::before,*::after { box-sizing: border-box; }
-html,body { margin: 0; padding: 0; }
-img,svg { max-width: 100%; }
-:root {
-  --ground: #0c1210; --surface: #131b18; --surface2: #18231f; --line: #24322c;
-  --ink: #d9e4de; --muted: #8ba49a; --jade: #55b98a; --gold: #c9a24b;
-  --tank: #6f9fd8; --heal: #5cb87c; --dps: #d4796a; --mythic: #e08a3c; --callout-bg: #16241e;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --ground: #eef2ef; --surface: #ffffff; --surface2: #f4f7f4; --line: #d5ded8;
-    --ink: #1a2420; --muted: #5c6f67; --jade: #2e8663; --gold: #96742a;
-    --tank: #2e64a8; --heal: #2c7d4f; --dps: #b04a3a; --mythic: #a85f1c; --callout-bg: #e6efe9;
-  }
-}
-:root[data-theme="light"] {
-  --ground: #eef2ef; --surface: #ffffff; --surface2: #f4f7f4; --line: #d5ded8;
-  --ink: #1a2420; --muted: #5c6f67; --jade: #2e8663; --gold: #96742a;
-  --tank: #2e64a8; --heal: #2c7d4f; --dps: #b04a3a; --mythic: #a85f1c; --callout-bg: #e6efe9;
-}
-body { background: var(--ground); color: var(--ink); font-family: "Segoe UI", -apple-system, sans-serif; line-height: 1.55; padding: 0 1.25rem 3rem; }
-.wrap { max-width: 62rem; margin: 0 auto; }
-h2 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.4rem; font-weight: 600; margin: .4rem 0 .8rem; }
-a { color: var(--jade); }
-
-/* --- společná horní lišta (stejná na všech stránkách) --- */
-.sitebar { position: sticky; top: 0; z-index: 20; background: var(--ground); border-bottom: 1px solid var(--line); margin-bottom: 1.2rem; }
-.topnav, .subnav { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-.topnav { padding: .6rem 0; }
-.subnav { padding: .5rem 0 .65rem; border-top: 1px solid var(--line); }
-.topnav .brand { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 600; font-size: 1.1rem; color: var(--gold); text-decoration: none; margin-right: .5rem; letter-spacing: .01em; }
-.topnav a:not(.brand), .subnav a, .subnav button {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: .28rem .8rem;
-  font-size: .82rem; color: var(--ink); text-decoration: none; white-space: nowrap; cursor: pointer; font-family: inherit;
-}
-.topnav a:not(.brand):hover, .subnav a:hover, .subnav button:hover { border-color: var(--jade); }
-.topnav a.active, .subnav .active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
-.topnav a.ext { border-color: var(--gold); }
-.topnav .grow, .subnav .grow { flex: 1; }
-
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin-top: .4rem; }
-.card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1.2rem 1.3rem;
-  display: flex; flex-direction: column; gap: .4rem; text-decoration: none; color: inherit; transition: border-color .15s;
-}
-.card:hover { border-color: var(--jade); }
-.card .ico { font-size: 1.5rem; line-height: 1; }
-.card h3 { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--gold); }
-.card p { margin: 0; color: var(--muted); font-size: .88rem; }
-
 .section { display: none; }
 .section.show { display: block; }
-.steps { color: var(--muted); font-size: .9rem; margin: 0 0 .9rem; }
-.steps code { font-family: Consolas, "Cascadia Mono", monospace; background: var(--surface); padding: .05rem .35rem; border-radius: 4px; color: var(--ink); }
-.frame { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.frame iframe { display: block; width: 100%; height: 680px; border: 0; background: transparent; }
-.framenote { color: var(--muted); font-size: .8rem; margin: .5rem 0 0; }
-.leader { margin-top: 1.2rem; display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; font-size: .86rem; color: var(--muted); }
-.leader input { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: .35rem .6rem; font: inherit; width: 9rem; }
-.leader button { background: var(--callout-bg); color: var(--jade); border: 1px solid var(--jade); border-radius: 999px; padding: .35rem 1rem; font: inherit; font-weight: 600; cursor: pointer; }
-.leader button:disabled { opacity: .6; cursor: wait; }
+.quick { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+.quick a {
+  display: inline-flex; align-items: center; gap: 8px; background: var(--surface2); color: var(--ink);
+  border-radius: 23px; padding: 10px 18px; text-decoration: none; font-size: 14px; transition: background-color .2s;
+}
+.quick a:hover { border-color: var(--accent); color: var(--ink-strong); }
+.quick a span { color: var(--accent); }
+.leader { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; font-size: 14px; color: var(--muted); }
+.leader input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 9px 16px; font: inherit; width: 11rem; }
+.leader input:focus { border-color: var(--accent); outline: 0; }
+.leader .btn { padding: 9px 22px; }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<div class="sitebar">
-<nav class="topnav">
-  <a href="index.html" class="brand">Eternal Shadows</a>
-  <a href="#omluvenky" data-sec="omluvenky">Omluvenky</a>
-  <a href="#simc" data-sec="simc">SimC</a>
-  <a href="loot.html">Simy</a>
-  <a href="raid.html">Raid taktiky</a>
-  <span class="grow"></span>
-  <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" class="ext" target="_blank" rel="noopener">Tabulka ↗</a>
-  <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" class="ext" target="_blank" rel="noopener">wowaudit ↗</a>
+<header class="site-header">
+<div class="container">
+<nav class="main-nav">
+  <a href="index.html" class="logo"><span class="mark" aria-hidden="true"></span>Eternal <em>Shadows</em></a>
+  <ul class="nav">
+    <li><a href="#omluvenky" data-sec="omluvenky">Omluvenky</a></li>
+    <li><a href="#simc" data-sec="simc">SimC</a></li>
+    <li><a href="loot.html">Simy</a></li>
+    <li><a href="raid.html">Raid taktiky</a></li>
+    <li class="ext"><a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Tabulka</a></li>
+    <li class="ext"><a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" target="_blank" rel="noopener">wowaudit</a></li>
+  </ul>
 </nav>
 </div>
+</header>
+
+<div class="container">
+<div class="page-content">
 
 <section class="section show" id="sec-home">
-  <div class="grid">
-    <a class="card" href="#omluvenky"><span class="ico">📅</span><h3>Omluvenky</h3><p>Nahlásit absenci nebo pozdní příchod.</p></a>
-    <a class="card" href="#simc"><span class="ico">🧪</span><h3>SimC</h3><p>Poslat SimC string – sim proběhne sám.</p></a>
-    <a class="card" href="loot.html"><span class="ico">📈</span><h3>Simy</h3><p>Upgrady podle hráče, bosse a itemu.</p></a>
-    <a class="card" href="raid.html"><span class="ico">⚔️</span><h3>Raid taktiky</h3><p>Venomous Abyss a Nymrissa.</p></a>
+  <div class="main-banner">
+    <h4>Eternal <em>Shadows</em></h4>
+    <p>Burning Blade EU</p>
+  </div>
+
+  <div class="heading-section">
+    <h4><em>Guildovní</em> nástroje</h4>
+  </div>
+  <div class="tiles">
+    <a class="tile" href="#omluvenky"><h4><span class="ico" aria-hidden="true">◷</span>Omluvenky</h4><p>Nahlásit absenci nebo pozdní příchod na raid.</p><span class="go">Vyplnit formulář →</span></a>
+    <a class="tile" href="#simc"><h4><span class="ico" aria-hidden="true">⌁</span>SimC</h4><p>Poslat SimC string – Droptimizer proběhne sám.</p><span class="go">Poslat string →</span></a>
+    <a class="tile" href="loot.html"><h4><span class="ico" aria-hidden="true">↗</span>Simy</h4><p>Upgrady podle hráče, bosse a itemu.</p><span class="go">Otevřít přehled →</span></a>
+    <a class="tile" href="raid.html"><h4><span class="ico" aria-hidden="true">✦</span>Raid taktiky</h4><p>Venomous Abyss a lair boss Nymrissa.</p><span class="go">Číst taktiky →</span></a>
+  </div>
+
+  <div class="heading-section">
+    <h4><em>Externí</em> odkazy</h4>
+  </div>
+  <div class="quick">
+    <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Guildovní tabulka <span>↗</span></a>
+    <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" target="_blank" rel="noopener">wowaudit <span>↗</span></a>
+    <a href="https://www.raidbots.com/simbot" target="_blank" rel="noopener">Raidbots <span>↗</span></a>
+    <a href="https://www.method.gg/guides/the-venomous-abyss" target="_blank" rel="noopener">Method guides <span>↗</span></a>
   </div>
 </section>
 
 <section class="section" id="sec-omluvenky">
-  <h2>Omluvenky</h2>
+  <div class="heading-section">
+    <h4><em>Omluvenky</em></h4>
+    <p>Nahlas absenci nebo pozdní příchod – raid leader to vidí v tabulce v přehledu absencí.</p>
+  </div>
   <div class="frame"><iframe data-src="__WEBAPP__" title="Formulář absence" loading="lazy"></iframe></div>
   <p class="framenote"><a href="__WEBAPP__" target="_blank" rel="noopener">Otevřít formulář ve vlastním okně ↗</a></p>
 </section>
 
 <section class="section" id="sec-simc">
-  <h2>SimC</h2>
+  <div class="heading-section">
+    <h4><em>SimC</em> string</h4>
+  </div>
   <p class="steps">Addon <a href="https://www.curseforge.com/wow/addons/simulationcraft" target="_blank" rel="noopener">SimulationCraft</a> → ve hře <code>/simc</code> → <code>Ctrl+A</code>, <code>Ctrl+C</code> → vložit sem. Sim proběhne sám, výsledek je v <a href="loot.html">Simech</a>.</p>
   <div class="frame"><iframe data-src="__WEBAPP__?p=sim" title="Formulář SimC" loading="lazy"></iframe></div>
   <p class="framenote"><a href="__WEBAPP__?p=sim" target="_blank" rel="noopener">Otevřít formulář ve vlastním okně ↗</a></p>
   <form class="leader" id="runsims">
     <span>Raid leader:</span>
     <input type="password" id="runpw" placeholder="heslo" autocomplete="current-password" required>
-    <button type="submit">Spustit simy teď</button>
+    <button type="submit" class="btn">Spustit simy teď</button>
     <span id="runmsg"></span>
   </form>
 </section>
 
+</div>
+
+<footer>
+  <p>Eternal Shadows · Burning Blade EU</p>
+  <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
+</footer>
 </div>
 
 <script>
@@ -124,7 +115,7 @@ a { color: var(--jade); }
     var attr = el.tagName === "IFRAME" ? "data-src" : "href";
     el.setAttribute(attr, el.getAttribute(attr).replace("__WEBAPP__", WEBAPP));
   });
-  var nav = document.querySelectorAll(".topnav a[data-sec]");
+  var nav = document.querySelectorAll(".main-nav a[data-sec]");
   var secs = { home: "sec-home", omluvenky: "sec-omluvenky", simc: "sec-simc" };
   function route() {
     var h = location.hash.replace("#", "");

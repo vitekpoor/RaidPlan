@@ -1,292 +1,193 @@
 <!DOCTYPE html>
-<!-- GENEROVANÝ SOUBOR - needituj venomous-abyss.html ani index.html přímo!
+<!-- GENEROVANÝ SOUBOR - needituj venomous-abyss.html ani raid.html přímo!
      Zdroje jsou parts\head.html, bosses\*.html a parts\tail.html.
-     Po úpravě spusť build.bat (nebo publish.bat, který builduje sám). -->
+     Po úpravě spusť build.bat (nebo publish.bat, který builduje sám).
+     Společný vzhled: assets\css\site.css (odvozeno ze šablony TemplateMo 579 Cyborg Gaming). -->
 <html lang="cs">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Raid taktiky · Eternal Shadows</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="web/assets/css/site.css">
 <style>
-/* minimal reset (normally added by the artifact host) */
-*,*::before,*::after { box-sizing: border-box; }
-html,body { margin: 0; padding: 0; }
-img,svg { max-width: 100%; }
-</style>
-<style>
-:root {
-  --ground: #0c1210;
-  --surface: #131b18;
-  --surface2: #18231f;
-  --line: #24322c;
-  --ink: #d9e4de;
-  --muted: #8ba49a;
-  --jade: #55b98a;
-  --gold: #c9a24b;
-  --tank: #6f9fd8;
-  --heal: #5cb87c;
-  --dps: #d4796a;
-  --mythic: #e08a3c;
-  --callout-bg: #16241e;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --ground: #eef2ef;
-    --surface: #ffffff;
-    --surface2: #f4f7f4;
-    --line: #d5ded8;
-    --ink: #1a2420;
-    --muted: #5c6f67;
-    --jade: #2e8663;
-    --gold: #96742a;
-    --tank: #2e64a8;
-    --heal: #2c7d4f;
-    --dps: #b04a3a;
-    --mythic: #a85f1c;
-    --callout-bg: #e6efe9;
-  }
-}
-:root[data-theme="light"] {
-  --ground: #eef2ef;
-  --surface: #ffffff;
-  --surface2: #f4f7f4;
-  --line: #d5ded8;
-  --ink: #1a2420;
-  --muted: #5c6f67;
-  --jade: #2e8663;
-  --gold: #96742a;
-  --tank: #2e64a8;
-  --heal: #2c7d4f;
-  --dps: #b04a3a;
-  --mythic: #a85f1c;
-  --callout-bg: #e6efe9;
-}
-* { box-sizing: border-box; }
-body {
-  background: var(--ground);
-  color: var(--ink);
-  font-family: "Segoe UI", -apple-system, sans-serif;
-  line-height: 1.55;
-  margin: 0;
-  padding: 0 1.25rem 4rem;
-}
-.wrap { max-width: 62rem; margin: 0 auto; }
-.mono { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
-
-header { padding: .4rem 0 1rem; }
+/* --- obsah taktik (společné tokeny jsou v site.css) --- */
+.page-content > header { margin: 0 0 20px; }
 .eyebrow {
-  text-transform: uppercase; letter-spacing: .18em; font-size: .72rem;
-  color: var(--gold); font-weight: 600; margin: 0 0 .6rem;
+  text-transform: uppercase; letter-spacing: .18em; font-size: 12px;
+  color: var(--muted); font-weight: 600; margin: 0 0 8px;
 }
-h1 {
-  font-family: "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 600;
-  margin: 0 0 .5rem; letter-spacing: .01em; text-wrap: balance;
+h1 { font-size: clamp(26px, 4vw, 40px); font-weight: 700; margin: 0; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--accent); }
+h2 { font-size: 24px; font-weight: 700; margin: 44px 0 16px; text-wrap: balance; }
+h2 em { color: var(--accent); font-style: normal; }
+.path { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.path .node { border: 1px solid var(--line);
+  background: var(--surface2); border-radius: 999px;
+  padding: 6px 16px; white-space: nowrap;
 }
-
-h2 {
-  font-family: "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: 1.5rem; font-weight: 600; margin: 3rem 0 1rem; text-wrap: balance;
-}
-.path { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .85rem; }
-.path .node {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
-  padding: .3rem .85rem; white-space: nowrap;
-}
-.path .branch { display: flex; flex-direction: column; gap: .4rem; }
+.path .branch { display: flex; flex-direction: column; gap: 6px; }
 .path .arrow { color: var(--muted); }
-.path .final { border-color: var(--gold); color: var(--gold); }
-.pathnote { color: var(--muted); font-size: .85rem; margin-top: .75rem; }
+.path .final { background: var(--accent); border-color: var(--accent); color: #07110c; font-weight: 600; }
+.pathnote { color: var(--muted); font-size: 14px; margin-top: 12px; }
 
 .killorder {
-  display: flex; flex-wrap: wrap; align-items: center; gap: .75rem;
-  margin: 0 0 1.25rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  margin: 0 0 20px;
 }
 .killorder .ko-label {
   flex-basis: 100%; color: var(--muted); font-weight: 700; text-transform: uppercase;
-  font-size: .66rem; letter-spacing: .12em;
+  font-size: 11px; letter-spacing: .12em;
 }
 .killorder .ko-node {
-  font-family: "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: 1.35rem; font-weight: 700; letter-spacing: .06em;
-  background: var(--callout-bg); border: 2px solid var(--jade); color: var(--jade);
-  border-radius: 999px; padding: .45rem 1.4rem; white-space: nowrap;
+  font-size: 20px; font-weight: 700; letter-spacing: .04em;
+  background: var(--accent-soft); border: 2px solid var(--accent); color: var(--accent);
+  border-radius: 999px; padding: 7px 22px; white-space: nowrap;
 }
-.killorder .ko-arrow { color: var(--muted); font-size: 1.5rem; }
+.killorder .ko-arrow { color: var(--muted); font-size: 24px; }
 
 .boss {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
-  margin: 1.5rem 0; padding: 1.5rem 1.75rem 1.75rem;
+  background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius);
+  margin: 24px 0; padding: 26px 28px 28px;
 }
-.boss-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.boss-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .boss-num {
-  font-family: "Palatino Linotype", Palatino, Georgia, serif;
-  color: var(--gold); font-size: 1.1rem;
+  color: var(--accent); font-size: 18px; font-weight: 700;
 }
-.boss h3 {
-  font-family: "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: 1.45rem; font-weight: 600; margin: 0; text-wrap: balance;
-}
-.boss .tag { color: var(--muted); font-size: .8rem; margin-left: auto; }
+.boss h3 { font-size: 24px; font-weight: 700; margin: 0; text-wrap: balance; }
+.boss .tag { color: var(--muted); font-size: 13px; margin-left: auto; }
 .rplink {
-  font-size: .74rem; text-transform: uppercase; letter-spacing: .08em;
-  color: var(--jade); text-decoration: none; border: 1px solid var(--jade);
-  border-radius: 999px; padding: .15rem .7rem; white-space: nowrap;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600;
+  color: var(--accent); text-decoration: none; border: 1px solid var(--accent);
+  border-radius: 999px; padding: 3px 12px; white-space: nowrap; transition: all .2s;
 }
-.rplink:hover { background: var(--callout-bg); }
+.rplink:hover { background: var(--accent); color: #07110c; }
 .callout {
-  background: var(--callout-bg); border-left: 3px solid var(--jade);
-  padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
-  font-size: .93rem;
+  background: var(--callout-bg); border-left: 3px solid var(--accent);
+  padding: 12px 16px; margin: 16px 0 20px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 14.5px;
 }
 .ability {
-  border-left: 3px solid var(--jade); background: var(--surface2);
-  padding: .6rem 1rem .7rem; margin: -0.35rem 0 .9rem; font-size: .88rem;
-  border-radius: 0 4px 4px 0;
+  border-left: 3px solid var(--accent); background: var(--surface);
+  padding: 10px 16px 12px; margin: -6px 0 14px; font-size: 14px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 .ability .hc-label {
-  display: block; color: var(--jade); font-weight: 700; text-transform: uppercase;
-  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+  display: block; color: var(--accent); font-weight: 700; text-transform: uppercase;
+  font-size: 11px; letter-spacing: .12em; margin-bottom: 4px;
 }
-.ability ul { margin: 0; padding-left: 1.1rem; }
-.ability li { margin-bottom: .3rem; }
-.ability li::marker { color: var(--jade); }
-.ability li strong { color: var(--jade); font-weight: 600; }
-figure.shot { margin: -0.35rem 0 1.25rem; }
-figure.shot img { max-width: 100%; border: 1px solid var(--line); border-radius: 6px; display: block; }
-figure.shot figcaption { color: var(--muted); font-size: .8rem; margin-top: .35rem; }
+.ability ul { margin: 0; padding-left: 18px; }
+.ability li { margin-bottom: 5px; }
+.ability li::marker { color: var(--accent); }
+.ability li strong { color: var(--accent); font-weight: 600; }
+figure.shot { margin: -6px 0 20px; }
+figure.shot img { max-width: 100%; border-radius: var(--radius-sm); display: block; }
+figure.shot figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .hc {
-  border-left: 3px solid var(--gold); background: var(--surface2);
-  padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
-  border-radius: 0 4px 4px 0;
+  border-left: 3px solid var(--gold); background: var(--surface);
+  padding: 10px 16px 12px; margin: -6px 0 20px; font-size: 14px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 .hc .hc-label {
   display: block; color: var(--gold); font-weight: 700; text-transform: uppercase;
-  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+  font-size: 11px; letter-spacing: .12em; margin-bottom: 4px;
 }
-.hc ul { margin: 0; padding-left: 1.1rem; }
-.hc li { margin-bottom: .2rem; }
+.hc ul { margin: 0; padding-left: 18px; }
+.hc li { margin-bottom: 3px; }
 .mythic {
-  border-left: 3px solid var(--mythic); background: var(--surface2);
-  padding: .6rem 1rem .7rem; margin: -0.35rem 0 1.25rem; font-size: .88rem;
-  border-radius: 0 4px 4px 0;
+  border-left: 3px solid var(--mythic); background: var(--surface);
+  padding: 10px 16px 12px; margin: -6px 0 20px; font-size: 14px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 .mythic .mythic-label {
   display: block; color: var(--mythic); font-weight: 700; text-transform: uppercase;
-  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+  font-size: 11px; letter-spacing: .12em; margin-bottom: 4px;
 }
-.mythic ul { margin: 0; padding-left: 1.1rem; }
-.mythic li { margin-bottom: .2rem; }
+.mythic ul { margin: 0; padding-left: 18px; }
+.mythic li { margin-bottom: 3px; }
 .mythic li::marker { color: var(--mythic); }
 .mythic li strong { color: var(--mythic); font-weight: 600; }
 /* WoW macro block: each command on its own line (newlines in the markup are
    kept, indentation is collapsed) */
 code {
   display: block; white-space: pre-line;
-  font-family: Consolas, "Cascadia Mono", monospace; font-size: .84em;
-  background: var(--callout-bg); border: 1px solid var(--line);
-  border-left: 3px solid var(--gold); border-radius: 0 4px 4px 0;
-  color: var(--gold); padding: .45rem .75rem; margin: .35rem 0 .45rem;
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: .86em;
+  background: var(--ground); border-left: 3px solid var(--gold); border-radius: 0 8px 8px 0;
+  color: var(--gold); padding: 7px 12px; margin: 6px 0 7px;
   overflow-x: auto;
 }
-.callout strong { color: var(--jade); }
+.callout strong { color: var(--accent); }
 /* Kick rotation block: template macro + per-player macros in two columns */
 .macros {
-  border-left: 3px solid var(--gold); background: var(--surface2);
-  padding: .6rem 1rem .7rem; margin: 0 0 1.25rem; font-size: .88rem;
-  border-radius: 0 4px 4px 0;
+  border-left: 3px solid var(--gold); background: var(--surface);
+  padding: 10px 16px 12px; margin: 0 0 20px; font-size: 14px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 .macros .macros-label {
   display: block; color: var(--gold); font-weight: 700; text-transform: uppercase;
-  font-size: .66rem; letter-spacing: .12em; margin-bottom: .25rem;
+  font-size: 11px; letter-spacing: .12em; margin-bottom: 4px;
 }
-.macros p { margin: 0 0 .4rem; }
-.macros-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0 1.25rem; margin-top: .5rem; }
+.macros p { margin: 0 0 6px; }
+.macros-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0 20px; margin-top: 8px; }
 .macros-side h4 {
-  margin: 0 0 .4rem; font-size: .72rem; text-transform: uppercase;
+  margin: 0 0 6px; font-size: 12px; text-transform: uppercase;
   letter-spacing: .14em; font-weight: 700; color: var(--dps);
 }
-.macros-side ol { margin: 0; padding-left: 1.3rem; }
-.macros-side li { margin-bottom: .45rem; }
+.macros-side ol { margin: 0; padding-left: 20px; }
+.macros-side li { margin-bottom: 7px; }
 .macros-side li::marker { color: var(--gold); font-weight: 700; }
-.macros-side li strong { color: var(--ink); font-weight: 600; }
-.macros-side .next { color: var(--muted); font-size: .82rem; }
-.macros-side code { margin: .25rem 0 0; }
+.macros-side li strong { color: var(--ink-strong); font-weight: 600; }
+.macros-side .next { color: var(--muted); font-size: 13px; }
+.macros-side code { margin: 4px 0 0; }
 .movement {
   background: var(--callout-bg); border-left: 3px solid var(--tank);
-  padding: .75rem 1rem; margin: 1rem 0 1.25rem; border-radius: 0 4px 4px 0;
-  font-size: .93rem;
+  padding: 12px 16px; margin: 16px 0 20px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 14.5px;
 }
 .movement strong { color: var(--tank); }
-.movement ol { margin: .45rem 0 .55rem; padding-left: 1.5rem; }
-.movement li { margin-bottom: .3rem; }
+.movement ol { margin: 7px 0 9px; padding-left: 24px; }
+.movement li { margin-bottom: 5px; }
 .movement li::marker { color: var(--tank); font-weight: 700; }
-.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 16px; }
+.role { background: var(--surface); border-radius: var(--radius-sm); padding: 14px 16px; }
 .role h4 {
-  margin: 0 0 .4rem; font-size: .72rem; text-transform: uppercase;
+  margin: 0 0 6px; font-size: 12px; text-transform: uppercase;
   letter-spacing: .14em; font-weight: 700;
 }
 .role.tank h4 { color: var(--tank); }
 .role.heal h4 { color: var(--heal); }
 .role.dps h4 { color: var(--dps); }
-.role ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
-.role li { margin-bottom: .35rem; }
-.posn { font-size: .88rem; color: var(--muted); margin: 1.1rem 0 0; }
-.guides { margin-top: 1.4rem; }
-.guides .guides-note { margin: 0 0 .6rem; font-size: .88rem; color: var(--muted); }
+.role ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.role li { margin-bottom: 6px; }
+.posn { font-size: 14px; color: var(--muted); margin: 18px 0 0; }
+.guides { margin-top: 22px; }
+.guides .guides-note { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
 .guides td { white-space: nowrap; }
-.guides .rplink { font-size: .68rem; }
-.guides .muted { color: var(--muted); font-size: .82rem; white-space: normal; }
-.posn strong { color: var(--ink); font-weight: 600; }
-
-.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
-table { border-collapse: collapse; width: 100%; font-size: .88rem; background: var(--surface); }
-th {
-  text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .12em;
-  color: var(--muted); padding: .6rem .9rem; border-bottom: 1px solid var(--line);
-  background: var(--surface2);
-}
-td { padding: .55rem .9rem; border-bottom: 1px solid var(--line); }
-tr:last-child td { border-bottom: none; }
-
-/* --- společná horní lišta (stejná na všech stránkách) --- */
-.sitebar { position: sticky; top: 0; z-index: 20; background: var(--ground); border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
-.topnav, .subnav, .bossnav { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-.topnav { padding: .6rem 0; }
-.subnav, .bossnav { padding: .5rem 0 .65rem; border-top: 1px solid var(--line); }
-.topnav .brand { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 600; font-size: 1.1rem; color: var(--gold); text-decoration: none; margin-right: .5rem; letter-spacing: .01em; }
-.topnav a:not(.brand), .subnav a, .subnav button, .bossnav a {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: .28rem .8rem;
-  font-size: .82rem; color: var(--ink); text-decoration: none; white-space: nowrap; cursor: pointer; font-family: inherit;
-}
-.topnav a:not(.brand):hover, .subnav a:hover, .subnav button:hover, .bossnav a:hover { border-color: var(--jade); }
-.topnav a.active, .subnav .active, .bossnav a.active { border-color: var(--jade); color: var(--jade); background: var(--callout-bg); }
-.topnav a.ext { border-color: var(--gold); }
-.topnav .grow, .subnav .grow, .bossnav .grow { flex: 1; }
-.subnav .sep, .bossnav .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .45rem; }
-.bossnav a.lair { border-color: var(--gold); }
-.bossnav a.lair.active { border-color: var(--gold); color: var(--gold); background: var(--surface2); }
-footer { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
-footer p { color: var(--muted); font-size: .82rem; }
-footer a { color: var(--jade); }
-a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-offset: 2px; }
+.guides .rplink { font-size: 10px; }
+.guides .muted { color: var(--muted); font-size: 13px; white-space: normal; }
+.posn strong { color: var(--ink-strong); font-weight: 600; }
+.boss .tablewrap { background: var(--surface); }
+.boss th { background: var(--surface3); }
 </style>
 </head>
 <body>
 
-<div class="wrap">
-<div class="sitebar">
-<nav class="topnav">
-  <a href="index.html" class="brand">Eternal Shadows</a>
-  <a href="index.html#omluvenky">Omluvenky</a>
-  <a href="index.html#simc">SimC</a>
-  <a href="loot.html">Simy</a>
-  <a href="raid.html" class="active">Raid taktiky</a>
-  <span class="grow"></span>
-  <a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" class="ext" target="_blank" rel="noopener">Tabulka ↗</a>
-  <a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" class="ext" target="_blank" rel="noopener">wowaudit ↗</a>
+<header class="site-header">
+<div class="container">
+<nav class="main-nav">
+  <a href="index.html" class="logo"><span class="mark" aria-hidden="true"></span>Eternal <em>Shadows</em></a>
+  <ul class="nav">
+    <li><a href="index.html#omluvenky">Omluvenky</a></li>
+    <li><a href="index.html#simc">SimC</a></li>
+    <li><a href="loot.html">Simy</a></li>
+    <li><a href="raid.html" class="active">Raid taktiky</a></li>
+    <li class="ext"><a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Tabulka</a></li>
+    <li class="ext"><a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" target="_blank" rel="noopener">wowaudit</a></li>
+  </ul>
 </nav>
-<nav class="bossnav">
+<nav class="sub-nav bossnav">
   <a href="#boss-1">I · Nek'zali</a>
   <a href="#boss-2">II · Sentinels</a>
   <a href="#boss-3">III · Vashnik</a>
@@ -299,6 +200,10 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   <a href="#boss-9" class="lair">Lair · Nymrissa</a>
 </nav>
 </div>
+</header>
+
+<div class="container">
+<div class="page-content">
 
 <header>
   <p class="eyebrow" id="page-eyebrow">Midnight · Patch 12.1 · Raid 2. sezóny</p>
@@ -1539,6 +1444,8 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
 <p class="pathnote">Tokeny Tier 36: Entombed Sentinels (hands), Lost Explorers (shoulders), Vashnik (chest), Sszorak (legs), Twin Fangs (head). Ula'tek dropí flexibilní Slumbering Coil Curio.</p>
 </div>
 
+</div><!-- /.page-content -->
+
 <footer>
   <p>Sestaveno 16. 8. 2026 z návodů založených na PTR — po otevření raidu 18. 8. čekejte změny v tuningu. Bossové I–VI aktualizováni podle heroic guidů <a href="https://www.method.gg/guides/the-venomous-abyss">Method.gg</a> a <a href="https://raidstrats.gg">Raidstrats.gg</a> (Consequence US); Coiled Altar a Ula'tek zatím Method guide nemají — jejich sekce vychází z PTR přehledů. Další zdroje:
   <a href="https://expcarry.com/venomous-abyss-raid-overview-wow-midnight">ExpCarry</a> ·
@@ -1549,8 +1456,9 @@ a:focus-visible, .node:focus-visible { outline: 2px solid var(--jade); outline-o
   Nymrissa Wavecaller (lair) podle <a href="https://www.wowhead.com/guide/midnight/nymrissa-wavecaller-tidebound-grotto-lair-boss-strategy-rewards">Wowhead</a>,
   <a href="https://skycoach.gg/blog/wow/articles/nymrissa-wavecaller-lair-boss-guide">Skycoach</a> a
   <a href="https://mythic-store.com/blog/nymrissa-wavecaller-guide-tidebound-grotto-lair-strategy-and-rewards">Mythic Store</a>.</p>
+  <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
-</div>
+</div><!-- /.container -->
 
 <script>
 (function () {
