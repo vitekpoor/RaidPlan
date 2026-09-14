@@ -95,6 +95,8 @@ tr.mplus td:first-child { color: var(--mplus); }
 .val.up0 { color: var(--neg); font-weight: 400; }
 .hint { color: var(--muted); font-size: 13px; }
 .bosshead { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 10px; }
+.bossblock { scroll-margin-top: 120px; }
+.bossblock:first-of-type .bosshead { margin-top: 6px; }
 .bosshead .num { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
 .bosshead.mplus h2 { color: var(--mplus); }
 .divider { display: flex; align-items: center; gap: 14px; margin: 38px 0 6px; color: var(--mplus); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
@@ -112,6 +114,13 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile.all { align-items: center; justify-content: center; color: var(--muted); border-style: dashed; }
 .ptile.all.active { color: var(--accent); }
 .pick { color: var(--muted); font-style: italic; padding: 6px 0 12px; }
+.ptile.boss .pname { color: var(--raid); }
+.ptile.boss.mplus .pname { color: var(--mplus); }
+.ptile.boss.mplus.active { border-color: var(--mplus); background: var(--mplus-soft); }
+.ptile.boss .num { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; margin-right: 6px; }
+.ptile.boss.empty { opacity: .55; }
+.pgrid .gridhead { grid-column: 1 / -1; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; margin: 6px 0 -2px; }
+.pgrid .gridhead.mplus { color: var(--mplus); }
 
 /* Top Gear – "best overall": nejlepší kombinace z nejlepších raid + M+ itemů */
 .best { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; font-size: 13.5px;
@@ -221,7 +230,7 @@ tr.mplus td:first-child { color: var(--mplus); }
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
 
   var $ = function (s) { return document.querySelector(s); };
-  var state = { view: "players", unit: "pct", kind: "all", player: null, rows: [], items: {}, bosses: [], vault: {}, sort: { key: "diff", dir: -1 } };
+  var state = { view: "players", unit: "pct", kind: "all", player: null, boss: null, rows: [], items: {}, bosses: [], vault: {}, sort: { key: "diff", dir: -1 } };
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
   try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
   if (!LIST_KINDS[state.kind]) state.kind = "all";
@@ -553,13 +562,40 @@ tr.mplus td:first-child { color: var(--mplus); }
       });
       return html + "</tbody></table></div>";
     }
-    var html = "";
-    if (kindOk("raid")) raidKeys.forEach(function (k) { html += group(k); });
-    if (kindOk("mplus")) {
-      html += '<div class="divider">Mythic+ dungeony</div>';
-      mKeys.forEach(function (k) { html += group(k); });
+    // mřížka bossů / dungeonů – klik rozbalí tabulku itemů pod mřížkou
+    function tile(k, kind) {
+      var b = state.bossById[k]; var e = byBoss[k];
+      var title = b ? b.name : (k.charAt(0) === "?" ? (kind === "mplus" ? "Neznámý dungeon" : "Neznámý boss") : (kind === "mplus" ? "Dungeon " : "Boss ") + k);
+      var n = e ? Object.keys(e.items).length : 0;
+      var top = null;
+      if (e) Object.keys(e.items).forEach(function (iid) { e.items[iid].forEach(function (r) { if (!top || (metric(r) || 0) > (metric(top) || 0)) top = r; }); });
+      var sub = n ? n + (n === 1 ? " item" : n < 5 ? " itemy" : " itemů") + " se zájemci" + (top ? ' · <span class="val ' + cls(top) + '">' + fmtVal(top) + "</span> " + esc(top.player) : "") : "nikdo nic";
+      var active = state.boss === k || state.boss === "*";
+      return '<button class="ptile boss ' + kind + (active ? " active" : "") + (n ? "" : " empty") + '" data-boss="' + esc(k) + '">' +
+        '<span class="pname">' + (b && b.num ? '<span class="num">' + esc(b.num) + "</span>" : "") + esc(title) + "</span>" +
+        '<span class="psub">' + sub + "</span></button>";
     }
-    return html || '<p class="empty">Zatím žádné simy.</p>';
+    var q = $("#q").value.trim();
+    var showRaid = raidKeys.filter(function (k) { return !q || byBoss[k]; });
+    var showM = mKeys.filter(function (k) { return !q || byBoss[k]; });
+    var visible = (kindOk("raid") ? showRaid : []).concat(kindOk("mplus") ? showM : []);
+    if (!visible.length) return '<p class="empty">' + (q ? "Hledání nic nenašlo." : "Zatím žádné simy.") + "</p>";
+    var withItems = visible.filter(function (k) { return byBoss[k]; });
+    if (q && withItems.length === 1) state.boss = withItems[0];   // jediný výsledek hledání rovnou rozbalit
+    var html = '<div class="pgrid">';
+    if (kindOk("raid") && showRaid.length) {
+      html += '<div class="gridhead">Raid</div>';
+      showRaid.forEach(function (k) { html += tile(k, "raid"); });
+    }
+    if (kindOk("mplus") && showM.length) {
+      html += '<div class="gridhead mplus">Mythic+ dungeony</div>';
+      showM.forEach(function (k) { html += tile(k, "mplus"); });
+    }
+    html += '<button class="ptile all' + (state.boss === "*" ? " active" : "") + '" data-boss="*">' + (state.boss === "*" ? "Sbalit všechny" : "Rozbalit všechny") + "</button></div>";
+    var open = state.boss === "*" ? visible : (state.boss && visible.indexOf(state.boss) >= 0 ? [state.boss] : []);
+    if (!open.length) html += '<p class="pick">Klikni na bosse nebo dungeon – rozbalí se itemy a kdo je chce.</p>';
+    open.forEach(function (k) { html += '<div class="bossblock">' + group(k) + "</div>"; });
+    return html;
   }
 
   function renderItems() {
@@ -594,6 +630,14 @@ tr.mplus td:first-child { color: var(--mplus); }
         state.player = n === "*" ? (state.player === "*" ? null : "*") : (state.player === n ? null : n);
         render();
         if (state.player && state.player !== "*") { var card = $("#view details.card"); if (card) card.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      });
+    });
+    v.querySelectorAll(".ptile[data-boss]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var k = b.getAttribute("data-boss");
+        state.boss = k === "*" ? (state.boss === "*" ? null : "*") : (state.boss === k ? null : k);
+        render();
+        if (state.boss && state.boss !== "*") { var blk = $("#view .bossblock"); if (blk) blk.scrollIntoView({ behavior: "smooth", block: "start" }); }
       });
     });
     v.querySelectorAll("th.sortable").forEach(function (th) {
