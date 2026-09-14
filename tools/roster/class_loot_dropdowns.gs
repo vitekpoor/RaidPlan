@@ -760,21 +760,28 @@ function colorRosterNames_(rs) {
 function getRoster_() {
   var rs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ROSTER_SHEET_NAME);
   if (!rs || rs.getLastRow() < 2) return null;
-  var vals = rs.getRange(2, 1, rs.getLastRow() - 1, 8).getValues();
+  var width = Math.max(rs.getLastColumn(), ROSTER_HEADER.length);
+  // sloupce podle hlavičky (v listu může být prázdný sloupec navíc, např. E před "Alt char");
+  // když hlavička chybí, platí pořadí ROSTER_HEADER
+  var head = rs.getRange(1, 1, 1, width).getValues()[0].map(function (h) { return String(h || "").trim().toLowerCase(); });
+  var col = {};
+  ROSTER_HEADER.forEach(function (h, i) { var j = head.indexOf(h.toLowerCase()); col[h] = j >= 0 ? j : i; });
+  var vals = rs.getRange(2, 1, rs.getLastRow() - 1, width).getValues();
   var players = [];
   vals.forEach(function (v) {
-    var player = String(v[0] || "").trim();
-    var main = String(v[1] || "").trim();
+    var g = function (h) { return String(v[col[h]] == null ? "" : v[col[h]]).trim(); };
+    var player = g("Hráč");
+    var main = g("Main char");
     if (!player || !main) return;
-    var mainRole = String(v[3] || "").trim().toLowerCase();
+    var mainRole = g("Main role").toLowerCase();
     players.push({
       player: player,
       main: main,
-      mainClass: String(v[2] || "").trim(),
+      mainClass: g("Main classa"),
       mainRole: mainRole,
-      alt: String(v[4] || "").trim(),
-      altClass: String(v[5] || "").trim(),
-      altRole: String(v[6] || "").trim().toLowerCase() || mainRole
+      alt: g("Alt char"),
+      altClass: g("Alt classa"),
+      altRole: g("Alt role").toLowerCase() || mainRole
     });
   });
   return players;
@@ -1934,8 +1941,8 @@ function simFormPage_() {
 }
 
 /**
- * Odeslání z webového formuláře: data = { simc }. Postavu najde podle jména
- * (a serveru) v SimC stringu mezi postavami wowaudit týmu a zapíše řádek do
+ * Odeslání z webového formuláře: data = { simc }. Postavu ověří podle jména
+ * (a classy) v SimC stringu proti listu "Roster" (main i alt) a zapíše řádek do
  * fronty. Vrací { ok, message }.
  */
 function submitSimWeb(data) {
@@ -1946,7 +1953,7 @@ function submitSimWeb(data) {
     var p = parseSimc_(data.simc);
     if (!p.ok) return { ok: false, message: "⚠ " + p.error };
 
-    var found = findWowauditCharacter_(p.name, p.server);
+    var found = findRosterCharacter_(p.name, p.cls);
     if (found.error) return { ok: false, message: "⚠ " + found.error };
     var ch = found.character;
 
@@ -1996,7 +2003,44 @@ function submitSimWeb(data) {
   }
 }
 
+/** Classa ze SimC ("deathknight") vs. z rosteru ("Death Knight") → stejný klíč. */
+function simClassKey_(cls) {
+  return String(cls || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
 /**
+ * Ověří postavu ze SimC proti listu "Roster" (main i alt char, bez diakritiky a velikosti
+ * písmen; stejné jméno u mainu i altu rozhodne classa). wowaudit ID se jen zkusí dohledat
+ * (nepovinné – upload do wowaudit si ho případně dohledá sám). Vrací { character } nebo { error }.
+ */
+function findRosterCharacter_(name, cls) {
+  var roster = getRoster_();
+  if (!roster) return { error: "List „" + ROSTER_SHEET_NAME + "“ je prázdný nebo neexistuje – napiš raid leaderovi." };
+  var key = simNameKey_(name), ck = simClassKey_(cls);
+  var hits = [];
+  roster.forEach(function (r) {
+    if (r.main && simNameKey_(r.main) === key) hits.push({ name: r.main, cls: r.mainClass, role: r.mainRole, player: r.player, which: "main" });
+    if (r.alt && simNameKey_(r.alt) === key) hits.push({ name: r.alt, cls: r.altClass, role: r.altRole, player: r.player, which: "alt" });
+  });
+  if (!hits.length) {
+    return { error: "Postava „" + name + "“ není v rosteru (list Roster). Pošli string z postavy, se kterou raiduješ, nebo napiš raid leaderovi, ať ji do rosteru doplní." };
+  }
+  var byClass = hits.filter(function (h) { return !ck || !h.cls || simClassKey_(h.cls) === ck; });
+  if (!byClass.length) {
+    return { error: "Postava „" + name + "“ je v rosteru jako " + hits.map(function (h) { return h.cls; }).join(" / ") +
+      ", ale string je z classy " + cls + ". Pošli string ze správné postavy, nebo ať raid leader opraví roster." };
+  }
+  var h = byClass[0];
+  var id = 0;
+  try {
+    var wk = simNameKey_(h.name);
+    wowauditCharacters_(false).forEach(function (c) { if (!id && simNameKey_(c.name) === wk) id = c.id; });
+  } catch (err) { /* wowaudit je nepovinný */ }
+  return { character: { name: h.name, id: id, role: h.role, player: h.player, cls: h.cls } };
+}
+
+/**
+ * (Už se pro formulář nepoužívá – postava se ověřuje proti rosteru, viz findRosterCharacter_.)
  * Najde postavu wowaudit týmu podle jména ze SimC (bez diakritiky/velikosti
  * písmen); při shodě více jmen rozhodne server (SimC `server=drakthul` vs.
  * wowaudit realm "Drak'thul"). Vrací { character } nebo { error }.
@@ -2332,7 +2376,7 @@ var SIM_FORM_HTML_ = '<!DOCTYPE html>\
   #detected b { color:#d9e4de; }\
 </style></head><body><div class="card">\
 <h1>⚔️ Sim pro loot</h1>\
-<p class="hint">Vlož sem celý text z <code>/simc</code>. Postavu poznáme automaticky, sim proběhne sám (raid i Mythic+ Droptimizer / QE Live, itemy jako plně upgradnuté Myth 6/6) a upgrady uvidíš na stránce Simy. Když před <code>/simc</code> otevřeš <b>Great Vault</b>, uvidíš tam i porovnání vaultu s raidem.</p>\
+<p class="hint">Vlož sem celý text z <code>/simc</code>. Postavu poznáme automaticky (musí být v rosteru guildy), sim proběhne sám (raid i Mythic+ Droptimizer / QE Live, itemy jako plně upgradnuté Myth 6/6) a upgrady uvidíš na stránce Simy. Když před <code>/simc</code> otevřeš <b>Great Vault</b>, uvidíš tam i porovnání vaultu s raidem.</p>\
 <textarea id="simc" placeholder="Sem vlož SimC string (Ctrl+V)…" spellcheck="false" autofocus></textarea>\
 <div id="detected"></div>\
 <button id="send">Odeslat</button>\
