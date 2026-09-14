@@ -4,12 +4,16 @@ sim_runner.py – automatický Raidbots Droptimizer pro frontu "Sim fronta".
 
 Co dělá (jeden spuštěný příkaz, pak se jen čeká):
   1. stáhne čekající řádky z Google Sheets (JSON API web appu, ?p=simapi),
-  2. pro každý řádek otevře v Chromiu nový panel s Raidbots Droptimizerem,
-     vloží SimC string, vybere zdroj ("Season 2 Raids") a obtížnost
-     ("Mythic"), klikne Run – až `parallel` simů najednou (výchozí 10),
+  2. pro každý řádek otevře v Chromiu DVA panely s Raidbots Droptimizerem:
+     raid ("Season 2 Raids", Mythic) a Mythic+ ("Mythic+ Dungeons", All Dungeons,
+     "+10 Vault"), oba s "Upgrade up to" Myth 6/6 – takže se raidové i dungeonové
+     itemy srovnávají na stejném (maximálním) ilvl. Vloží SimC string, klikne Run –
+     až `parallel` simů najednou (výchozí 10),
   3. hlídá všechny běžící reporty (…/simbot/report/<id>) a jak který doběhne,
-  4. nahlásí ho zpět do Sheets – Apps Script ho nahraje do wowaudit
-     (stejná funkce jako dialog "Simy → Zpracovat frontu").
+  4. nahlásí ho zpět do Sheets (action=done&kind=raid|mplus) – Apps Script
+     zapíše výsledky do listu "Sim výsledky" (stránka Simy) a raidový report
+     zkusí nahrát do wowaudit. Řádek je ✅, až když jsou hotové oba reporty;
+     když jeden selže, při dalším běhu se dosimuje jen ten chybějící.
 
 Kolik simů Raidbots pustí najednou, určuje účet (Premium tier); když další
 sim odmítne, runner řádek vrátí do fronty a dál posílá jen tolik, kolik
@@ -17,8 +21,8 @@ skutečně běží.
 
 Healery (holy/disc/resto/mistweaver/preservation) Droptimizer neumí – ty
 runner prohání QE Live Upgrade Finderem (questionablyepic.com): vybere spec,
-Import Gear → SimC, obtížnost, GO!; report je hotový hned a jde do wowaudit
-stejnou cestou (wowaudit QE odkazy bere).
+Import Gear → SimC, obtížnost (raid Mythic, M+ +10), GO!; report je hotový hned
+a obsahuje raid i dungeony najednou (kind=qe = oba).
 
 Řádky se stavem ⚠ chyba, kde chybu zapsal sim_runner, se při dalším běhu
 zkusí znovu automaticky.
@@ -36,10 +40,12 @@ Použití (v tools/roster/):
 Online (bez PC): .github/workflows/sims.yml spouští tenhle skript v GitHub Actions
 každou hodinu a na kliknutí (menu Simy → Spustit simy online, tlačítko na hubu).
 Konfigurace přes env: SIM_WEBAPP_URL, SIM_API_TOKEN, SIM_STORAGE_STATE (cesta
-k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE. Místo (nebo vedle)
+k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE, SIM_MPLUS=0 (vypne
+druhý, dungeonový Droptimizer). Místo (nebo vedle)
 uložené session jde použít RAIDBOTS_EMAIL + RAIDBOTS_PASSWORD – když skript zjistí,
 že není přihlášený, přihlásí se e-mailem a heslem na https://www.raidbots.com/auth.
   python sim_runner.py --parallel 3 # max 3 simy najednou (výchozí 10)
+  python sim_runner.py --no-mplus   # jen raidový Droptimizer (bez Mythic+ dungeonů)
   python sim_runner.py --dry-run    # všechno kromě kliknutí na Run (kontrola nastavení)
   python sim_runner.py --row 7      # jen konkrétní řádek listu
   python sim_runner.py --headless   # bez okna prohlížeče
@@ -82,6 +88,10 @@ DEFAULTS = {
     "source": "Season 2 Raids",
     "difficulty": "Mythic",
     "upgrade": "max",        # Droptimizer "Upgrade up to": max = plně upgradnuté (Myth 6/6), base = bez upgradů
+    "mplus": True,           # druhý Droptimizer: Mythic+ dungeony (kind "mplus")
+    "mplus_source": "Mythic+ Dungeons",
+    "mplus_dungeons": "All Dungeons",   # dlaždice pod zdrojem (výchozí vybraná)
+    "mplus_difficulty": "+10 Vault",    # Myth track (318) – s upgrade "max" = Myth 6/6 jako raid
     "parallel": 10,          # kolik simů posílat najednou (každý ve vlastním panelu)
     "sim_timeout_min": 60,   # maximální čekání na jeden sim
     "poll_seconds": 15,
@@ -139,7 +149,16 @@ def load_config():
         cfg["parallel"] = int(os.environ["SIM_PARALLEL"])
     if os.environ.get("SIM_UPGRADE", "").strip():
         cfg["upgrade"] = os.environ["SIM_UPGRADE"].strip()
+    if os.environ.get("SIM_MPLUS", "").strip():
+        cfg["mplus"] = os.environ["SIM_MPLUS"].strip().lower() not in ("0", "false", "no", "off")
     return cfg
+
+
+KINDS = {"raid": "raid", "mplus": "M+", "qe": "raid+M+"}
+
+
+def kind_label(kind):
+    return KINDS.get(kind, kind)
 
 
 def cmd_setup(cfg):
@@ -150,6 +169,9 @@ def cmd_setup(cfg):
     source = input(f"Raidbots zdroj [{cfg['source']}]: ").strip() or cfg["source"]
     diff = input(f"Obtížnost [{cfg['difficulty']}]: ").strip() or cfg["difficulty"]
     par = input(f"Simů najednou [{cfg['parallel']}]: ").strip() or cfg["parallel"]
+    mp = input(f"Druhý Droptimizer na Mythic+ dungeony (a/n) [{'a' if cfg.get('mplus', True) else 'n'}]: ").strip().lower()
+    if mp:
+        cfg["mplus"] = mp.startswith(("a", "y", "1"))
     if not url or not token:
         sys.exit("Chybí URL nebo token.")
     url = url.split("?")[0]
@@ -202,12 +224,13 @@ class SheetApi:
     def queue(self):
         return self.call("queue")["rows"]
 
-    def running(self, row, character, url):
-        return self.call("running", row=row, character=character, url=url)
+    def running(self, row, character, url, kind="raid"):
+        return self.call("running", row=row, character=character, url=url, kind=kind)
 
-    def done(self, row, character, url):
+    def done(self, row, character, url, kind="raid"):
+        """kind: raid | mplus (Raidbots) | qe (QE Live – raid i dungeony v jednom reportu)."""
         r = requests.get(self.url, params={"p": "simapi", "token": self.token, "action": "done",
-                                           "row": row, "character": character, "url": url},
+                                           "row": row, "character": character, "url": url, "kind": kind},
                          timeout=120, allow_redirects=True)
         r.raise_for_status()
         return r.json()
@@ -365,10 +388,20 @@ class Raidbots:
     def load_simc(self, page, simc):
         page.goto(DROPTIMIZER_URL, wait_until="domcontentloaded")
         self.settle(page)
+        # Raidbots si pamatuje minulý vstup (profil / storage state), takže na stránce
+        # může být karta a seznam zdrojů ještě od předchozí postavy – a když je to ta
+        # samá postava (nebo se jmenuje jako účet v hlavičce), kontrola jména ji
+        # nerozezná. Proto editor nejdřív vyprázdníme a počkáme, až stará karta zmizí.
+        if page.locator("#instanceList").count():
+            self.set_editor(page, "")
+            try:
+                page.wait_for_function("() => !document.querySelector('#instanceList')", timeout=15000)
+            except Exception:
+                log("   (stará karta postavy nezmizela, pokračuji)")
+            page.wait_for_timeout(500)
         self.set_editor(page, simc)
-        # Raidbots si pamatuje minulý vstup, takže seznam zdrojů může být na stránce
-        # ještě od předchozí postavy. Čekáme, až karta postavy (mimo editor) ukáže
-        # jméno z vloženého stringu a zmizí "Loading character…".
+        # Čekáme, až karta postavy (mimo editor) ukáže jméno z vloženého stringu,
+        # existuje seznam zdrojů a zmizí "Loading character…".
         name = simc_name(simc)
         deadline = time.time() + 60
         last = ""
@@ -449,7 +482,18 @@ class Raidbots:
             raise RuntimeError(f"„Upgrade up to“ se nepřepnulo na max (ukazuje „{shown}“)")
         log(f"   upgrade: {shown}")
 
-    def configure(self, page):
+    def configure(self, page, kind="raid"):
+        """kind "raid": zdroj + obtížnost z configu. kind "mplus": zdroj "Mythic+ Dungeons",
+        dlaždice "All Dungeons", obtížnost "+10 Vault" (Myth track). Přepnutí zdroje
+        resetuje "Upgrade up to" na "Base level", proto se max nastavuje až po dlaždicích."""
+        if kind == "mplus":
+            self.select_tile(page, self.cfg["mplus_source"], "zdroj")
+            dung = self.cfg.get("mplus_dungeons")
+            if dung and self.tile(page, dung).count():
+                self.select_tile(page, dung, "dungeony")
+            self.select_tile(page, self.cfg["mplus_difficulty"], "obtížnost")
+            self.set_upgrade_level(page)
+            return
         self.select_tile(page, self.cfg["source"], "zdroj")
         self.select_tile(page, self.cfg["difficulty"], "obtížnost")
         self.set_upgrade_level(page)
@@ -561,6 +605,13 @@ class Raidbots:
             page.wait_for_timeout(600)
         if btn.count() and btn.get_attribute("aria-pressed") != "true":
             raise RuntimeError(f"QE Live: nepodařilo se vybrat obtížnost „{diff}“")
+        # Mythic+ klíč (+10 = Myth track) a typy "Upgraded"/"Bonus Roll" (dungeonový item
+        # na 334 = Myth 6/6 je v QE pod dropType "bonus"); ve výchozím stavu zapnuté, jen pojistka
+        for label in (self.cfg.get("qe_mplus_key", "+10"), "Bonus Roll", "Upgraded"):
+            t = page.locator("button", has_text=re.compile(r"^\s*" + re.escape(label) + r"\s*$")).first
+            if t.count() and t.get_attribute("aria-pressed") == "false":
+                t.click()
+                page.wait_for_timeout(500)
         if dry_run:
             return None
         # 4) GO! – výpočet je v prohlížeči, URL se hned změní na /live/upgradereport/<id>
@@ -633,7 +684,7 @@ def qe_row(rb, api, row, dry_run):
             log(f"   {character}: dry-run QE Live ({qe_spec}) – import OK, GO! nekliknuto")
             return "dry"
         log(f"   {character}: QE Live report {url}")
-        res = api.done(row["row"], character, url)
+        res = api.done(row["row"], character, url, "qe")
         log(f"   {character}: {res.get('message') or res}")
         return "done" if res.get("ok") else "error"
     except Exception as err:  # noqa: BLE001
@@ -644,42 +695,44 @@ def qe_row(rb, api, row, dry_run):
         page.close()
 
 
-def submit_row(rb, api, row, dry_run):
-    """Otevře panel, nahraje SimC, nastaví a klikne Run. Vrací dict aktivního simu nebo None."""
+def submit_row(rb, api, row, kind, dry_run):
+    """Otevře panel, nahraje SimC, nastaví (raid / mplus) a klikne Run. Vrací dict aktivního simu nebo None."""
     character = row["character"]
+    tag = f"{character} [{kind_label(kind)}]"
     page = rb.new_tab()
     try:
         rb.load_simc(page, row["simc"])
-        rb.configure(page)
+        rb.configure(page, kind)
         if dry_run:
-            rb.screenshot(page, f"dryrun_{strip_accents(character)}")
-            log(f"   {character}: dry-run – nastavení OK, Run nekliknuto")
+            rb.screenshot(page, f"dryrun_{kind}_{strip_accents(character)}")
+            log(f"   {tag}: dry-run – nastavení OK, Run nekliknuto")
             page.close()
             return None
         report_id, url = rb.run(page)
-        log(f"   {character}: spuštěno {url}")
+        log(f"   {tag}: spuštěno {url}")
         try:
-            api.running(row["row"], character, url)
+            api.running(row["row"], character, url, kind)
         except Exception as err:  # noqa: BLE001
             log(f"   (stav 🔄 se nezapsal: {err})")
-        return {"row": row, "page": page, "id": report_id, "url": url,
+        return {"row": row, "kind": kind, "page": page, "id": report_id, "url": url,
                 "deadline": time.time() + rb.cfg["sim_timeout_min"] * 60, "state": ""}
     except SubmitLimit:
         page.close()
         raise
     except Exception as err:  # noqa: BLE001
-        rb.screenshot(page, f"error_{strip_accents(character)}")
+        rb.screenshot(page, f"error_{kind}_{strip_accents(character)}")
         page.close()
-        fail_row(api, row, str(err).splitlines()[0][:300])
+        fail_row(api, row, f"[{kind_label(kind)}] " + str(err).splitlines()[0][:300])
         return None
 
 
 def finish_sim(rb, api, sim):
     row, character = sim["row"], sim["row"]["character"]
-    log(f"   {character}: sim hotový, nahrávám do wowaudit…")
+    tag = f"{character} [{kind_label(sim['kind'])}]"
+    log(f"   {tag}: sim hotový, zapisuji výsledky…")
     try:
-        res = api.done(row["row"], character, sim["url"])
-        log(f"   {character}: {res.get('message') or res}")
+        res = api.done(row["row"], character, sim["url"], sim["kind"])
+        log(f"   {tag}: {res.get('message') or res}")
         ok = bool(res.get("ok"))
     except Exception as err:  # noqa: BLE001
         log(f"   ⚠ {character}: upload selhal: {err}")
@@ -701,8 +754,9 @@ def cmd_run(cfg, args):
     log(f"Ve frontě: {len(rows)} řádků: " + ", ".join(f"{r['character']} ({r['spec']})" for r in rows))
 
     results = {}
-    todo = deque()
+    todo = deque()   # (row, kind) – raid i M+ Droptimizer za každou postavu; hotové reporty se přeskočí
     healers = []
+    want_mplus = bool(cfg.get("mplus", True))
     for row in rows:
         if not row["simc"].strip():
             fail_row(api, row, "prázdný SimC string")
@@ -710,7 +764,12 @@ def cmd_run(cfg, args):
         elif row["spec"].lower() in HEALER_SPECS:
             healers.append(row)
         else:
-            todo.append(row)
+            kinds = [k for k in ("raid", "mplus") if (k == "raid" or want_mplus) and not row.get("report_" + k)]
+            if not kinds:
+                log(f"   {row['character']}: oba reporty už existují, nic k simování (řádek {row['row']})")
+                continue
+            for k in kinds:
+                todo.append((row, k))
     if not todo and not healers:
         log("Hotovo: " + ", ".join(f"{k}: {v}" for k, v in results.items()))
         return
@@ -736,16 +795,17 @@ def cmd_run(cfg, args):
             log(f"▶ {row['character']} ({row['spec']}) – řádek {row['row']} – healer → QE Live")
             results[rkey(row)] = qe_row(rb, api, row, args.dry_run)
         if todo:
-            log(f"Posílám až {parallel} simů najednou.")
+            log(f"Posílám až {parallel} simů najednou ({'raid + M+' if want_mplus else 'jen raid'} Droptimizer za postavu).")
         while todo or active:
             # 1) doplnit běžící simy do limitu
             while todo and len(active) < parallel:
-                row = todo.popleft()
-                log(f"▶ {row['character']} ({row['spec']}) – řádek {row['row']}")
+                row, kind = todo.popleft()
+                key = f"{rkey(row)} {kind_label(kind)}"
+                log(f"▶ {row['character']} ({row['spec']}) – řádek {row['row']} – {kind_label(kind)}")
                 try:
-                    sim = submit_row(rb, api, row, args.dry_run)
+                    sim = submit_row(rb, api, row, kind, args.dry_run)
                 except SubmitLimit as lim:
-                    todo.appendleft(row)
+                    todo.appendleft((row, kind))
                     parallel = max(1, len(active))
                     log(f"   Raidbots nepustil další sim ({lim}); dál jedu s {parallel} najednou.")
                     if not active:
@@ -755,9 +815,9 @@ def cmd_run(cfg, args):
                 if sim:
                     active.append(sim)
                 elif args.dry_run:
-                    results[rkey(row)] = "dry"
+                    results[key] = "dry"
                 else:
-                    results[rkey(row)] = "error"
+                    results[key] = "error"
             if not active:
                 continue
             # 2) zkontrolovat běžící
@@ -765,24 +825,26 @@ def cmd_run(cfg, args):
             still = []
             for sim in active:
                 ch = sim["row"]["character"]
+                key = f"{rkey(sim['row'])} {kind_label(sim['kind'])}"
+                tagk = f"[{kind_label(sim['kind'])}] "
                 if rb.report_ready(sim["id"]):
-                    results[rkey(sim["row"])] = finish_sim(rb, api, sim)
+                    results[key] = finish_sim(rb, api, sim)
                     continue
                 failed = rb.report_failed(sim["page"])
                 if failed:
-                    rb.screenshot(sim["page"], f"simfail_{strip_accents(ch)}")
+                    rb.screenshot(sim["page"], f"simfail_{sim['kind']}_{strip_accents(ch)}")
                     sim["page"].close()
-                    fail_row(api, sim["row"], f"Raidbots hlásí chybu simulace ({failed}) {sim['url']}")
-                    results[rkey(sim["row"])] = "error"
+                    fail_row(api, sim["row"], tagk + f"Raidbots hlásí chybu simulace ({failed}) {sim['url']}")
+                    results[key] = "error"
                     continue
                 if time.time() > sim["deadline"]:
                     sim["page"].close()
-                    fail_row(api, sim["row"], f"sim nedoběhl do {cfg['sim_timeout_min']} minut {sim['url']}")
-                    results[rkey(sim["row"])] = "error"
+                    fail_row(api, sim["row"], tagk + f"sim nedoběhl do {cfg['sim_timeout_min']} minut {sim['url']}")
+                    results[key] = "error"
                     continue
                 state = rb.job_state(sim["id"])
                 if state and state != sim["state"]:
-                    log(f"   {ch}: {state}")
+                    log(f"   {ch} {tagk}: {state}")
                     sim["state"] = state
                 still.append(sim)
             active = still
@@ -802,12 +864,15 @@ def main():
     ap.add_argument("--export", nargs="?", const=str(HERE / "raidbots_state.json"), metavar="FILE",
                     help="(login) po přihlášení uložit cookies/localStorage do souboru pro GitHub Actions")
     ap.add_argument("--dry-run", action="store_true", help="vše kromě kliknutí na Run Droptimizer")
+    ap.add_argument("--no-mplus", action="store_true", help="jen raidový Droptimizer, bez Mythic+ dungeonů")
     ap.add_argument("--headless", action="store_true", help="bez okna prohlížeče")
     ap.add_argument("--row", type=int, help="zpracovat jen řádek listu N")
     ap.add_argument("--max", type=int, help="nejvýše N řádků")
     ap.add_argument("--keep-open", action="store_true", help="po skončení nechat prohlížeč otevřený")
     args = ap.parse_args()
     cfg = load_config()
+    if args.no_mplus:
+        cfg["mplus"] = False
     if args.command == "setup":
         cmd_setup(cfg)
     elif args.command == "login":
