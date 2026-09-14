@@ -101,6 +101,16 @@ tr.mplus td:first-child { color: var(--mplus); }
 .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
 .empty { color: var(--muted); font-style: italic; padding: 10px 16px; }
 
+/* Top Gear – "best overall": nejlepší kombinace z nejlepších raid + M+ itemů */
+.best { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; font-size: 13.5px;
+        background: var(--surface); border-top: 1px solid var(--line); border-left: 3px solid var(--ink-strong); }
+.best .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-strong); font-weight: 700; }
+.best .verdict { font-weight: 600; color: var(--ink-strong); }
+.best .verdict .val { font-size: 15px; }
+.best .vs, .best .when { color: var(--muted); font-size: 12.5px; }
+.best .when a { color: var(--muted); }
+.best .chips { gap: 4px; }
+
 /* Great Vault – řádek nahoře v kartě hráče: vzít item z vaultu, nebo si nechat bonus roll na raid? */
 .vault { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; font-size: 13.5px;
          background: var(--surface); border-top: 1px solid var(--line); border-left: 3px solid var(--gold); }
@@ -147,7 +157,7 @@ tr.mplus td:first-child { color: var(--mplus); }
   <h4><em>Loot</em> simy</h4>
 </div>
 <p class="lead">Itemy jako plně upgradnuté (Myth 6/6) – <span class="kind raid">Raid</span> Mythic i <span class="kind mplus">M+</span> dungeony (+10 vault track) na stejném ilvl, takže se dají srovnávat.
-  Raidbots pro DPS, QE Live pro healery – procenta obou rolí nesrovnávej mezi sebou. Kdo před <code>/simc</code> otevřel Great Vault, má nahoře i verdikt <b>vault vs. bonus roll</b>.</p>
+  Raidbots pro DPS, QE Live pro healery – procenta obou rolí nesrovnávej mezi sebou. Kdo před <code>/simc</code> otevřel Great Vault, má nahoře i verdikt <b>vault vs. bonus roll</b>; řádek <b>Best overall</b> je Top Gear z nejlepších raid + M+ itemů najednou.</p>
 
 <div class="controls">
   <span class="seg" id="kindseg">
@@ -184,7 +194,8 @@ tr.mplus td:first-child { color: var(--mplus); }
   var VAULT_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(VAULT_TAB);
   var ITEMS_URL = "loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
-  var KIND_LABEL = { raid: "Raid", mplus: "M+" };
+  var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear" };
+  var LIST_KINDS = { raid: 1, mplus: 1 };   // do tabulek jdou jen raid a M+; Top Gear = souhrnný řádek v kartě hráče
   var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
                   legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
                   one_hand: "1H zbraň", two_hand: "2H zbraň", ranged: "ranged", token: "tier token", relic: "relic" };
@@ -201,7 +212,7 @@ tr.mplus td:first-child { color: var(--mplus); }
   var state = { view: "players", unit: "pct", kind: "all", rows: [], items: {}, bosses: [], vault: {}, sort: { key: "diff", dir: -1 } };
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
   try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
-  if (!KIND_LABEL[state.kind]) state.kind = "all";
+  if (!LIST_KINDS[state.kind]) state.kind = "all";
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function num(s) { if (s == null || s === "") return null; var v = parseFloat(String(s).replace(/\s/g, "").replace(",", ".")); return isNaN(v) ? null : v; }
@@ -274,7 +285,7 @@ tr.mplus td:first-child { color: var(--mplus); }
 
   function showStatus() {
     var latest = null; state.rows.forEach(function (r) { if (r.time && (!latest || r.time > latest)) latest = r.time; });
-    var players = {}, n = { raid: 0, mplus: 0 }; state.rows.forEach(function (r) { players[r.player] = 1; n[r.kind]++; });
+    var players = {}, n = { raid: 0, mplus: 0, topgear: 0 }; state.rows.forEach(function (r) { players[r.player] = 1; n[r.kind]++; });
     var vaults = Object.keys(state.vault).length;
     var status = $("#status");
     status.textContent = Object.keys(players).length + " postav · " + n.raid + " raid + " + n.mplus + " M+ řádků" + (vaults ? " · " + vaults + " vaultů" : "") +
@@ -291,20 +302,24 @@ tr.mplus td:first-child { color: var(--mplus); }
       var bossById = {}; bosses.forEach(function (b) { bossById[String(b.id)] = b; });
       state.items = items; state.bosses = bosses; state.bossById = bossById;
       state.rows = table.filter(function (r) { return r[idx["Postava"]]; }).map(function (r) {
-        var itemId = String(num(r[idx["Item ID"]]) || "");
+        var itemIdRaw = String(r[idx["Item ID"]] || "").trim();
+        var itemId = /\|/.test(itemIdRaw) ? itemIdRaw : String(num(itemIdRaw) || "");
         var lib = items[itemId] || {};
         var bossId = num(r[idx["Boss ID"]]);
-        var bossIds = bossId != null ? [bossId] : (lib.bosses || []);
         var spec = String(r[idx["Spec"]] || "").toLowerCase();
         var src = String(r[idx["Zdroj"]] || "");
         // "Původ" = Raid | M+ (starší řádky bez sloupce = raid); u QE řádků bez bosse rozhodne loot_items.json
         var origin = idx["Původ"] != null ? String(r[idx["Původ"]] || "").trim() : "";
-        var kind = origin === "M+" ? "mplus" : (origin ? "raid" : (lib.kind === "mplus" ? "mplus" : "raid"));
+        var kind = origin === "M+" ? "mplus" : origin === "Top Gear" ? "topgear" : (origin ? "raid" : (lib.kind === "mplus" ? "mplus" : "raid"));
+        // M+ řádky ze staršího parseru mají Boss ID -1 ("Mythic+ Dungeons") – dungeon vezmeme z loot_items.json
+        var bossName = r[idx["Boss"]] || "";
+        if (kind === "mplus" && !(bossId > 0) && lib.bosses && lib.bosses.length) { bossId = null; bossName = ""; }
+        var bossIds = bossId != null ? [bossId] : (lib.bosses || []);
         return {
           player: r[idx["Postava"]], spec: spec, role: HEALER_SPECS[spec] ? "heal" : "dps",
           src: src, unit: /QE/i.test(src) ? "HPS" : "DPS", kind: kind,
           report: r[idx["Report"]], time: parseDate(r[idx["Čas"]]),
-          bossIds: bossIds, boss: r[idx["Boss"]] || (bossIds.length && bossById[String(bossIds[0])] ? bossById[String(bossIds[0])].name : ""),
+          bossIds: bossIds, boss: bossName || (bossIds.length && bossById[String(bossIds[0])] ? bossById[String(bossIds[0])].name : ""),
           itemId: itemId, item: r[idx["Item"]] || lib.name || ("#" + itemId), icon: lib.icon || "",
           slot: r[idx["Slot"]] || lib.slot || "", ilvl: num(r[idx["ilvl"]]),
           base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]])
@@ -341,7 +356,7 @@ tr.mplus td:first-child { color: var(--mplus); }
   }
   function kindOk(k) { return state.kind === "all" || state.kind === k; }
   function passes(r) {
-    if (!kindOk(r.kind)) return false;
+    if (!LIST_KINDS[r.kind] || !kindOk(r.kind)) return false;
     var min = num($("#minv").value); if (min == null) min = 0;
     var v = metric(r); if (v == null) return false;
     if (!$("#showneg").checked && v <= 0) return false;
@@ -404,6 +419,29 @@ tr.mplus td:first-child { color: var(--mplus); }
       (stale ? '<span class="stale">⚠ z minulého týdne – pošli nový SimC string</span>' : "") + "</div>";
   }
 
+  // ---- Top Gear: best overall (nejlepší kombinace z nejlepších raid + M+ itemů) ----
+  function bestHtml(tg, playerRows) {
+    var byId = {};
+    playerRows.forEach(function (r) { var c = byId[r.itemId]; if (!c || (metric(r) || 0) > (metric(c) || 0)) byId[r.itemId] = r; });
+    var ids = String(tg.itemId || "").split("|").filter(Boolean);
+    var names = String(tg.item || "").split(" + ");
+    var chips = ids.map(function (id, i) {
+      var r = byId[id]; var lib = state.items[id] || {};
+      var name = (r && r.item) || lib.name || names[i] || ("#" + id);
+      var kind = r ? r.kind : (lib.kind === "mplus" ? "mplus" : (lib.bosses && lib.bosses.length ? "raid" : ""));
+      var where = r && r.boss ? " (" + r.boss + ")" : "";
+      return '<span class="chip" title="' + esc(name + where) + '">' + (kind ? kindBadge(kind) + " " : "") + esc(name) +
+        (r ? ' <span class="v">' + fmtVal(r) + "</span>" : "") + "</span>";
+    }).join("");
+    var v = metric(tg) || 0;
+    var verdict = v > 0
+      ? 'Všechny najednou: <span class="val ' + cls(tg) + '">' + fmtVal(tg) + "</span>" + (tg.base != null && tg.value != null ? ' <span class="vs">(' + Math.round(tg.base).toLocaleString("cs-CZ") + " → " + Math.round(tg.value).toLocaleString("cs-CZ") + " " + tg.unit + ")</span>" : "")
+      : "Žádná kombinace není lepší než současný gear.";
+    return '<div class="best"><span class="tag">🏆 Best overall</span><span class="verdict">' + verdict + "</span>" +
+      (ids.length ? '<span class="vs">· nejlepší kombinace ' + ids.length + (ids.length === 1 ? " itemu" : ids.length < 5 ? " itemů" : " itemů") + ' z raidu a M+:</span><span class="chips">' + chips + "</span>" : "") +
+      '<span class="when">' + (tg.time ? fmtDate(tg.time) : "") + (tg.report ? ' · <a href="' + esc(tg.report) + '" target="_blank" rel="noopener">Top Gear report</a>' : "") + "</span></div>";
+  }
+
   // ---- views ----
   function sectionHtml(kind, rows, report) {
     var html = '<div class="sect ' + kind + '"><div class="secthead">' + kindBadge(kind) + "<b>" + (kind === "raid" ? "Raid (Mythic)" : "Mythic+ dungeony (+10 vault → Myth 6/6)") + "</b>" +
@@ -425,9 +463,10 @@ tr.mplus td:first-child { color: var(--mplus); }
     var names = Object.keys(by).sort(function (a, b) { return a.localeCompare(b, "cs"); });
     var html = "";
     names.forEach(function (n) {
-      var g = by[n], a = g.any;
+      var g = by[n], a = g.rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
       var raidRows = g.rows.filter(function (r) { return r.kind === "raid"; });
       var mRows = g.rows.filter(function (r) { return r.kind === "mplus"; });
+      var tgRow = g.rows.filter(function (r) { return r.kind === "topgear"; })[0];
       var raidAny = raidRows[0], mAny = mRows[0];
       var shown = g.rows.filter(passes).sort(byMetricDesc);
       var links = [];
@@ -439,6 +478,7 @@ tr.mplus td:first-child { color: var(--mplus); }
         '<span class="meta">' + shown.length + " upgradů" + (mRows.length ? "" : " · M+ sim zatím není") + "</span></summary>";
       var vault = state.vault[nkey(n)];
       if (vault) html += vaultHtml(g.rows, vault);
+      if (tgRow) html += bestHtml(tgRow, g.rows);
       // raid vlevo, M+ vpravo (jen jedna sekce = přes celou šířku)
       var parts = [];
       if (kindOk("raid")) parts.push(sectionHtml("raid", raidRows.filter(passes).sort(byMetricDesc), raidAny && raidAny.report));

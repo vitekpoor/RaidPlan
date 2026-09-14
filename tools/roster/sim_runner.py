@@ -12,8 +12,14 @@ Co dělá (jeden spuštěný příkaz, pak se jen čeká):
   3. hlídá všechny běžící reporty (…/simbot/report/<id>) a jak který doběhne,
   4. nahlásí ho zpět do Sheets (action=done&kind=raid|mplus) – Apps Script
      zapíše výsledky do listu "Sim výsledky" (stránka Simy) a raidový report
-     zkusí nahrát do wowaudit. Řádek je ✅, až když jsou hotové oba reporty;
-     když jeden selže, při dalším běhu se dosimuje jen ten chybějící.
+     zkusí nahrát do wowaudit,
+  5. když má postava hotový raid i M+ report, pustí třetí sim: Raidbots Top Gear
+     (kind "topgear") – z obou Droptimizerů vezme pro každý slot nejlepší raidový
+     a nejlepší M+ item (jen kladné upgrady, nejvýš `topgear_max_items`), přidá je
+     do SimC stringu jako "Gear from Bags", v Top Gearu je zaškrtne a nechá
+     Raidbots najít nejlepší kombinaci ("best overall" řádek na stránce Simy).
+     Řádek je ✅, až když jsou hotové všechny tři reporty; když některý selže,
+     při dalším běhu se dosimuje jen ten chybějící.
 
 Kolik simů Raidbots pustí najednou, určuje účet (Premium tier); když další
 sim odmítne, runner řádek vrátí do fronty a dál posílá jen tolik, kolik
@@ -41,11 +47,12 @@ Online (bez PC): .github/workflows/sims.yml spouští tenhle skript v GitHub Act
 každou hodinu a na kliknutí (menu Simy → Spustit simy online, tlačítko na hubu).
 Konfigurace přes env: SIM_WEBAPP_URL, SIM_API_TOKEN, SIM_STORAGE_STATE (cesta
 k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE, SIM_MPLUS=0 (vypne
-druhý, dungeonový Droptimizer). Místo (nebo vedle)
+druhý, dungeonový Droptimizer), SIM_TOPGEAR=0 (vypne Top Gear). Místo (nebo vedle)
 uložené session jde použít RAIDBOTS_EMAIL + RAIDBOTS_PASSWORD – když skript zjistí,
 že není přihlášený, přihlásí se e-mailem a heslem na https://www.raidbots.com/auth.
   python sim_runner.py --parallel 3 # max 3 simy najednou (výchozí 10)
   python sim_runner.py --no-mplus   # jen raidový Droptimizer (bez Mythic+ dungeonů)
+  python sim_runner.py --no-topgear # bez třetího simu (Top Gear z nejlepších itemů)
   python sim_runner.py --dry-run    # všechno kromě kliknutí na Run (kontrola nastavení)
   python sim_runner.py --row 7      # jen konkrétní řádek listu
   python sim_runner.py --headless   # bez okna prohlížeče
@@ -72,6 +79,7 @@ PROFILE_DIR = HERE / ".raidbots_profile"
 LOG_DIR = HERE / "sim_runner_logs"
 
 DROPTIMIZER_URL = "https://www.raidbots.com/simbot/droptimizer"
+TOPGEAR_URL = "https://www.raidbots.com/simbot/topgear"
 AUTH_URL = "https://www.raidbots.com/auth"
 REPORT_RE = re.compile(r"raidbots\.com/simbot/report/([A-Za-z0-9]{10,40})")
 GOLD = "rgb(255, 187, 51)"  # barva rámečku vybraného zdroje / obtížnosti
@@ -92,6 +100,10 @@ DEFAULTS = {
     "mplus_source": "Mythic+ Dungeons",
     "mplus_dungeons": "All Dungeons",   # dlaždice pod zdrojem (výchozí vybraná)
     "mplus_difficulty": "+10 Vault",    # Myth track (318) – s upgrade "max" = Myth 6/6 jako raid
+    "topgear": True,         # třetí sim: Top Gear z nejlepších raid + M+ itemů (kind "topgear")
+    "topgear_max_items": 10, # nejvýš tolik kandidátů (nejlepší raid + nejlepší M+ na slot, seřazeno podle upgradu)
+    "topgear_min_gain": 0.1, # kandidát musí mít aspoň tolik % upgradu v Droptimizeru
+    "topgear_max_combos": 20000,   # když Raidbots hlásí víc kombinací, uber nejslabší kandidáty
     "parallel": 10,          # kolik simů posílat najednou (každý ve vlastním panelu)
     "sim_timeout_min": 60,   # maximální čekání na jeden sim
     "poll_seconds": 15,
@@ -137,6 +149,99 @@ QE_URL = "https://questionablyepic.com/live/upgradefinder"
 QE_REPORT_RE = re.compile(r"questionablyepic\.com/live/upgradereport/([A-Za-z0-9_-]{6,80})")
 
 
+# ------------------------------------------------------------- Top Gear ----
+
+PROFILESET_LINE_RE = re.compile(r'^profileset\."([^"]+)"\+?=(.*)$', re.M)
+
+
+def fetch_report(report_id):
+    """data.json + celý SimC vstup. POZOR: data.json má v simbot.input jen první chunk
+    profilesetů (např. 8 ze 101) – kompletní řádky itemů jsou v reports/<id>/input.txt."""
+    r = requests.get(f"https://www.raidbots.com/reports/{report_id}/data.json", timeout=180)
+    r.raise_for_status()
+    data = r.json()
+    try:
+        t = requests.get(f"https://www.raidbots.com/reports/{report_id}/input.txt", timeout=180)
+        if t.ok and "profileset." in t.text:
+            data["_input"] = t.text
+    except requests.RequestException:
+        pass
+    return data
+
+
+def report_id_from_url(url):
+    m = REPORT_RE.search(str(url or ""))
+    return m.group(1) if m else ""
+
+
+def droptimizer_best_per_slot(data, kind, min_gain):
+    """Z Droptimizer data.json vrátí {slot: kandidát} – nejlepší item na slot s upgradem
+    >= min_gain %. Kandidát nese přesný SimC řádek itemu z profilesetu (včetně bonus_id
+    pro Myth 6/6, enchant, gem), takže ho jde vložit do Top Gearu jako item z bagu."""
+    sim = data.get("sim") or {}
+    base = float((((sim.get("players") or [{}])[0].get("collected_data") or {}).get("dps") or {}).get("mean") or 0)
+    if not base:
+        raise RuntimeError("v reportu chybí základní DPS")
+    lines = dict(PROFILESET_LINE_RE.findall(data.get("_input") or (data.get("simbot") or {}).get("input") or ""))
+    lib = {str(it.get("id")): it for it in (((data.get("simbot") or {}).get("meta") or {}).get("itemLibrary") or [])}
+    best = {}
+    for r in (sim.get("profilesets") or {}).get("results") or []:
+        parts = str(r.get("name") or "").split("/")
+        if len(parts) < 7:
+            continue
+        line = lines.get(r["name"])
+        if not line:
+            continue
+        gain = (float(r.get("mean") or 0) - base) / base * 100
+        if gain < min_gain:
+            continue
+        slot = parts[6]
+        base_slot = re.sub(r"[12]$", "", slot)
+        cur = best.get(base_slot)
+        if cur and cur["gain"] >= gain:
+            continue
+        m = re.search(r"id=(\d+)", line)
+        bonus = re.search(r"bonus_id=([\d/]+)", line)
+        best[base_slot] = {"kind": kind, "slot": base_slot, "gain": gain, "id": m.group(1) if m else parts[3],
+                           "bonus": set(bonus.group(1).split("/")) if bonus else set(),
+                           "name": lib.get(parts[3], {}).get("name") or f"#{parts[3]}", "line": line}
+    return best
+
+
+def topgear_candidates(raid_data, mplus_data, cfg):
+    """Nejlepší raidový a nejlepší M+ item na slot, seřazené podle upgradu, nejvýš topgear_max_items."""
+    min_gain = float(cfg.get("topgear_min_gain", 0.1))
+    cands = []
+    if raid_data:
+        cands += droptimizer_best_per_slot(raid_data, "raid", min_gain).values()
+    if mplus_data:
+        cands += droptimizer_best_per_slot(mplus_data, "mplus", min_gain).values()
+    cands.sort(key=lambda c: -c["gain"])
+    return cands[: int(cfg.get("topgear_max_items", 10))]
+
+
+def strip_bags(simc):
+    """Odstraní hráčův blok "### Gear from Bags" (aby v Top Gearu nebyly cizí kopie itemů);
+    vault blok a ostatní části zůstávají."""
+    lines = simc.replace("\r", "").split("\n")
+    out, skip = [], False
+    for l in lines:
+        if re.match(r"^###\s*Gear from Bags", l, re.I):
+            skip = True
+            continue
+        if skip and (re.match(r"^###", l) or re.match(r"^#\s*(Checksum|Saved Loadout|talents=)", l, re.I) or re.match(r"^[a-z_]+=", l)):
+            skip = False
+        if not skip:
+            out.append(l)
+    return "\n".join(out)
+
+
+def topgear_input(simc, cands):
+    """SimC string + kandidáti jako itemy z bagu (Raidbots je v Top Gearu nabídne k zaškrtnutí)."""
+    block = "\n".join(f"# {c['name']}\n# {c['line']}" for c in cands)
+    return strip_bags(simc).rstrip() + "\n\n### Gear from Bags\n" + block + "\n"
+
+
 # ---------------------------------------------------------------- config ----
 
 def load_config():
@@ -151,10 +256,12 @@ def load_config():
         cfg["upgrade"] = os.environ["SIM_UPGRADE"].strip()
     if os.environ.get("SIM_MPLUS", "").strip():
         cfg["mplus"] = os.environ["SIM_MPLUS"].strip().lower() not in ("0", "false", "no", "off")
+    if os.environ.get("SIM_TOPGEAR", "").strip():
+        cfg["topgear"] = os.environ["SIM_TOPGEAR"].strip().lower() not in ("0", "false", "no", "off")
     return cfg
 
 
-KINDS = {"raid": "raid", "mplus": "M+", "qe": "raid+M+"}
+KINDS = {"raid": "raid", "mplus": "M+", "qe": "raid+M+", "topgear": "Top Gear"}
 
 
 def kind_label(kind):
@@ -385,17 +492,18 @@ class Raidbots:
             page.keyboard.press("Delete")
             page.keyboard.insert_text(simc)
 
-    def load_simc(self, page, simc):
-        page.goto(DROPTIMIZER_URL, wait_until="domcontentloaded")
+    def load_simc(self, page, simc, url=DROPTIMIZER_URL, ready="#instanceList"):
+        """url/ready: Droptimizer (#instanceList) nebo Top Gear (div.item = karty itemů)."""
+        page.goto(url, wait_until="domcontentloaded")
         self.settle(page)
         # Raidbots si pamatuje minulý vstup (profil / storage state), takže na stránce
         # může být karta a seznam zdrojů ještě od předchozí postavy – a když je to ta
         # samá postava (nebo se jmenuje jako účet v hlavičce), kontrola jména ji
         # nerozezná. Proto editor nejdřív vyprázdníme a počkáme, až stará karta zmizí.
-        if page.locator("#instanceList").count():
+        if page.locator(ready).count():
             self.set_editor(page, "")
             try:
-                page.wait_for_function("() => !document.querySelector('#instanceList')", timeout=15000)
+                page.wait_for_function("(sel) => !document.querySelector(sel)", arg=ready, timeout=15000)
             except Exception:
                 log("   (stará karta postavy nezmizela, pokračuji)")
             page.wait_for_timeout(500)
@@ -407,9 +515,9 @@ class Raidbots:
         last = ""
         while True:
             info = page.evaluate(
-                """() => { const c = document.body.cloneNode(true);
+                """(sel) => { const c = document.body.cloneNode(true);
                      c.querySelectorAll('.cm-editor').forEach(e => e.remove());
-                     const t = c.innerText || ''; return { text: t, list: !!document.querySelector('#instanceList') }; }""")
+                     const t = c.innerText || ''; return { text: t, list: !!document.querySelector(sel) }; }""", ready)
             last = info["text"]
             loading = re.search(r"(?i)loading character", last)
             if info["list"] and not loading and (not name or name.upper() in last.upper()):
@@ -503,10 +611,11 @@ class Raidbots:
         if "raid-" in body and want not in body:
             raise RuntimeError(f"vstup pro sim neobsahuje {want}")
 
-    def run(self, page):
-        """Klikne Run a vrátí (report_id, url). SubmitLimit = účet nesmí pustit další sim."""
+    def run(self, page, button=r"run droptimizer"):
+        """Klikne Run (Droptimizer "RUN DROPTIMIZER", Top Gear "FIND TOP GEAR") a vrátí
+        (report_id, url). SubmitLimit = účet nesmí pustit další sim."""
         before = self.text(page)
-        page.get_by_role("button", name=re.compile(r"run droptimizer", re.I)).click()
+        page.get_by_role("button", name=re.compile(button, re.I)).click()
         deadline = time.time() + 120
         while time.time() < deadline:
             m = REPORT_RE.search(page.url)
@@ -522,6 +631,98 @@ class Raidbots:
         body = self.text(page)
         m = re.search(r"(?im)^.*(error|limit|premium|login|sign in).*$", body)
         raise RuntimeError("po kliknutí na Run se neobjevil report" + (f": {m.group(0).strip()[:200]}" if m else ""))
+
+    # -- Top Gear (třetí sim z nejlepších raid + M+ itemů) --
+    @staticmethod
+    def topgear_combos(page):
+        """Z řádku "ITERATIONS: 6,480,000 / 5,500,000 (1,296 COMBINATIONS)" u tlačítka FIND TOP GEAR
+        vrátí (kombinace, iterace, limit iterací účtu) – cokoli None, když řádek chybí."""
+        body = Raidbots.text(page)
+        m = re.search(r"ITERATIONS:\s*([\d,]+)\s*/\s*([\d,]+)\s*\(([\d,]+)\s+COMBINATIONS?\)", body, re.I)
+        if m:
+            return int(m.group(3).replace(",", "")), int(m.group(1).replace(",", "")), int(m.group(2).replace(",", ""))
+        m = re.search(r"\(([\d,]+)\s+COMBINATIONS?\)", body, re.I)
+        return (int(m.group(1).replace(",", "")) if m else None), None, None
+
+    def topgear_boxes(self, page, item_id):
+        """Karty itemu (div.item) s daným ID – nasazený kus, kopie z bagu, kandidát z Droptimizeru…"""
+        return page.locator(f'div.item:has(a[href*="item={item_id}?"]), div.item:has(a[href*="item={item_id}&"])')
+
+    def topgear_include(self, page, cand):
+        """Zaškrtne v Top Gearu náš kandidát: mezi kartami s jeho ID vezme ŠEDOU (nezahrnutou)
+        kopii, nejraději tu, jejíž wowhead odkaz nese naše bonus_id (Myth 6/6). Zlatou
+        (= nasazený/zahrnutý item) nechává být – odškrtnutí jediného itemu ve slotu by
+        Raidbots položilo ("unable to generate valid combinations")."""
+        boxes = self.topgear_boxes(page, cand["id"])
+        n = boxes.count()
+        if not n:
+            return False
+        info = [(i, boxes.nth(i).evaluate("el => getComputedStyle(el).borderTopColor"),
+                 boxes.nth(i).locator("a[href*='wowhead.com/item=']").first.get_attribute("href") or "") for i in range(n)]
+        gray = [x for x in info if x[1] != GOLD]
+        if not gray:
+            return True   # už zahrnutý (např. nasazený stejný kus)
+        def bonus_ok(href):
+            m = re.search(r"bonus=([\d:]+)", href)
+            have = set(m.group(1).split(":")) if m else set()
+            return cand["bonus"] <= have
+        pick = next((x for x in gray if bonus_ok(x[2])), gray[0])
+        box = boxes.nth(pick[0])
+        box.scroll_into_view_if_needed()
+        try:
+            box.click(timeout=5000)
+        except Exception:
+            box.evaluate("el => el.click()")
+        page.wait_for_timeout(400)
+        return box.evaluate("el => getComputedStyle(el).borderTopColor") == GOLD
+
+    def topgear_exclude(self, page, cand):
+        """Odškrtne zlatou kartu kandidáta (ne nasazený kus – ten má jiné bonus_id)."""
+        boxes = self.topgear_boxes(page, cand["id"])
+        for i in range(boxes.count()):
+            b = boxes.nth(i)
+            href = b.locator("a[href*='wowhead.com/item=']").first.get_attribute("href") or ""
+            m = re.search(r"bonus=([\d:]+)", href)
+            have = set(m.group(1).split(":")) if m else set()
+            if b.evaluate("el => getComputedStyle(el).borderTopColor") == GOLD and cand["bonus"] and cand["bonus"] <= have and boxes.count() > 1:
+                b.click()
+                page.wait_for_timeout(400)
+                return True
+        return False
+
+    def setup_topgear(self, page, simc, cands):
+        """Načte string s kandidáty do Top Gearu a zaškrtne je. Vrací (zahrnutí kandidáti, počet kombinací)."""
+        self.load_simc(page, topgear_input(simc, cands), url=TOPGEAR_URL, ready="div.item")
+        included = []
+        for c in cands:
+            if self.topgear_include(page, c):
+                included.append(c)
+            else:
+                log(f"   Top Gear: item {c['name']} ({c['id']}) na stránce není, vynechávám")
+        page.wait_for_timeout(1200)
+        combos, iters, cap = self.topgear_combos(page)
+        limit = int(self.cfg.get("topgear_max_combos", 20000))
+        # moc kombinací / iterací nad limit účtu → ubírej nejslabší kandidáty
+        def too_many():
+            return (combos and combos > limit) or (iters and cap and iters > cap)
+        while too_many() and len(included) > 2:
+            weakest = included.pop()
+            log(f"   Top Gear: {combos} kombinací / {iters} iterací (limit {cap}) je moc, vynechávám {weakest['name']}")
+            before = (combos, iters)
+            self.topgear_exclude(page, weakest)
+            # počítadlo se přepočítává se zpožděním – počkat, až se změní (max ~6 s)
+            for _ in range(12):
+                page.wait_for_timeout(500)
+                combos, iters, cap = self.topgear_combos(page)
+                if (combos, iters) != before:
+                    break
+        if "unable to generate valid combinations" in self.text(page).lower():
+            raise RuntimeError("Top Gear: Raidbots hlásí „unable to generate valid combinations“")
+        btn = page.get_by_role("button", name=re.compile(r"find top gear", re.I))
+        if btn.count() and btn.first.is_disabled():
+            raise RuntimeError(f"Top Gear: tlačítko FIND TOP GEAR je neaktivní ({combos} kombinací, {iters}/{cap} iterací)")
+        log(f"   Top Gear: {len(included)} itemů, {combos} kombinací, {iters}/{cap} iterací")
+        return included, combos
 
     # -- report polling (neblokující, volá se v cyklu pro všechny běžící) --
     @staticmethod
@@ -726,6 +927,56 @@ def submit_row(rb, api, row, kind, dry_run):
         return None
 
 
+def submit_topgear(rb, api, row, reports, dry_run):
+    """Třetí sim: Top Gear z nejlepších raid + M+ itemů. reports = {"raid": id, "mplus": id}."""
+    character = row["character"]
+    tag = f"{character} [Top Gear]"
+    try:
+        raid = fetch_report(reports["raid"]) if reports.get("raid") else None
+        mplus = fetch_report(reports["mplus"]) if reports.get("mplus") else None
+    except Exception as err:  # noqa: BLE001
+        fail_row(api, row, f"[Top Gear] nejde stáhnout data.json Droptimizerů: {str(err)[:200]}")
+        return None
+    cands = topgear_candidates(raid, mplus, rb.cfg)
+    if len(cands) < 1:
+        log(f"   {tag}: žádný item není upgrade – Top Gear není potřeba")
+        try:
+            api.note(row["row"], character, "Top Gear: žádný kandidát (nic není upgrade)")
+            res = api.done(row["row"], character, "", "topgear-skip")
+            log(f"   {tag}: {res.get('message') or res}")
+        except Exception as err:  # noqa: BLE001
+            log(f"   (poznámka se nezapsala: {err})")
+        return None
+    log(f"   {tag}: kandidáti: " + ", ".join(f"{c['name']} ({kind_label(c['kind'])} {c['gain']:+.2f}%)" for c in cands))
+    page = rb.new_tab()
+    try:
+        included, combos = rb.setup_topgear(page, row["simc"], cands)
+        log(f"   {tag}: zaškrtnuto {len(included)} itemů, {combos if combos is not None else '?'} kombinací")
+        if not included:
+            raise RuntimeError("Top Gear: žádný kandidát se nepodařilo zaškrtnout")
+        if dry_run:
+            rb.screenshot(page, f"dryrun_topgear_{strip_accents(character)}")
+            log(f"   {tag}: dry-run – nastavení OK, Find Top Gear nekliknuto")
+            page.close()
+            return None
+        report_id, url = rb.run(page, r"find top gear")
+        log(f"   {tag}: spuštěno {url}")
+        try:
+            api.running(row["row"], character, url, "topgear")
+        except Exception as err:  # noqa: BLE001
+            log(f"   (stav 🔄 se nezapsal: {err})")
+        return {"row": row, "kind": "topgear", "page": page, "id": report_id, "url": url,
+                "deadline": time.time() + rb.cfg["sim_timeout_min"] * 60, "state": ""}
+    except SubmitLimit:
+        page.close()
+        raise
+    except Exception as err:  # noqa: BLE001
+        rb.screenshot(page, f"error_topgear_{strip_accents(character)}")
+        page.close()
+        fail_row(api, row, "[Top Gear] " + str(err).splitlines()[0][:300])
+        return None
+
+
 def finish_sim(rb, api, sim):
     row, character = sim["row"], sim["row"]["character"]
     tag = f"{character} [{kind_label(sim['kind'])}]"
@@ -757,6 +1008,12 @@ def cmd_run(cfg, args):
     todo = deque()   # (row, kind) – raid i M+ Droptimizer za každou postavu; hotové reporty se přeskočí
     healers = []
     want_mplus = bool(cfg.get("mplus", True))
+    want_topgear = bool(cfg.get("topgear", True))
+    # hotové Droptimizer reporty postavy (z listu i z tohohle běhu) – až jsou oba, jede Top Gear
+    reports = {}
+    def topgear_ready(row):
+        r = reports.get(row["row"], {})
+        return want_topgear and not row.get("report_topgear") and r.get("raid") and (r.get("mplus") or not want_mplus)
     for row in rows:
         if not row["simc"].strip():
             fail_row(api, row, "prázdný SimC string")
@@ -764,12 +1021,15 @@ def cmd_run(cfg, args):
         elif row["spec"].lower() in HEALER_SPECS:
             healers.append(row)
         else:
+            reports[row["row"]] = {k: report_id_from_url(row.get("report_" + k)) for k in ("raid", "mplus") if row.get("report_" + k)}
             kinds = [k for k in ("raid", "mplus") if (k == "raid" or want_mplus) and not row.get("report_" + k)]
-            if not kinds:
-                log(f"   {row['character']}: oba reporty už existují, nic k simování (řádek {row['row']})")
-                continue
             for k in kinds:
                 todo.append((row, k))
+            if not kinds:
+                if topgear_ready(row):
+                    todo.append((row, "topgear"))
+                else:
+                    log(f"   {row['character']}: všechny reporty už existují, nic k simování (řádek {row['row']})")
     if not todo and not healers:
         log("Hotovo: " + ", ".join(f"{k}: {v}" for k, v in results.items()))
         return
@@ -795,7 +1055,8 @@ def cmd_run(cfg, args):
             log(f"▶ {row['character']} ({row['spec']}) – řádek {row['row']} – healer → QE Live")
             results[rkey(row)] = qe_row(rb, api, row, args.dry_run)
         if todo:
-            log(f"Posílám až {parallel} simů najednou ({'raid + M+' if want_mplus else 'jen raid'} Droptimizer za postavu).")
+            log(f"Posílám až {parallel} simů najednou ({'raid + M+' if want_mplus else 'jen raid'} Droptimizer"
+                f"{' + Top Gear' if want_topgear else ''} za postavu).")
         while todo or active:
             # 1) doplnit běžící simy do limitu
             while todo and len(active) < parallel:
@@ -803,7 +1064,10 @@ def cmd_run(cfg, args):
                 key = f"{rkey(row)} {kind_label(kind)}"
                 log(f"▶ {row['character']} ({row['spec']}) – řádek {row['row']} – {kind_label(kind)}")
                 try:
-                    sim = submit_row(rb, api, row, kind, args.dry_run)
+                    if kind == "topgear":
+                        sim = submit_topgear(rb, api, row, reports.get(row["row"], {}), args.dry_run)
+                    else:
+                        sim = submit_row(rb, api, row, kind, args.dry_run)
                 except SubmitLimit as lim:
                     todo.appendleft((row, kind))
                     parallel = max(1, len(active))
@@ -829,6 +1093,12 @@ def cmd_run(cfg, args):
                 tagk = f"[{kind_label(sim['kind'])}] "
                 if rb.report_ready(sim["id"]):
                     results[key] = finish_sim(rb, api, sim)
+                    if results[key] == "done" and sim["kind"] in ("raid", "mplus"):
+                        reports.setdefault(sim["row"]["row"], {})[sim["kind"]] = sim["id"]
+                        if topgear_ready(sim["row"]):
+                            sim["row"]["report_topgear"] = "pending"   # ať se nezařadí dvakrát
+                            todo.append((sim["row"], "topgear"))
+                            log(f"   {ch}: raid i M+ hotové → řadím Top Gear")
                     continue
                 failed = rb.report_failed(sim["page"])
                 if failed:
@@ -865,6 +1135,7 @@ def main():
                     help="(login) po přihlášení uložit cookies/localStorage do souboru pro GitHub Actions")
     ap.add_argument("--dry-run", action="store_true", help="vše kromě kliknutí na Run Droptimizer")
     ap.add_argument("--no-mplus", action="store_true", help="jen raidový Droptimizer, bez Mythic+ dungeonů")
+    ap.add_argument("--no-topgear", action="store_true", help="bez třetího simu (Top Gear z nejlepších itemů)")
     ap.add_argument("--headless", action="store_true", help="bez okna prohlížeče")
     ap.add_argument("--row", type=int, help="zpracovat jen řádek listu N")
     ap.add_argument("--max", type=int, help="nejvýše N řádků")
@@ -873,6 +1144,8 @@ def main():
     cfg = load_config()
     if args.no_mplus:
         cfg["mplus"] = False
+    if args.no_topgear:
+        cfg["topgear"] = False
     if args.command == "setup":
         cmd_setup(cfg)
     elif args.command == "login":
