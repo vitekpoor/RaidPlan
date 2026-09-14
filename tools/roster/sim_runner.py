@@ -101,9 +101,14 @@ DEFAULTS = {
     "mplus_dungeons": "All Dungeons",   # dlaždice pod zdrojem (výchozí vybraná)
     "mplus_difficulty": "+10 Vault",    # Myth track (318) – s upgrade "max" = Myth 6/6 jako raid
     "topgear": True,         # třetí sim: Top Gear z nejlepších raid + M+ itemů (kind "topgear")
-    "topgear_max_items": 10, # nejvýš tolik kandidátů (nejlepší raid + nejlepší M+ na slot, seřazeno podle upgradu)
+    "topgear_max_items": 16, # nejvýš tolik kandidátů (nejlepší raid + nejlepší M+ na slot, seřazeno podle upgradu);
+                             # odškrtnuté slabé nasazené kusy drží počet kombinací nízko, tak si můžeme dovolit skoro vše
     "topgear_min_gain": 0.1, # kandidát musí mít aspoň tolik % upgradu v Droptimizeru
     "topgear_max_combos": 20000,   # když Raidbots hlásí víc kombinací, uber nejslabší kandidáty
+    "topgear_weapon_min_gain": -6, # zbraně (main hand / off hand) jdou do Top Gearu skoro vždy – Droptimizer simuje
+                                   # 1H bez správného off-handu, takže pár 1H + OH ukáže až kombinace
+    "topgear_replace_gap": 10,     # nasazený kus o >= tolik ilvl horší než kandidát ve slotu se v Top Gearu odškrtne
+                                   # (méně kombinací, víc místa pro další itemy); zbraně se neodškrtávají
     "parallel": 10,          # kolik simů posílat najednou (každý ve vlastním panelu)
     "sim_timeout_min": 60,   # maximální čekání na jeden sim
     "poll_seconds": 15,
@@ -174,50 +179,107 @@ def report_id_from_url(url):
     return m.group(1) if m else ""
 
 
-def droptimizer_best_per_slot(data, kind, min_gain):
+WEAPON_SLOTS = ("main_hand", "off_hand")
+SLOT_GROUP = {"finger": "rings", "trinket": "trinkets"}   # skupiny karet v Top Gearu (id karty "rings-1/item")
+
+
+def slot_group(slot):
+    base = re.sub(r"[12]$", "", str(slot))
+    return SLOT_GROUP.get(base, base)
+
+
+def droptimizer_best_per_slot(data, kind, min_gain, weapon_min_gain=None):
     """Z Droptimizer data.json vrátí {slot: kandidát} – nejlepší item na slot s upgradem
-    >= min_gain %. Kandidát nese přesný SimC řádek itemu z profilesetu (včetně bonus_id
-    pro Myth 6/6, enchant, gem), takže ho jde vložit do Top Gearu jako item z bagu."""
+    >= min_gain % (zbraně >= weapon_min_gain, protected=True – Top Gear je nesmí vyhodit).
+    Kandidát nese přesný SimC řádek itemu z profilesetu (včetně bonus_id pro Myth 6/6,
+    enchant, gem), takže ho jde vložit do Top Gearu jako item z bagu."""
     sim = data.get("sim") or {}
     base = float((((sim.get("players") or [{}])[0].get("collected_data") or {}).get("dps") or {}).get("mean") or 0)
     if not base:
         raise RuntimeError("v reportu chybí základní DPS")
-    lines = dict(PROFILESET_LINE_RE.findall(data.get("_input") or (data.get("simbot") or {}).get("input") or ""))
+    # profileset může mít víc řádků (1H main hand + doplňkový off hand, když je nasazená 2H) – všechny
+    lines = {}
+    for name, line in PROFILESET_LINE_RE.findall(data.get("_input") or (data.get("simbot") or {}).get("input") or ""):
+        lines.setdefault(name, []).append(line.strip())
     lib = {str(it.get("id")): it for it in (((data.get("simbot") or {}).get("meta") or {}).get("itemLibrary") or [])}
     best = {}
     for r in (sim.get("profilesets") or {}).get("results") or []:
         parts = str(r.get("name") or "").split("/")
         if len(parts) < 7:
             continue
-        line = lines.get(r["name"])
+        ls = lines.get(r["name"]) or []
+        line = next((l for l in ls if re.match(rf"^{re.escape(parts[6])}=,", l)), ls[0] if ls else None)
         if not line:
             continue
+        extras = []
+        for l in ls:
+            if l == line or not re.match(r"^[a-z_0-9]+=,id=\d+", l):
+                continue
+            em = re.match(r"^([a-z_0-9]+)=,id=(\d+)", l); eb = re.search(r"bonus_id=([\d/]+)", l)
+            extras.append({"slot": re.sub(r"[12]$", "", em.group(1)), "id": em.group(2), "line": l,
+                           "bonus": set(eb.group(1).split("/")) if eb else set(),
+                           "name": lib.get(em.group(2), {}).get("name") or f"#{em.group(2)}"})
         gain = (float(r.get("mean") or 0) - base) / base * 100
-        if gain < min_gain:
-            continue
         slot = parts[6]
         base_slot = re.sub(r"[12]$", "", slot)
+        weapon = base_slot in WEAPON_SLOTS
+        if gain < (weapon_min_gain if (weapon and weapon_min_gain is not None) else min_gain):
+            continue
         cur = best.get(base_slot)
         if cur and cur["gain"] >= gain:
             continue
         m = re.search(r"id=(\d+)", line)
         bonus = re.search(r"bonus_id=([\d/]+)", line)
-        best[base_slot] = {"kind": kind, "slot": base_slot, "gain": gain, "id": m.group(1) if m else parts[3],
+        it = lib.get(parts[3], {})
+        best[base_slot] = {"kind": kind, "slot": base_slot, "group": slot_group(base_slot), "gain": gain,
+                           "id": m.group(1) if m else parts[3], "protected": weapon,
+                           "ilvl": int(it.get("itemLevel") or parts[4] or 0),
                            "bonus": set(bonus.group(1).split("/")) if bonus else set(),
-                           "name": lib.get(parts[3], {}).get("name") or f"#{parts[3]}", "line": line}
+                           "name": it.get("name") or f"#{parts[3]}", "line": line, "extras": extras}
     return best
 
 
 def topgear_candidates(raid_data, mplus_data, cfg):
-    """Nejlepší raidový a nejlepší M+ item na slot, seřazené podle upgradu, nejvýš topgear_max_items."""
+    """Nejlepší raidový a nejlepší M+ item na slot, seřazené podle upgradu, nejvýš topgear_max_items
+    (+ zbraně navíc: nejlepší main hand a off hand z každého zdroje, protected)."""
     min_gain = float(cfg.get("topgear_min_gain", 0.1))
+    wmin = float(cfg.get("topgear_weapon_min_gain", -6))
     cands = []
     if raid_data:
-        cands += droptimizer_best_per_slot(raid_data, "raid", min_gain).values()
+        cands += droptimizer_best_per_slot(raid_data, "raid", min_gain, wmin).values()
     if mplus_data:
-        cands += droptimizer_best_per_slot(mplus_data, "mplus", min_gain).values()
-    cands.sort(key=lambda c: -c["gain"])
-    return cands[: int(cfg.get("topgear_max_items", 10))]
+        cands += droptimizer_best_per_slot(mplus_data, "mplus", min_gain, wmin).values()
+    weapons = sorted([c for c in cands if c["protected"]], key=lambda c: -c["gain"])
+    others = sorted([c for c in cands if not c["protected"]], key=lambda c: -c["gain"])[: int(cfg.get("topgear_max_items", 16))]
+    chosen = sorted(others + weapons, key=lambda c: -c["gain"])
+    # doplňkové itemy z profilesetu (off hand k 1H kandidátovi) – také zaškrtnout, jinak by 1H neměl pár
+    seen = {(c["id"], frozenset(c["bonus"])) for c in chosen}
+    for c in list(chosen):
+        for e in c.get("extras", []):
+            key = (e["id"], frozenset(e["bonus"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            chosen.append({"kind": c["kind"], "slot": e["slot"], "group": slot_group(e["slot"]), "gain": c["gain"], "id": e["id"],
+                           "protected": True, "ilvl": 0, "bonus": e["bonus"], "name": e["name"] + " (doplněk k " + c["name"] + ")",
+                           "line": e["line"], "extras": [], "companion": True})
+    return chosen
+
+
+def equipped_items(raid_data):
+    """Nasazený gear z Droptimizer reportu (simbot.meta.rawFormData.simcItems):
+    {skupina karet: [{id, ilvl, bonus:set}]} – klíče mainHand/offHand/finger1… → main_hand/rings…"""
+    si = (((raid_data or {}).get("simbot") or {}).get("meta") or {}).get("rawFormData", {}).get("simcItems") or {}
+    out = {}
+    for key, it in si.items():
+        if not isinstance(it, dict) or not it.get("id"):
+            continue
+        slot = re.sub(r"(?<!^)(?=[A-Z])", "_", str(key)).lower()   # mainHand → main_hand
+        if slot in ("tabard", "shirt"):
+            continue
+        out.setdefault(slot_group(slot), []).append({"id": str(it["id"]), "ilvl": int(it.get("itemLevel") or 0),
+                                                      "bonus": set(str(b) for b in (it.get("bonusList") or []))})
+    return out
 
 
 def strip_bags(simc):
@@ -690,8 +752,58 @@ class Raidbots:
                 return True
         return False
 
-    def setup_topgear(self, page, simc, cands):
-        """Načte string s kandidáty do Top Gearu a zaškrtne je. Vrací (zahrnutí kandidáti, počet kombinací)."""
+    def gold_cards(self, page):
+        """Zahrnuté (zlaté) karty: [{card, group, item, bonus:set}] – card = DOM id "head-0/item"."""
+        return page.evaluate("""(gold) => Array.from(document.querySelectorAll('div.item')).filter(e => getComputedStyle(e).borderTopColor === gold).map(e => {
+            const a = e.querySelector('a[href*="wowhead.com/item="]'); const m = a && /item=(\\d+)\\?bonus=([\\d:]*)/.exec(a.getAttribute('href'));
+            return { card: e.id, group: e.id.split('-')[0], item: m ? m[1] : '', bonus: m && m[2] ? m[2].split(':') : [] }; })""", GOLD)
+
+    def topgear_drop_equipped(self, page, included, equipped):
+        """Odškrtne nasazené kusy, které jsou o >= topgear_replace_gap ilvl horší než kandidát ve
+        stejné skupině (Droptimizer už řekl, že kandidát je lepší) – každý ušetří polovinu
+        kombinací. Ve skupině musí zůstat dost karet (prsteny/trinkety 2, jinak 1); zbraně se
+        nechávají (2H vs. 1H + OH řeší až Top Gear). Vrací počet odškrtnutých."""
+        gap = int(self.cfg.get("topgear_replace_gap", 10))
+        if not equipped or gap <= 0:
+            return 0
+        dropped = 0
+        for group, eqs in equipped.items():
+            if group in WEAPON_SLOTS:
+                continue
+            cand = [c for c in included if c["group"] == group]
+            if not cand:
+                continue
+            best_ilvl = max(c["ilvl"] for c in cand)
+            need = 2 if group in ("rings", "trinkets") else 1
+            for eq in sorted(eqs, key=lambda e: e["ilvl"]):
+                if not eq["ilvl"] or best_ilvl - eq["ilvl"] < gap:
+                    continue
+                gold = [g for g in self.gold_cards(page) if g["group"] == group]
+                if len(gold) - 1 < need:
+                    break
+                card = next((g for g in gold if g["item"] == eq["id"] and (not eq["bonus"] or eq["bonus"] <= set(g["bonus"]))), None) \
+                    or next((g for g in gold if g["item"] == eq["id"]), None)
+                if not card:
+                    continue
+                before = self.topgear_combos(page)
+                el = page.locator("[id='" + card["card"] + "']").first
+                try:
+                    el.click(timeout=5000)
+                except Exception:
+                    el.evaluate("el => el.click()")
+                page.wait_for_timeout(700)
+                if "unable to generate valid combinations" in self.text(page).lower():
+                    el.click()   # vrátit zpět
+                    page.wait_for_timeout(500)
+                    continue
+                dropped += 1
+                after = self.topgear_combos(page)
+                log(f"   Top Gear: odškrtávám nasazený {group} ({eq['ilvl']} ilvl, kandidát {best_ilvl}) – kombinací {before[0] or '?'} → {after[0] or '?'}")
+        return dropped
+
+    def setup_topgear(self, page, simc, cands, equipped=None):
+        """Načte string s kandidáty do Top Gearu, zaškrtne je, odškrtne slabé nasazené kusy a ohlídá
+        limit kombinací/iterací. Vrací (zahrnutí kandidáti, počet kombinací)."""
         self.load_simc(page, topgear_input(simc, cands), url=TOPGEAR_URL, ready="div.item")
         included = []
         for c in cands:
@@ -700,13 +812,21 @@ class Raidbots:
             else:
                 log(f"   Top Gear: item {c['name']} ({c['id']}) na stránce není, vynechávám")
         page.wait_for_timeout(1200)
+        self.topgear_drop_equipped(page, included, equipped)
         combos, iters, cap = self.topgear_combos(page)
+        for _ in range(8):   # počítadlo se někdy vykreslí se zpožděním
+            if combos is not None:
+                break
+            page.wait_for_timeout(500)
+            combos, iters, cap = self.topgear_combos(page)
         limit = int(self.cfg.get("topgear_max_combos", 20000))
-        # moc kombinací / iterací nad limit účtu → ubírej nejslabší kandidáty
+        # moc kombinací / iterací nad limit účtu → ubírej nejslabší kandidáty (zbraně až nakonec);
+        # bez počítadla (Raidbots ho při obřím počtu kombinací neukazuje) také ubírat
         def too_many():
-            return (combos and combos > limit) or (iters and cap and iters > cap)
+            return combos is None or (combos and combos > limit) or (iters and cap and iters > cap)
         while too_many() and len(included) > 2:
-            weakest = included.pop()
+            weakest = min(included, key=lambda c: (c["protected"], c["gain"]))
+            included.remove(weakest)
             log(f"   Top Gear: {combos} kombinací / {iters} iterací (limit {cap}) je moc, vynechávám {weakest['name']}")
             before = (combos, iters)
             self.topgear_exclude(page, weakest)
@@ -714,7 +834,7 @@ class Raidbots:
             for _ in range(12):
                 page.wait_for_timeout(500)
                 combos, iters, cap = self.topgear_combos(page)
-                if (combos, iters) != before:
+                if (combos, iters) != before and combos is not None:
                     break
         if "unable to generate valid combinations" in self.text(page).lower():
             raise RuntimeError("Top Gear: Raidbots hlásí „unable to generate valid combinations“")
@@ -938,6 +1058,7 @@ def submit_topgear(rb, api, row, reports, dry_run):
         fail_row(api, row, f"[Top Gear] nejde stáhnout data.json Droptimizerů: {str(err)[:200]}")
         return None
     cands = topgear_candidates(raid, mplus, rb.cfg)
+    equipped = equipped_items(raid) or equipped_items(mplus)
     if len(cands) < 1:
         log(f"   {tag}: žádný item není upgrade – Top Gear není potřeba")
         try:
@@ -947,10 +1068,10 @@ def submit_topgear(rb, api, row, reports, dry_run):
         except Exception as err:  # noqa: BLE001
             log(f"   (poznámka se nezapsala: {err})")
         return None
-    log(f"   {tag}: kandidáti: " + ", ".join(f"{c['name']} ({kind_label(c['kind'])} {c['gain']:+.2f}%)" for c in cands))
+    log(f"   {tag}: kandidáti: " + ", ".join(f"{c['name']} ({kind_label(c['kind'])} {c['gain']:+.2f}%{', zbraň' if c['protected'] else ''})" for c in cands if not c.get("companion")))
     page = rb.new_tab()
     try:
-        included, combos = rb.setup_topgear(page, row["simc"], cands)
+        included, combos = rb.setup_topgear(page, row["simc"], cands, equipped)
         log(f"   {tag}: zaškrtnuto {len(included)} itemů, {combos if combos is not None else '?'} kombinací")
         if not included:
             raise RuntimeError("Top Gear: žádný kandidát se nepodařilo zaškrtnout")
