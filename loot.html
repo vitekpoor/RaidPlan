@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!-- ZDROJ stránky Loot simy. build.bat ji kopíruje do kořene repa jako loot.html
-     (s cestami web/loot_items.json a web/assets/). Data čte živě z Google Sheets, list
-     "Sim výsledky" (plní ho Apps Script po každém simu), přes gviz CSV.
+     (s cestami web/loot_items.json a web/assets/). Data čte živě z Google Sheets:
+     list "Sim výsledky" (raid + Mythic+ Droptimizer / QE Live, sloupec "Původ" = Raid | M+)
+     a list "Vault" (Great Vault ze SimC exportu) – oba plní Apps Script, čte se přes gviz CSV.
      Společný vzhled: assets/css/site.css (odvozeno ze šablony TemplateMo 579 Cyborg Gaming). -->
 <html lang="cs">
 <head>
@@ -13,6 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="web/assets/css/site.css">
 <style>
+:root { --mplus: #7fb0e6; --mplus-soft: rgba(127, 176, 230, .12); --raid: var(--accent); --raid-soft: var(--accent-soft); }
 h2 { font-size: 22px; font-weight: 700; margin: 26px 0 10px; color: var(--accent); }
 .lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
 
@@ -28,6 +30,7 @@ h2 { font-size: 22px; font-weight: 700; margin: 26px 0 10px; color: var(--accent
 .seg { display: inline-flex; background: var(--surface2); border-radius: 23px; overflow: hidden; padding: 3px; }
 .seg button { background: transparent; color: var(--muted); border: 0; border-radius: 20px; padding: 5px 14px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; }
 .seg button.active { background: var(--accent2); color: var(--ink-strong); }
+.seg button.active[data-kind=mplus] { background: var(--mplus); color: #07111c; }
 
 .tablewrap { background: var(--surface2); }
 th.sortable { cursor: pointer; user-select: none; }
@@ -42,6 +45,7 @@ th.num { text-align: right; }
 .card > summary:hover { background: #232926; }
 .card .name { font-weight: 600; font-size: 16px; color: var(--ink-strong); }
 .card .meta { color: var(--muted); font-size: 13px; }
+.card .meta a { color: var(--ink); }
 .card .tablewrap { border-radius: 0; background: var(--surface2); }
 .card th { background: var(--surface2); }
 .badge { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 11.5px; border: 1px solid var(--line); color: var(--muted); }
@@ -54,10 +58,24 @@ th.num { text-align: right; }
 .item a:hover { text-decoration: underline; color: var(--ink-strong); }
 .slot { color: var(--muted); font-size: 12.5px; }
 
+/* původ: raid (zelená) vs. Mythic+ (modrá) – ať je na první pohled vidět, odkud item je */
+.kind { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 18px; vertical-align: middle; }
+.kind.raid { background: var(--raid-soft); color: var(--raid); border: 1px solid var(--raid); }
+.kind.mplus { background: var(--mplus-soft); color: var(--mplus); border: 1px solid var(--mplus); }
+.sect { border-left: 3px solid var(--raid); }
+.sect.mplus { border-left-color: var(--mplus); }
+.sect .secthead { display: flex; align-items: center; gap: 10px; padding: 9px 16px 7px; font-size: 13px; color: var(--muted); background: var(--surface2); border-top: 1px solid var(--line); }
+.sect .secthead b { color: var(--ink-strong); font-weight: 600; }
+.sect.mplus .secthead b { color: var(--mplus); }
+.sect.raid .secthead b { color: var(--raid); }
+.sect .secthead a { color: var(--muted); }
+tr.mplus td:first-child { color: var(--mplus); }
+
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 2px 10px; font-size: 13px;
         border: 1px solid var(--line); background: var(--surface); white-space: nowrap; }
 .chip .v { font-family: Consolas, "Cascadia Mono", monospace; font-variant-numeric: tabular-nums; }
+.chip .kind { font-size: 9.5px; line-height: 15px; padding: 0 4px; }
 .up4 { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .up3 { border-color: var(--accent); color: var(--accent); }
 .up2 { border-color: var(--gold); color: var(--gold); }
@@ -70,7 +88,23 @@ th.num { text-align: right; }
 .hint { color: var(--muted); font-size: 13px; }
 .bosshead { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 10px; }
 .bosshead .num { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
+.bosshead.mplus h2 { color: var(--mplus); }
+.divider { display: flex; align-items: center; gap: 14px; margin: 38px 0 6px; color: var(--mplus); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
+.divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
 .empty { color: var(--muted); font-style: italic; padding: 10px 16px; }
+
+/* Great Vault – řádek nahoře v kartě hráče: vzít item z vaultu, nebo si nechat bonus roll na raid? */
+.vault { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; font-size: 13.5px;
+         background: var(--surface); border-top: 1px solid var(--line); border-left: 3px solid var(--gold); }
+.vault .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--gold); font-weight: 700; }
+.vault .verdict { font-weight: 600; color: var(--ink-strong); }
+.vault.take { border-left-color: var(--accent); } .vault.take .verdict { color: var(--accent); }
+.vault.roll { border-left-color: var(--dps); } .vault.roll .verdict { color: var(--dps); }
+.vault.none .verdict { color: var(--muted); font-weight: 500; }
+.vault .vs { color: var(--muted); }
+.vault .chips { gap: 4px; }
+.vault .stale { color: var(--dps); font-size: 12.5px; }
+.vault .when { color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -104,16 +138,22 @@ th.num { text-align: right; }
 <div class="heading-section">
   <h4><em>Loot</em> simy</h4>
 </div>
-<p class="lead">Itemy jako plně upgradnuté (Myth 6/6). Raidbots pro DPS, QE Live pro healery – procenta obou rolí nesrovnávej mezi sebou.</p>
+<p class="lead">Itemy jako plně upgradnuté (Myth 6/6) – <span class="kind raid">Raid</span> Mythic i <span class="kind mplus">M+</span> dungeony (+10 vault track) na stejném ilvl, takže se dají srovnávat.
+  Raidbots pro DPS, QE Live pro healery – procenta obou rolí nesrovnávej mezi sebou. Kdo před <code>/simc</code> otevřel Great Vault, má nahoře i verdikt <b>vault vs. bonus roll</b>.</p>
 
 <div class="controls">
+  <span class="seg" id="kindseg">
+    <button data-kind="all" class="active">Raid + M+</button>
+    <button data-kind="raid">jen Raid</button>
+    <button data-kind="mplus">jen M+</button>
+  </span>
   <span class="seg" id="unitseg">
     <button data-unit="pct" class="active">% upgrade</button>
     <button data-unit="abs">číslo (DPS / HPS)</button>
   </span>
   <label>min. upgrade <input type="number" id="minv" value="0.5" step="0.1" min="-100"> <span id="minunit">%</span></label>
   <label><input type="checkbox" id="showneg"> zobrazit i zhoršení</label>
-  <label>hledat <input type="search" id="q" placeholder="hráč / item / boss"></label>
+  <label>hledat <input type="search" id="q" placeholder="hráč / item / boss / dungeon"></label>
 </div>
 
 <div id="view"></div>
@@ -122,7 +162,7 @@ th.num { text-align: right; }
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: list „Sim výsledky“ v guildovní tabulce · Raidbots Droptimizer (DPS) a QE Live (healeři) · itemy z Wowheadu.</p>
+  <p>Data: listy „Sim výsledky“ a „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+) a QE Live (healeři) · itemy z Wowheadu.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
@@ -131,9 +171,12 @@ th.num { text-align: right; }
 (function () {
   var SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI";
   var SHEET_TAB = "Sim výsledky";
+  var VAULT_TAB = "Vault";
   var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(SHEET_TAB);
+  var VAULT_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(VAULT_TAB);
   var ITEMS_URL = "web/loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
+  var KIND_LABEL = { raid: "Raid", mplus: "M+" };
   var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
                   legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
                   one_hand: "1H zbraň", two_hand: "2H zbraň", ranged: "ranged", token: "tier token", relic: "relic" };
@@ -147,11 +190,14 @@ th.num { text-align: right; }
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
 
   var $ = function (s) { return document.querySelector(s); };
-  var state = { view: "players", unit: "pct", rows: [], items: {}, bosses: [], sort: { key: "diff", dir: -1 } };
+  var state = { view: "players", unit: "pct", kind: "all", rows: [], items: {}, bosses: [], vault: {}, sort: { key: "diff", dir: -1 } };
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
+  try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
+  if (!KIND_LABEL[state.kind]) state.kind = "all";
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function num(s) { if (s == null || s === "") return null; var v = parseFloat(String(s).replace(/\s/g, "").replace(",", ".")); return isNaN(v) ? null : v; }
+  function nkey(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim(); }
   function parseCsv(text) {
     var rows = [], row = [], field = "", i = 0, q = false;
     while (i < text.length) {
@@ -175,8 +221,15 @@ th.num { text-align: right; }
     return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
   }
   function fmtDate(d) { return d ? d.getDate() + "." + (d.getMonth() + 1) + ". " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0") : ""; }
+  // poslední týdenní reset (EU: středa 04:00 UTC) – vault poslaný před ním je z minulého týdne
+  function lastReset() {
+    var d = new Date(); var back = (d.getUTCDay() - 3 + 7) % 7;
+    var r = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back, 4, 0, 0));
+    if (r > d) r = new Date(r.getTime() - 7 * 86400000);
+    return r;
+  }
 
-  // ---- načítání: loot_items.json jednou, list "Sim výsledky" každou minutu + při návratu do záložky ----
+  // ---- načítání: loot_items.json jednou, listy každou minutu + při návratu do záložky ----
   var REFRESH_MS = 60000;
   var lastCsv = null, refreshing = false, itemsLoaded = null;
 
@@ -195,11 +248,14 @@ th.num { text-align: right; }
     if (manual) status.textContent = "Obnovuji…";
     Promise.all([
       fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); }),
+      // list Vault je volitelný – bez něj stránka funguje, jen bez verdiktu
+      fetch(VAULT_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
       loadItems()
     ]).then(function (res) {
-      if (res[0] === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
-      lastCsv = res[0];
-      applyData(res[0], res[1]);
+      var combined = res[0] + "\n " + res[1];
+      if (combined === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
+      lastCsv = combined;
+      applyData(res[0], res[1], res[2]);
       render();
     }).catch(function (err) {
       status.textContent = "Nepodařilo se načíst data: " + err.message;
@@ -210,14 +266,15 @@ th.num { text-align: right; }
 
   function showStatus() {
     var latest = null; state.rows.forEach(function (r) { if (r.time && (!latest || r.time > latest)) latest = r.time; });
-    var players = {}; state.rows.forEach(function (r) { players[r.player] = 1; });
+    var players = {}, n = { raid: 0, mplus: 0 }; state.rows.forEach(function (r) { players[r.player] = 1; n[r.kind]++; });
+    var vaults = Object.keys(state.vault).length;
     var status = $("#status");
-    status.textContent = Object.keys(players).length + " postav · " + state.rows.length + " řádků" + (latest ? " · poslední sim " + fmtDate(latest) : "") +
-      " · načteno " + fmtDate(new Date()) + " (obnova každou minutu)";
+    status.textContent = Object.keys(players).length + " postav · " + n.raid + " raid + " + n.mplus + " M+ řádků" + (vaults ? " · " + vaults + " vaultů" : "") +
+      (latest ? " · poslední sim " + fmtDate(latest) : "") + " · načteno " + fmtDate(new Date()) + " (obnova každou minutu)";
     status.className = "status";
   }
 
-  function applyData(csvText, lib) {
+  function applyData(csvText, vaultText, lib) {
       var table = parseCsv(csvText);
       var head = table.shift() || [];
       var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
@@ -232,9 +289,12 @@ th.num { text-align: right; }
         var bossIds = bossId != null ? [bossId] : (lib.bosses || []);
         var spec = String(r[idx["Spec"]] || "").toLowerCase();
         var src = String(r[idx["Zdroj"]] || "");
+        // "Původ" = Raid | M+ (starší řádky bez sloupce = raid); u QE řádků bez bosse rozhodne loot_items.json
+        var origin = idx["Původ"] != null ? String(r[idx["Původ"]] || "").trim() : "";
+        var kind = origin === "M+" ? "mplus" : (origin ? "raid" : (lib.kind === "mplus" ? "mplus" : "raid"));
         return {
           player: r[idx["Postava"]], spec: spec, role: HEALER_SPECS[spec] ? "heal" : "dps",
-          src: src, unit: /QE/i.test(src) ? "HPS" : "DPS",
+          src: src, unit: /QE/i.test(src) ? "HPS" : "DPS", kind: kind,
           report: r[idx["Report"]], time: parseDate(r[idx["Čas"]]),
           bossIds: bossIds, boss: r[idx["Boss"]] || (bossIds.length && bossById[String(bossIds[0])] ? bossById[String(bossIds[0])].name : ""),
           itemId: itemId, item: r[idx["Item"]] || lib.name || ("#" + itemId), icon: lib.icon || "",
@@ -242,6 +302,21 @@ th.num { text-align: right; }
           base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]])
         };
       });
+      // Vault: Postava | Čas | Item ID | Item | Slot | ilvl | Bonus ID  → { nkey(postava): { player, time, items[] } }
+      state.vault = {};
+      var vt = vaultText ? parseCsv(vaultText) : [];
+      var vh = vt.shift() || []; var vi = {}; vh.forEach(function (h, i) { vi[h.trim()] = i; });
+      if (vi["Postava"] != null && vi["Item ID"] != null) {
+        vt.forEach(function (r) {
+          var name = r[vi["Postava"]]; if (!name) return;
+          var id = String(num(r[vi["Item ID"]]) || ""); if (!id) return;
+          var k = nkey(name);
+          var v = state.vault[k] = state.vault[k] || { player: name, time: parseDate(r[vi["Čas"]]), items: [] };
+          var lib = items[id] || {};
+          v.items.push({ itemId: id, item: r[vi["Item"]] || lib.name || ("#" + id), icon: lib.icon || "", slot: r[vi["Slot"]] || lib.slot || "",
+                         ilvl: num(r[vi["ilvl"]]), libKind: lib.kind === "mplus" ? "mplus" : (lib.bosses && lib.bosses.length ? "raid" : "") });
+        });
+      }
       showStatus();
   }
 
@@ -256,13 +331,15 @@ th.num { text-align: right; }
     var p = r.pct == null ? 0 : r.pct;
     return p >= 5 ? "up4" : p >= 2 ? "up3" : p >= 1 ? "up2" : p > 0 ? "up1" : "up0";
   }
+  function kindOk(k) { return state.kind === "all" || state.kind === k; }
   function passes(r) {
+    if (!kindOk(r.kind)) return false;
     var min = num($("#minv").value); if (min == null) min = 0;
     var v = metric(r); if (v == null) return false;
     if (!$("#showneg").checked && v <= 0) return false;
     if (v < min && !($("#showneg").checked && v <= 0)) return false;
     var q = $("#q").value.trim().toLowerCase();
-    if (q && (r.player + " " + r.item + " " + r.boss + " " + r.spec).toLowerCase().indexOf(q) < 0) return false;
+    if (q && (r.player + " " + r.item + " " + r.boss + " " + r.spec + " " + KIND_LABEL[r.kind]).toLowerCase().indexOf(q) < 0) return false;
     return true;
   }
   function itemHtml(r) {
@@ -277,61 +354,125 @@ th.num { text-align: right; }
     return '<span style="' + (color ? "color:" + color : "") + '">' + esc(r.player) + "</span>";
   }
   function roleBadge(r) { return '<span class="badge ' + r.role + '">' + esc(r.spec.replace(/_/g, " ")) + " · " + r.unit + "</span>"; }
+  function kindBadge(k) { return '<span class="kind ' + k + '">' + KIND_LABEL[k] + "</span>"; }
+  function byMetricDesc(a, b) { return (metric(b) || 0) - (metric(a) || 0); }
+
+  // ---- Great Vault: vzít item z vaultu, nebo si nechat bonus roll na raid? ----
+  function vaultHtml(playerRows, vault) {
+    // gain každého itemu podle raidového / M+ Droptimizeru (stejné ilvl Myth 6/6); u duplicit lepší hodnota
+    var byId = {};
+    playerRows.forEach(function (r) { var c = byId[r.itemId]; if (!c || (metric(r) || 0) > (metric(c) || 0)) byId[r.itemId] = r; });
+    var found = [], ignored = 0;
+    vault.items.forEach(function (v) { var r = byId[v.itemId]; if (r) found.push({ v: v, r: r }); else ignored++; });
+    found.sort(function (a, b) { return byMetricDesc(a.r, b.r); });
+    var raidRows = playerRows.filter(function (r) { return r.kind === "raid"; }).sort(byMetricDesc);
+    var bestRaid = raidRows[0] && (metric(raidRows[0]) || 0) > 0 ? raidRows[0] : null;
+    var bestVault = found[0] && (metric(found[0].r) || 0) > 0 ? found[0] : null;
+    var stale = vault.time && vault.time < lastReset();
+    var mood = "none", verdict, detail = "";
+    if (!vault.items.length) {
+      verdict = "Vault zatím nic nenabízí.";
+    } else if (!found.length) {
+      verdict = "Vault nabízí jen itemy mimo raid a M+ (delvy / world) – ty tu nesimujeme.";
+    } else if (bestVault && (!bestRaid || (metric(bestVault.r) || 0) >= (metric(bestRaid) || 0))) {
+      mood = "take";
+      verdict = "✅ Vzít z vaultu: " + bestVault.r.item + " (" + fmtVal(bestVault.r) + ")";
+      detail = bestRaid ? "nejlepší raid item " + bestRaid.item + " z " + (bestRaid.boss || "?") + " dá jen " + fmtVal(bestRaid) : "z raidu už nic lepšího nepadá";
+    } else if (bestRaid) {
+      mood = "roll";
+      verdict = "🎲 Bonus roll na raid je lepší: " + bestRaid.item + " z " + (bestRaid.boss || "?") + " (" + fmtVal(bestRaid) + ")";
+      detail = bestVault ? "vault nabízí nejvýš " + bestVault.r.item + " (" + fmtVal(bestVault.r) + ")" : "nic z vaultu není upgrade";
+    } else {
+      verdict = "Nic z vaultu ani z raidu není upgrade – vezmi si z vaultu, co se hodí (nebo měnu).";
+    }
+    var chips = found.map(function (f) {
+      return '<span class="chip ' + cls(f.r) + '" title="' + esc(f.r.boss ? "z " + f.r.boss : "") + '">' + kindBadge(f.r.kind) + " " + esc(f.r.item) + ' <span class="v">' + fmtVal(f.r) + "</span></span>";
+    }).join("");
+    if (ignored) chips += '<span class="chip up0" title="itemy z delvů / worldu nebo bez simu">+' + ignored + " mimo raid/M+</span>";
+    return '<div class="vault ' + mood + '"><span class="tag">Great Vault</span><span class="verdict">' + esc(verdict) + "</span>" +
+      (detail ? '<span class="vs">· ' + esc(detail) + "</span>" : "") +
+      '<span class="chips">' + chips + "</span>" +
+      (vault.time ? '<span class="when">vault z ' + fmtDate(vault.time) + "</span>" : "") +
+      (stale ? '<span class="stale">⚠ z minulého týdne – pošli nový SimC string</span>' : "") + "</div>";
+  }
 
   // ---- views ----
+  function sectionHtml(kind, rows, report) {
+    var html = '<div class="sect ' + kind + '"><div class="secthead">' + kindBadge(kind) + "<b>" + (kind === "raid" ? "Raid (Mythic)" : "Mythic+ dungeony (+10 vault → Myth 6/6)") + "</b>" +
+      '<span>' + rows.length + " upgradů</span>" + (report ? ' · <a href="' + esc(report) + '" target="_blank" rel="noopener">report</a>' : "") + "</div>";
+    if (!rows.length) html += '<p class="empty">Nic nad zvolený limit.</p>';
+    else {
+      html += '<div class="tablewrap"><table><thead><tr><th>' + (kind === "raid" ? "Boss" : "Dungeon") + '</th><th>Item</th><th class="num">Upgrade</th></tr></thead><tbody>';
+      rows.forEach(function (r) {
+        html += '<tr class="' + kind + '"><td>' + esc(r.boss || "?") + "</td><td>" + itemHtml(r) + '</td><td class="num"><span class="val ' + cls(r) + '">' + fmtVal(r) + "</span></td></tr>";
+      });
+      html += "</tbody></table></div>";
+    }
+    return html + "</div>";
+  }
+
   function renderPlayers() {
     var by = {};
     state.rows.forEach(function (r) { (by[r.player] = by[r.player] || { rows: [], any: r }).rows.push(r); });
     var names = Object.keys(by).sort(function (a, b) { return a.localeCompare(b, "cs"); });
     var html = "";
     names.forEach(function (n) {
-      var g = by[n], rows = g.rows.filter(passes).sort(function (a, b) { return (metric(b) || 0) - (metric(a) || 0); });
-      var a = g.any;
+      var g = by[n], a = g.any;
+      var raidRows = g.rows.filter(function (r) { return r.kind === "raid"; });
+      var mRows = g.rows.filter(function (r) { return r.kind === "mplus"; });
+      var raidAny = raidRows[0], mAny = mRows[0];
+      var shown = g.rows.filter(passes).sort(byMetricDesc);
+      var links = [];
+      if (raidAny && raidAny.report) links.push('<a href="' + esc(raidAny.report) + '" target="_blank" rel="noopener">report raid</a>');
+      if (mAny && mAny.report && !(raidAny && raidAny.report === mAny.report)) links.push('<a href="' + esc(mAny.report) + '" target="_blank" rel="noopener">report M+</a>');
       html += '<details class="card" open><summary><span class="name">' + playerHtml(a) + "</span> " + roleBadge(a) +
-        '<span class="meta">' + esc(a.src) + (a.time ? " · " + fmtDate(a.time) : "") + (a.report ? ' · <a href="' + esc(a.report) + '" target="_blank" rel="noopener">report</a>' : "") +
+        '<span class="meta">' + esc(a.src) + (a.time ? " · " + fmtDate(a.time) : "") + (links.length ? " · " + links.join(" · ") : "") +
         (a.base != null ? ' · základ <span class="mono">' + Math.round(a.base).toLocaleString("cs-CZ") + "</span> " + a.unit : "") + "</span>" +
-        '<span class="meta">' + rows.length + " upgradů</span></summary>";
-      if (!rows.length) html += '<p class="empty">Nic nad zvolený limit.</p>';
-      else {
-        html += '<div class="tablewrap"><table><thead><tr><th>Boss</th><th>Item</th><th class="num">Upgrade</th></tr></thead><tbody>';
-        rows.forEach(function (r) {
-          html += "<tr><td>" + esc(r.boss || "?") + "</td><td>" + itemHtml(r) + '</td><td class="num"><span class="val ' + cls(r) + '">' + fmtVal(r) + "</span></td></tr>";
-        });
-        html += "</tbody></table></div>";
-      }
+        '<span class="meta">' + shown.length + " upgradů" + (mRows.length ? "" : " · M+ sim zatím není") + "</span></summary>";
+      var vault = state.vault[nkey(n)];
+      if (vault) html += vaultHtml(g.rows, vault);
+      if (kindOk("raid")) html += sectionHtml("raid", raidRows.filter(passes).sort(byMetricDesc), raidAny && raidAny.report);
+      if (kindOk("mplus") && (mRows.length || state.kind === "mplus")) html += sectionHtml("mplus", mRows.filter(passes).sort(byMetricDesc), mAny && mAny.report);
       html += "</details>";
     });
     return html || '<p class="empty">Zatím žádné simy.</p>';
   }
 
   function renderBosses() {
-    var order = state.bosses.length ? state.bosses : [];
     var byBoss = {};
     state.rows.filter(passes).forEach(function (r) {
-      var ids = r.bossIds.length ? r.bossIds : ["?"];
-      ids.forEach(function (id) { var k = String(id); (byBoss[k] = byBoss[k] || {}); (byBoss[k][r.itemId] = byBoss[k][r.itemId] || []).push(r); });
+      var ids = r.bossIds.length ? r.bossIds : ["?" + r.kind];
+      ids.forEach(function (id) { var k = String(id); (byBoss[k] = byBoss[k] || { kind: r.kind, items: {} }); (byBoss[k].items[r.itemId] = byBoss[k].items[r.itemId] || []).push(r); });
     });
-    var keys = order.map(function (b) { return String(b.id); });
-    Object.keys(byBoss).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });
-    var html = "";
-    keys.forEach(function (k) {
-      var b = state.bossById[k]; var items = byBoss[k];
-      var title = b ? b.name : (k === "?" ? "Neznámý boss" : "Boss " + k);
-      html += '<div class="bosshead"><span class="num">' + esc(b ? b.num : "") + "</span><h2 style=\"margin:0\">" + esc(title) + "</h2>" +
-        '<span class="hint">' + (items ? Object.keys(items).length + " itemů se zájemci" : "nikdo nic") + "</span></div>";
-      if (!items) return;
-      var list = Object.keys(items).map(function (iid) {
-        var rs = items[iid].sort(function (x, y) { return (metric(y) || 0) - (metric(x) || 0); });
+    var raidKeys = state.bosses.filter(function (b) { return b.kind !== "mplus"; }).map(function (b) { return String(b.id); });
+    var mKeys = state.bosses.filter(function (b) { return b.kind === "mplus"; }).map(function (b) { return String(b.id); });
+    Object.keys(byBoss).forEach(function (k) {
+      if (raidKeys.indexOf(k) < 0 && mKeys.indexOf(k) < 0) (byBoss[k].kind === "mplus" ? mKeys : raidKeys).push(k);
+    });
+    function group(k) {
+      var b = state.bossById[k]; var e = byBoss[k]; var kind = b && b.kind === "mplus" ? "mplus" : (e ? e.kind : "raid");
+      var title = b ? b.name : (k.charAt(0) === "?" ? (kind === "mplus" ? "Neznámý dungeon" : "Neznámý boss") : (kind === "mplus" ? "Dungeon " : "Boss ") + k);
+      var html = '<div class="bosshead ' + kind + '"><span class="num">' + esc(b ? b.num : "") + "</span><h2 style=\"margin:0\">" + esc(title) + "</h2>" + kindBadge(kind) +
+        '<span class="hint">' + (e ? Object.keys(e.items).length + " itemů se zájemci" : "nikdo nic") + "</span></div>";
+      if (!e) return html;
+      var list = Object.keys(e.items).map(function (iid) {
+        var rs = e.items[iid].sort(byMetricDesc);
         return { iid: iid, rs: rs, top: metric(rs[0]) || 0 };
       }).sort(function (x, y) { return y.top - x.top; });
       html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Zájemci (seřazeno podle upgradu)</th></tr></thead><tbody>';
-      list.forEach(function (e) {
-        html += "<tr><td>" + itemHtml(e.rs[0]) + '</td><td><div class="chips">' + e.rs.map(function (r) {
+      list.forEach(function (en) {
+        html += '<tr class="' + kind + '"><td>' + itemHtml(en.rs[0]) + '</td><td><div class="chips">' + en.rs.map(function (r) {
           return '<span class="chip ' + cls(r) + '" title="' + esc(r.spec + " · " + r.src) + '">' + playerHtml(r) + ' <span class="v">' + fmtVal(r) + "</span></span>";
         }).join("") + "</div></td></tr>";
       });
-      html += "</tbody></table></div>";
-    });
+      return html + "</tbody></table></div>";
+    }
+    var html = "";
+    if (kindOk("raid")) raidKeys.forEach(function (k) { html += group(k); });
+    if (kindOk("mplus")) {
+      html += '<div class="divider">Mythic+ dungeony</div>';
+      mKeys.forEach(function (k) { html += group(k); });
+    }
     return html || '<p class="empty">Zatím žádné simy.</p>';
   }
 
@@ -344,13 +485,13 @@ th.num { text-align: right; }
       if (typeof va === "number" || typeof vb === "number") return ((va || 0) - (vb || 0)) * s.dir;
       return String(va || "").localeCompare(String(vb || ""), "cs") * s.dir;
     });
-    var cols = [["item", "Item"], ["boss", "Boss"], ["player", "Hráč"], ["spec", "Spec"], ["ilvl", "ilvl"], ["diff", "Upgrade"]];
+    var cols = [["item", "Item"], ["kind", "Původ"], ["boss", "Boss / dungeon"], ["player", "Hráč"], ["spec", "Spec"], ["ilvl", "ilvl"], ["diff", "Upgrade"]];
     var html = '<div class="tablewrap"><table><thead><tr>' + cols.map(function (c) {
       var num = c[0] === "diff" || c[0] === "ilvl";
       return '<th class="sortable' + (num ? " num" : "") + '" data-key="' + c[0] + '">' + c[1] + (s.key === c[0] ? '<span class="arrow">' + (s.dir < 0 ? "▼" : "▲") + "</span>" : "") + "</th>";
     }).join("") + "</tr></thead><tbody>";
     rows.forEach(function (r) {
-      html += "<tr><td>" + itemHtml(r) + "</td><td>" + esc(r.boss || "?") + "</td><td>" + playerHtml(r) + "</td><td>" + roleBadge(r) +
+      html += '<tr class="' + r.kind + '"><td>' + itemHtml(r) + "</td><td>" + kindBadge(r.kind) + "</td><td>" + esc(r.boss || "?") + "</td><td>" + playerHtml(r) + "</td><td>" + roleBadge(r) +
         '</td><td class="num mono">' + (r.ilvl || "") + '</td><td class="num"><span class="val ' + cls(r) + '">' + fmtVal(r) + "</span></td></tr>";
     });
     html += "</tbody></table></div>";
@@ -374,6 +515,15 @@ th.num { text-align: right; }
     b.addEventListener("click", function () {
       state.view = b.getAttribute("data-view");
       document.querySelectorAll(".sub-nav button[data-view]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      render();
+    });
+  });
+  document.querySelectorAll("#kindseg button").forEach(function (b) {
+    b.classList.toggle("active", b.getAttribute("data-kind") === state.kind);
+    b.addEventListener("click", function () {
+      state.kind = b.getAttribute("data-kind");
+      try { localStorage.setItem("lootKind", state.kind); } catch (e) {}
+      document.querySelectorAll("#kindseg button").forEach(function (x) { x.classList.toggle("active", x === b); });
       render();
     });
   });

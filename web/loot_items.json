@@ -3,6 +3,16 @@
   "1320": "The Venomous Abyss",
   "1317": "The Tidebound Grotto"
  },
+ "dungeons": {
+  "1322": "Altar of Fangs",
+  "1311": "Den of Nalorakk",
+  "1041": "Kings' Rest",
+  "1304": "Murder Row",
+  "1202": "Ruby Life Pools",
+  "1030": "Temple of Sethraliss",
+  "1309": "The Blinding Vale",
+  "1313": "Voidscar Arena"
+ },
  "bosses": [
   {
    "id": 2888,
@@ -63,9 +73,1875 @@
    "name": "Nymrissa Wavecaller",
    "num": "Lair",
    "instance": 1317
+  },
+  {
+   "id": 1322,
+   "name": "Altar of Fangs",
+   "num": "M+",
+   "instance": 1322,
+   "kind": "mplus"
+  },
+  {
+   "id": 1311,
+   "name": "Den of Nalorakk",
+   "num": "M+",
+   "instance": 1311,
+   "kind": "mplus"
+  },
+  {
+   "id": 1041,
+   "name": "Kings' Rest",
+   "num": "M+",
+   "instance": 1041,
+   "kind": "mplus"
+  },
+  {
+   "id": 1304,
+   "name": "Murder Row",
+   "num": "M+",
+   "instance": 1304,
+   "kind": "mplus"
+  },
+  {
+   "id": 1202,
+   "name": "Ruby Life Pools",
+   "num": "M+",
+   "instance": 1202,
+   "kind": "mplus"
+  },
+  {
+   "id": 1030,
+   "name": "Temple of Sethraliss",
+   "num": "M+",
+   "instance": 1030,
+   "kind": "mplus"
+  },
+  {
+   "id": 1309,
+   "name": "The Blinding Vale",
+   "num": "M+",
+   "instance": 1309,
+   "kind": "mplus"
+  },
+  {
+   "id": 1313,
+   "name": "Voidscar Arena",
+   "num": "M+",
+   "instance": 1313,
+   "kind": "mplus"
   }
  ],
  "items": {
+  "158366": {
+   "name": "Charged Sandstone Band",
+   "icon": "inv_ring_80_03d",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "158367": {
+   "name": "Merektha's Fang",
+   "icon": "inv_misc_food_87_sporelingsnack",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "158368": {
+   "name": "Sethraliss' Defiled Relic",
+   "icon": "inv_staff_2h_snakeman_c_01",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "158369": {
+   "name": "Galvanized Stormcrusher",
+   "icon": "inv_mace_1h_pandaraid_d_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "158370": {
+   "name": "Twin-Strike Polearm",
+   "icon": "inv_polearm_2h_snakeman_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "158373": {
+   "name": "Resonating Crystal Scimitar",
+   "icon": "inv_sword_1h_battledungeon_c_02",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "158374": {
+   "name": "Tiny Electromental in a Jar",
+   "icon": "inv_alchemy_71_potion4",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "158714": {
+   "name": "Swarm's Edge",
+   "icon": "inv_sword_1h_battledungeon_c_02",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159136": {
+   "name": "Jeweled Dagger of Subjugation",
+   "icon": "inv_knife_1h_battledungeon_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159137": {
+   "name": "Gilded Serpent's Tooth",
+   "icon": "inv_knife_1h_battledungeon_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159234": {
+   "name": "Down-Lined Breeches",
+   "icon": "inv_pant_cloth_zandalardungeon_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159243": {
+   "name": "Sandals of Wise Voodoo",
+   "icon": "inv_boot_cloth_zandalardungeon_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159247": {
+   "name": "Handwraps of Oscillating Polarity",
+   "icon": "inv_glove_cloth_zandalardungeon_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159255": {
+   "name": "Ouroborial Sash",
+   "icon": "inv_belt_cloth_zandalardungeon_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159259": {
+   "name": "Sandswept Sandals",
+   "icon": "inv_boot_cloth_zandalardungeon_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159263": {
+   "name": "Bindings of the Slithering Current",
+   "icon": "inv_bracer_cloth_zandalardungeon_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159288": {
+   "name": "Cloak of the Restless Tribes",
+   "icon": "inv_cape_mail_zandalardungeon_c_01",
+   "slot": "back",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159300": {
+   "name": "Kula's Butchering Wristwraps",
+   "icon": "inv_bracer_leather_zandalardungeon_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159301": {
+   "name": "Primal Dinomancer's Belt",
+   "icon": "inv_belt_leather_zandalardungeon_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159304": {
+   "name": "Goldfeather Boots",
+   "icon": "inv_boot_leather_zandalardungeon_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159312": {
+   "name": "Desiccator's Blessed Gloves",
+   "icon": "inv_glove_leather_zandalardungeon_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159313": {
+   "name": "Breeches of the Sacred Hall",
+   "icon": "inv_pant_leather_zandalardungeon_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159317": {
+   "name": "Whirling Dervish Sash",
+   "icon": "inv_belt_leather_zandalardungeon_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159327": {
+   "name": "Sand-Shined Snakeskin Sandals",
+   "icon": "inv_boot_leather_zandalardungeon_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159329": {
+   "name": "Leggings of the Galeforce Viper",
+   "icon": "inv_pant_leather_zandalardungeon_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159337": {
+   "name": "Grips of Electrified Defense",
+   "icon": "inv_glove_leather_zandalardungeon_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159369": {
+   "name": "Belt of the Consecrated Tomb",
+   "icon": "inv_belt_mail_zandalardungeon_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159371": {
+   "name": "Boots of the Headlong Conqueror",
+   "icon": "inv_boot_mail_zandalardungeon_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159375": {
+   "name": "Legguards of the Awakening Brood",
+   "icon": "inv_pant_mail_zandalardungeon_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159380": {
+   "name": "Arc-Glass Bindings",
+   "icon": "inv_bracer_mail_zandalardungeon_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159388": {
+   "name": "Sabatons of Coruscating Energy",
+   "icon": "inv_boot_mail_zandalardungeon_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159409": {
+   "name": "Embalmer's Steadying Bracers",
+   "icon": "inv_bracer_plate_zandalardungeon_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159412": {
+   "name": "Auric Puddle Stompers",
+   "icon": "inv_boot_plate_zandalardungeon_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159413": {
+   "name": "Gauntlets of the Avian Sentinel",
+   "icon": "inv_glove_plate_zandalardungeon_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159418": {
+   "name": "Girdle of Pestilent Purification",
+   "icon": "inv_belt_plate_zandalardungeon_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159425": {
+   "name": "Shard-Tipped Vambraces",
+   "icon": "inv_bracer_plate_zandalardungeon_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159435": {
+   "name": "Legplates of Charged Duality",
+   "icon": "inv_pant_plate_zandalardungeon_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159442": {
+   "name": "Sand-Scoured Greatbelt",
+   "icon": "inv_belt_plate_zandalardungeon_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159459": {
+   "name": "Ritual Binder's Ring",
+   "icon": "inv_ring_80_03e",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159617": {
+   "name": "Lustrous Golden Plumage",
+   "icon": "inv_icon_feather06a",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159618": {
+   "name": "Mchimba's Ritual Bandages",
+   "icon": "inv_misc_emberweavebandagelight",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159636": {
+   "name": "Staff of the Lightning Serpent",
+   "icon": "inv_staff_2h_battledungeon_c_04",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159637": {
+   "name": "Snakebite Recurve",
+   "icon": "inv_bow_1h_battledungeon_c_01",
+   "slot": "ranged",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159642": {
+   "name": "Royal Purifier's Spade",
+   "icon": "inv_polearm_2h_zandalariguard_b_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159643": {
+   "name": "Crossbow of Forgotten Majesty",
+   "icon": "inv_bow_2h_crossbow_pandaraid_d_01",
+   "slot": "ranged",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159644": {
+   "name": "Geti'ikku, Cut of Death",
+   "icon": "inv_sword_2h_battledungeon_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159645": {
+   "name": "Headcracker of Supplication",
+   "icon": "inv_mace_1h_battledungeon_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "159664": {
+   "name": "Bulwark of Brimming Potential",
+   "icon": "inv_shield_1h_battledungeon_c_02",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "159667": {
+   "name": "Vessel of Last Rites",
+   "icon": "inv_offhand_1h_battledungeon_c_02",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "160213": {
+   "name": "Sepulchral Construct's Gloves",
+   "icon": "inv_glove_mail_zandalardungeon_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "160216": {
+   "name": "Crackling Jade Kilij",
+   "icon": "inv_sword_1h_battledungeon_c_02",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "162544": {
+   "name": "Jade Ophidian Band",
+   "icon": "inv_ring_80_04c",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "193691": {
+   "name": "Sky Saddle Cord",
+   "icon": "inv_belt_dragondungeon_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193728": {
+   "name": "Scaleguard's Stalwart Greatboots",
+   "icon": "inv_plate_dragondungeon_c_01_boot",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193748": {
+   "name": "Kyrakka's Searing Embers",
+   "icon": "inv_10_dungeonjewelry_primalist_trinket_4_fire",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193750": {
+   "name": "Wind Soarer's Breeches",
+   "icon": "inv_pant_cloth_dragondungeon_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193751": {
+   "name": "Crown of Roaring Storms",
+   "icon": "inv_leather_dragondungeon_c_01_helm",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193752": {
+   "name": "Galerattle Gauntlets",
+   "icon": "inv_mail_dragondungeon_c_01_glove",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193753": {
+   "name": "Breastplate of Soaring Terror",
+   "icon": "inv_plate_dragondungeon_c_01_chest",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193754": {
+   "name": "Drake Rider's Stecktarge",
+   "icon": "inv_shield_1h_drakonid_c_01",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193755": {
+   "name": "Backdraft Cleaver",
+   "icon": "inv_axe_2h_drakonoid_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193756": {
+   "name": "Skyferno Rondel",
+   "icon": "inv_knife_1h_dragondungeon_c_02",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193757": {
+   "name": "Ruby Whelp Shell",
+   "icon": "inv_item_dragonegg_redbroken01",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193758": {
+   "name": "Subjugator's Chilling Grips",
+   "icon": "inv_leather_dragondungeon_c_01_glove",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193759": {
+   "name": "Egg Tender's Leggings",
+   "icon": "inv_mail_dragondungeon_c_01_pant",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193761": {
+   "name": "Chillworn's Infusion Staff",
+   "icon": "inv_staff_2h_dragondungeon_c_02",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193762": {
+   "name": "Blazebinder's Hoof",
+   "icon": "inv_10_dungeonjewelry_primalist_trinket_2_fire",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193763": {
+   "name": "Fireproof Drape",
+   "icon": "inv_mail_dragondungeon_c_01_cape",
+   "slot": "back",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193764": {
+   "name": "Invader's Firestorm Chestguard",
+   "icon": "inv_leather_dragondungeon_c_01_chest",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193765": {
+   "name": "Blazebound Lieutenant's Helm",
+   "icon": "inv_mail_dragondungeon_c_01_helm",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193766": {
+   "name": "Kokia's Burnout Rod",
+   "icon": "inv_offhand_1h_drakonid_c_01",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "193767": {
+   "name": "Havoc Crusher",
+   "icon": "inv_mace_1h_dragondungeon_c_02",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1202
+   ],
+   "kind": "mplus"
+  },
+  "239031": {
+   "name": "Brood Cleanser's Amice",
+   "icon": "inv_shoulder_cloth_zandalardungeon_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "239032": {
+   "name": "Robes of the Reborn Serpent",
+   "icon": "inv_chest_cloth_zandalardungeon_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "239033": {
+   "name": "Hood of the Slithering Loa",
+   "icon": "inv_helm_leather_zandalardungeon_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "239034": {
+   "name": "Corrupted Hexxer's Vestments",
+   "icon": "inv_chest_mail_zandalardungeon_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "239035": {
+   "name": "Sethraliss' Fanged Helm",
+   "icon": "inv_helm_mail_zandalardungeon_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "239036": {
+   "name": "Desert Guardian's Breastplate",
+   "icon": "inv_chest_plate_zandalardungeon_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "239037": {
+   "name": "C'thraxxi Binders Pauldrons",
+   "icon": "inv_shoulder_plate_zandalardungeon_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1030
+   ],
+   "kind": "mplus"
+  },
+  "239045": {
+   "name": "Mantle of Ceremonial Ascension",
+   "icon": "inv_shoulder_cloth_zandalardungeon_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "239046": {
+   "name": "Loa-Blessed Chestguard",
+   "icon": "inv_chest_mail_zandalardungeon_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "239047": {
+   "name": "Headdress of the First Empire",
+   "icon": "inv_helm_cloth_zandalardungeon_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "239048": {
+   "name": "Vest of Reverent Adoration",
+   "icon": "inv_chest_leather_zandalardungeon_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "239049": {
+   "name": "Spaulders of Prime Emperor",
+   "icon": "inv_shoulder_mail_zandalardungeon_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "239050": {
+   "name": "Helm of the Raptor King",
+   "icon": "inv_helm_plate_zandalardungeon_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "239051": {
+   "name": "Pauldrons of the Great Unifier",
+   "icon": "inv_shoulder_plate_zandalardungeon_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "250214": {
+   "name": "Lightspire Core",
+   "icon": "inv_enchant_essenceastrallarge",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "250215": {
+   "name": "Freightrunner's Flask",
+   "icon": "inv_alchemy_90_flask_red",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "250224": {
+   "name": "Mindpiercer's Sigil",
+   "icon": "inv_icon_shadowcouncilorb_purple",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "250225": {
+   "name": "Void Execution Mandate",
+   "icon": "inv_inscription_80_warscroll_intellect",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "250228": {
+   "name": "Resonant Bellowstone",
+   "icon": "inv_alchemy_90_stone_green",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "250229": {
+   "name": "Idol of the War Loa",
+   "icon": "inv12_jewelrytrinkets_dungeon_idolofthewargod",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "250238": {
+   "name": "Seed of the Devouring Wild",
+   "icon": "inv12_jewelrytrinkets_dungeon_seedofthedevouringwild",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "250243": {
+   "name": "Manaheart's Binding Flame",
+   "icon": "inv_ember_fel",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "250244": {
+   "name": "Permafrost Essence",
+   "icon": "inv12_jewelrytrinkets_dungeon_permafrostreservoir",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "250245": {
+   "name": "Tumor of the Swarm",
+   "icon": "ability_pet_baneling",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "250248": {
+   "name": "Mycolic Medicine",
+   "icon": "inv_misc_starspecklemushroom",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "250254": {
+   "name": "Seed of Radiant Hope",
+   "icon": "inv12_jewelrytrinkets_dungeon_seedofradianthope",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "250255": {
+   "name": "Unstable Felheart Crystal",
+   "icon": "tooltip_crystallizedfel",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "250259": {
+   "name": "Sapling of the Dawnroot",
+   "icon": "inv_misc_herb_nightmarevine",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251123": {
+   "name": "Nibbles' Training Rod",
+   "icon": "inv_staff_2h_dungeonharronir_c_02",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251124": {
+   "name": "Gauntlets of Fevered Defense",
+   "icon": "inv_glove_leather_dungeonharronir_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251125": {
+   "name": "Felsoaked Soles",
+   "icon": "inv_boot_mail_dungeonharronir_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251126": {
+   "name": "Greathelm of Temptation",
+   "icon": "inv_helm_plate_dungeonharronir_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251127": {
+   "name": "Nibbling Armbands",
+   "icon": "inv_bracer_cloth_dungeonharronir_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251128": {
+   "name": "Bladesorrow",
+   "icon": "inv_knife_1h_dungeonharronir_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251129": {
+   "name": "Counterfeit Clutches",
+   "icon": "inv_glove_cloth_dungeonharronir_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251130": {
+   "name": "Breeches of Deft Deals",
+   "icon": "inv_pant_leather_dungeonharronir_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251131": {
+   "name": "Jangling Felpaulets",
+   "icon": "inv_shoulder_mail_dungeonharronir_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251132": {
+   "name": "Speakeasy Shroud",
+   "icon": "inv_cape_leather_dungeonharronir_c_01",
+   "slot": "back",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251133": {
+   "name": "Overseer's Vambraces",
+   "icon": "inv_bracer_plate_dungeonharronir_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251134": {
+   "name": "Xathuux's Cleave",
+   "icon": "inv_axe_2h_dungeonharronir_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251135": {
+   "name": "Fury-fletched Armlets",
+   "icon": "inv_bracer_leather_dungeonharronir_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251136": {
+   "name": "Signet of Snarling Servitude",
+   "icon": "inv_12_jewelry_voidelf_ring_teal",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251137": {
+   "name": "Tempestuous Sandals",
+   "icon": "inv_boot_cloth_dungeonharronir_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251138": {
+   "name": "Cinderfury Shoulderguards",
+   "icon": "inv_shoulder_plate_dungeonharronir_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251139": {
+   "name": "Summoner's Searing Shirt",
+   "icon": "inv_chest_cloth_dungeonharronir_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251140": {
+   "name": "Vilefiend's Guise",
+   "icon": "inv_helm_leather_dungeonharronir_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251141": {
+   "name": "Lithiel's Linked Leggings",
+   "icon": "inv_pant_mail_dungeonharronir_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251142": {
+   "name": "Pendant of Malefic Fury",
+   "icon": "inv_12_jewelry_silvermoonelf_necklace_green",
+   "slot": "neck",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "251143": {
+   "name": "Grim Harvest Gloves",
+   "icon": "inv_hand_1h_dungeonharronir_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251144": {
+   "name": "Autumn's Boon Belt",
+   "icon": "inv_belt_plate_dungeonharronir_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251145": {
+   "name": "Forgotten Tribe Footguards",
+   "icon": "inv_boot_mail_dungeonharronir_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251146": {
+   "name": "Scavenger's Spaulders",
+   "icon": "inv_shoulder_leather_dungeonharronir_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251147": {
+   "name": "Hoarded Harvest Wrap",
+   "icon": "inv_chest_cloth_dungeonharronir_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251148": {
+   "name": "Pilfered Precious Band",
+   "icon": "inv_12_jewelry_zulaman_troll_ring_green2",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251149": {
+   "name": "Victor's Flashfrozen Blade",
+   "icon": "inv_polearm_2h_dungeonharronir_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251150": {
+   "name": "Tempest's Shelter",
+   "icon": "inv_shield_1h_dungeonharronir_c_01",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251151": {
+   "name": "Sentinel Challenger's Prize",
+   "icon": "inv_chest_plate_dungeonharronir_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251152": {
+   "name": "Season's Turn Gauntlets",
+   "icon": "inv_glove_mail_dungeonharronir_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251153": {
+   "name": "Arctic Explorer's Legwraps",
+   "icon": "inv_boot_leather_dungeonharronir_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251154": {
+   "name": "Winter's Embrace Bracers",
+   "icon": "inv_bracer_cloth_dungeonharronir_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251155": {
+   "name": "Tribal Defender's Cord",
+   "icon": "inv_belt_mail_dungeonharronir_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251156": {
+   "name": "Fallen Speaker's Staff",
+   "icon": "inv_staff_2h_amani_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251158": {
+   "name": "Nalorakk's Nightmare",
+   "icon": "inv_helm_mail_dungeonharronir_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251159": {
+   "name": "War Trial Vestments",
+   "icon": "inv_chest_leather_dungeonharronir_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251160": {
+   "name": "Forest Dream Leg-guards",
+   "icon": "inv_pant_cloth_dungeonharronir_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251165": {
+   "name": "Pulverizing Pads",
+   "icon": "inv_glove_mail_dungeonharronir_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251173": {
+   "name": "Yoke of the Charging Bear",
+   "icon": "inv_12_jewelry_zulaman_troll_necklace_green1",
+   "slot": "neck",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251180": {
+   "name": "Thornblade",
+   "icon": "inv_knife_1h_rutaani_b_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251181": {
+   "name": "Pruning Lance",
+   "icon": "inv_polearm_2h_rutaani_b_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251182": {
+   "name": "Bedrock Breeches",
+   "icon": "inv_pant_plate_dungeonharronir_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251183": {
+   "name": "Rootwarden Wraps",
+   "icon": "inv_bracer_leather_dungeonharronir_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251184": {
+   "name": "Ironroot Collar",
+   "icon": "inv_shoulder_mail_dungeonharronir_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251185": {
+   "name": "Lightblossom Cinch",
+   "icon": "inv_belt_cloth_dungeonharronir_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251186": {
+   "name": "Thorntalon Edge",
+   "icon": "inv_hand_1h_dungeonharronir_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251187": {
+   "name": "Amirdrassil's Reach",
+   "icon": "inv_crossbow_2h_dungeonharronir_c_01",
+   "slot": "ranged",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251188": {
+   "name": "Doompetal",
+   "icon": "inv_wand_1h_dungeonharronir_c_01",
+   "slot": "ranged",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251189": {
+   "name": "Rootwalker Harness",
+   "icon": "inv_belt_leather_dungeonharronir_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251190": {
+   "name": "Bloodthorn Burnous",
+   "icon": "inv_cape_mail_dungeonharronir_c_01",
+   "slot": "back",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251191": {
+   "name": "Luminescent Sprout",
+   "icon": "inv_offhand_1h_dungeonharronir_c_01",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251192": {
+   "name": "Branch of Pride",
+   "icon": "inv_staff_2h_dungeonharronir_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251193": {
+   "name": "Taproot Ribs",
+   "icon": "inv_chest_plate_dungeonharronir_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251194": {
+   "name": "Lightwarden's Bind",
+   "icon": "inv12_jewelrytrinkets_rutaani_ring_yellow",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251195": {
+   "name": "Thorned Reply",
+   "icon": "inv_sword_1h_dungeonharronir_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251196": {
+   "name": "Teldrassil's Sacrifice",
+   "icon": "inv_shield_1h_rutaani_b_01",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251197": {
+   "name": "Thornspike Gauntlets",
+   "icon": "inv_glove_plate_dungeonharronir_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251198": {
+   "name": "Lightspore Leggings",
+   "icon": "inv_pant_leather_dungeonharronir_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251199": {
+   "name": "Worldroot Canopy",
+   "icon": "inv_helm_cloth_dungeonharronir_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251200": {
+   "name": "Saptorbane Guards",
+   "icon": "inv_bracer_mail_dungeonharronir_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1309
+   ],
+   "kind": "mplus"
+  },
+  "251214": {
+   "name": "Bonds of the Hash'ura",
+   "icon": "inv_glove_plate_dungeonharronir_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
+  "251218": {
+   "name": "Taz'Rah's Cosmic Edge",
+   "icon": "inv_sword_1h_domanaar_b_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251219": {
+   "name": "Riftworn Stompers",
+   "icon": "inv_boot_cloth_dungeonharronir_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251220": {
+   "name": "Voidscarred Crown",
+   "icon": "inv_helm_mail_dungeonharronir_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251221": {
+   "name": "Despondent's Gauntlets",
+   "icon": "inv_glove_plate_dungeonharronir_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251222": {
+   "name": "Ethereal Netherwrap",
+   "icon": "inv_belt_cloth_dungeonharronir_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251223": {
+   "name": "Somber Spaulders",
+   "icon": "inv_shoulder_leather_dungeonharronir_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251224": {
+   "name": "Hulking Handaxe",
+   "icon": "inv_axe_1h_dungeonharronir_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251225": {
+   "name": "Fang of Contagion",
+   "icon": "inv_knife_1h_dungeonharronir_c_02",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251226": {
+   "name": "Hide of Pestilence",
+   "icon": "inv_chest_leather_dungeonharronir_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251227": {
+   "name": "Poisoner's Pauldrons",
+   "icon": "inv_shoulder_cloth_dungeonharronir_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251228": {
+   "name": "Behemoth Waistband",
+   "icon": "inv_belt_mail_dungeonharronir_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251229": {
+   "name": "Visor of the Predator",
+   "icon": "inv_helm_armor_domanaar_d_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251230": {
+   "name": "Charonic Crescent",
+   "icon": "inv_polearm_2h_domanaar_b_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251231": {
+   "name": "Singularity Slicer",
+   "icon": "inv_glaive_1h_dungeonharronir_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251232": {
+   "name": "Overseer's Diadem",
+   "icon": "inv_helm_cloth_dungeonharronir_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251233": {
+   "name": "Manipulator's Vest",
+   "icon": "inv_chest_mail_dungeonharronir_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251234": {
+   "name": "Graft of the Domanaar",
+   "icon": "inv_12_jewelry_devouringhost_necklace_silver2",
+   "slot": "neck",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "251235": {
+   "name": "Gravitic Girdle",
+   "icon": "inv_belt_leather_dungeonharronir_c_01",
+   "slot": "waist",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "252258": {
+   "name": "Sickening Signet of Atroxus",
+   "icon": "inv_12_jewelry_devouringhost_ring_bronze2",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1313
+   ],
+   "kind": "mplus"
+  },
+  "258045": {
+   "name": "Dawnblade's Glaives",
+   "icon": "inv_glaive_1h_questbloodelf_b_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
   "268196": {
    "name": "Venom-Slashed Scuteward",
    "icon": "inv_shield_1h_ulatek_d_01",
@@ -1843,6 +3719,26 @@
     -97
    ]
   },
+  "271680": {
+   "name": "Sinseared Repeater",
+   "icon": "inv_firearm_2h_undergroundquest_b_01",
+   "slot": "ranged",
+   "quality": 3,
+   "bosses": [
+    1304
+   ],
+   "kind": "mplus"
+  },
+  "271681": {
+   "name": "Perennial Frostbound Charm",
+   "icon": "inv_offhand_1h_dungeonharronir_c_01",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1311
+   ],
+   "kind": "mplus"
+  },
   "271874": {
    "name": "Venomkeeper's Horrific Cowl",
    "icon": "inv_helm_cloth_raidwarlockulatek_d_01",
@@ -1878,6 +3774,256 @@
    "bosses": [
     2895
    ]
+  },
+  "273649": {
+   "name": "Stormbound Emblem of Dazar",
+   "icon": "inv_7_0raid_necklace_14a",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1041
+   ],
+   "kind": "mplus"
+  },
+  "273773": {
+   "name": "Handwraps of Blasphemous Rites",
+   "icon": "inv_glove_cloth_outdooramaniloa_c_01",
+   "slot": "hands",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273774": {
+   "name": "Snakeskin Spaulders",
+   "icon": "inv_shoulder_leather_outdooramaniloa_c_01",
+   "slot": "shoulder",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273775": {
+   "name": "Hydra Scale Wristguards",
+   "icon": "inv_bracer_mail_outdooramaniloa_c_01",
+   "slot": "wrist",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273776": {
+   "name": "Ancient General's Obsidian Pillars",
+   "icon": "inv_pant_plate_outdooramaniloa_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273777": {
+   "name": "Poison-Proof Stompers",
+   "icon": "inv_boot_plate_outdooramaniloa_c_01",
+   "slot": "feet",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273778": {
+   "name": "Polished Lightwood Channeler",
+   "icon": "inv_knife_1h_zuljin_d_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273779": {
+   "name": "Nocuous Focal Fang",
+   "icon": "inv_offhand_1h_outdooramaniloa_c_01",
+   "slot": "off_hand",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273780": {
+   "name": "Venom-Etched Crescent",
+   "icon": "inv_axe_1h_outdooramaniloa_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273781": {
+   "name": "Strand of Warding Fangs",
+   "icon": "inv_121_jewelry_neck03_teal",
+   "slot": "neck",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273782": {
+   "name": "Vile Writhefang Glaive",
+   "icon": "inv_polearm_2h_outdooramaniloa_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273783": {
+   "name": "Toxin-Coated Warstaff",
+   "icon": "inv_staff_2h_outdooramaniloa_c_01",
+   "slot": "two_hand",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273784": {
+   "name": "Ancestral Amani Recurve",
+   "icon": "inv_bow_1h_outdooramaniloa_c_01",
+   "slot": "ranged",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273785": {
+   "name": "Primordial Robe of Rites",
+   "icon": "inv_robe_cloth_outdooramaniloa_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273786": {
+   "name": "Leggings of Entwined Serpents",
+   "icon": "inv_pant_cloth_outdooramaniloa_c_01",
+   "slot": "legs",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273787": {
+   "name": "Aged Interwoven Scaleplate",
+   "icon": "inv_chest_plate_outdooramaniloa_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273789": {
+   "name": "Chestguard of Corroded Scales",
+   "icon": "inv_chest_mail_outdooramaniloa_c_01",
+   "slot": "chest",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273791": {
+   "name": "Spare Speaker's Hood",
+   "icon": "inv_helm_leather_outdooramaniloa_c_01",
+   "slot": "head",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273792": {
+   "name": "Band of the Amani Warlord",
+   "icon": "inv_121_jewelry_ring02_green",
+   "slot": "finger",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273793": {
+   "name": "Hydraspine Twinblade",
+   "icon": "inv_glaive_1h_outdooramaniloa_c_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273794": {
+   "name": "Knot of Writhing Serpents",
+   "icon": "inv_121_trinket_dungeon_ulatek_writhe",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273795": {
+   "name": "Coiled Fangstone",
+   "icon": "inv_121_trinket_dungeon_ulatek_fangstone",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273796": {
+   "name": "Vile Vial of Volatile Venom",
+   "icon": "inv_121_trinket_dungeon_ulatek_vile",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "273797": {
+   "name": "Tattered Amani War Banner",
+   "icon": "inv_121_trinket_dungeon_ulatek_banner",
+   "slot": "trinket",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
+  },
+  "275070": {
+   "name": "Sharpened Lightwood Slasher",
+   "icon": "inv_knife_1h_zuljin_d_01",
+   "slot": "one_hand",
+   "quality": 3,
+   "bosses": [
+    1322
+   ],
+   "kind": "mplus"
   },
   "275937": {
    "name": "Hex Lord's Visage",
