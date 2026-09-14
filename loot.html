@@ -62,9 +62,17 @@ th.num { text-align: right; }
 .kind { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 18px; vertical-align: middle; }
 .kind.raid { background: var(--raid-soft); color: var(--raid); border: 1px solid var(--raid); }
 .kind.mplus { background: var(--mplus-soft); color: var(--mplus); border: 1px solid var(--mplus); }
+/* raid vlevo, M+ vpravo – vedle sebe; na úzké obrazovce pod sebou */
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
+.pair > .sect + .sect { border-left: 1px solid var(--line); }
+.pair .sect { border-top: 0; }
+@media (max-width: 860px) { .pair { grid-template-columns: 1fr; } .pair > .sect + .sect { border-left: 3px solid var(--mplus); } }
 .sect { border-left: 3px solid var(--raid); }
 .sect.mplus { border-left-color: var(--mplus); }
-.sect .secthead { display: flex; align-items: center; gap: 10px; padding: 9px 16px 7px; font-size: 13px; color: var(--muted); background: var(--surface2); border-top: 1px solid var(--line); }
+.sect .secthead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 9px 16px 7px; font-size: 13px; color: var(--muted); background: var(--surface2); border-top: 1px solid var(--line); }
+.pair .sect .secthead { border-top: 0; }
+.pair .tablewrap table { width: 100%; }
+.pair td, .pair th { padding-left: 12px; padding-right: 12px; }
 .sect .secthead b { color: var(--ink-strong); font-weight: 600; }
 .sect.mplus .secthead b { color: var(--mplus); }
 .sect.raid .secthead b { color: var(--raid); }
@@ -431,8 +439,11 @@ tr.mplus td:first-child { color: var(--mplus); }
         '<span class="meta">' + shown.length + " upgradů" + (mRows.length ? "" : " · M+ sim zatím není") + "</span></summary>";
       var vault = state.vault[nkey(n)];
       if (vault) html += vaultHtml(g.rows, vault);
-      if (kindOk("raid")) html += sectionHtml("raid", raidRows.filter(passes).sort(byMetricDesc), raidAny && raidAny.report);
-      if (kindOk("mplus") && (mRows.length || state.kind === "mplus")) html += sectionHtml("mplus", mRows.filter(passes).sort(byMetricDesc), mAny && mAny.report);
+      // raid vlevo, M+ vpravo (jen jedna sekce = přes celou šířku)
+      var parts = [];
+      if (kindOk("raid")) parts.push(sectionHtml("raid", raidRows.filter(passes).sort(byMetricDesc), raidAny && raidAny.report));
+      if (kindOk("mplus") && (mRows.length || state.kind === "mplus")) parts.push(sectionHtml("mplus", mRows.filter(passes).sort(byMetricDesc), mAny && mAny.report));
+      html += parts.length === 2 ? '<div class="pair">' + parts.join("") + "</div>" : parts.join("");
       html += "</details>";
     });
     return html || '<p class="empty">Zatím žádné simy.</p>';
