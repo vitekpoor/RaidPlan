@@ -469,6 +469,8 @@ tr.mplus td:first-child { color: var(--mplus); }
       var tgRow = g.rows.filter(function (r) { return r.kind === "topgear"; })[0];
       var raidAny = raidRows[0], mAny = mRows[0];
       var shown = g.rows.filter(passes).sort(byMetricDesc);
+      // při hledání schovat celé karty hráčů, kterých se dotaz netýká (jméno hráče je součástí hledaného textu řádků)
+      if ($("#q").value.trim() && !shown.length) return;
       var links = [];
       if (raidAny && raidAny.report) links.push('<a href="' + esc(raidAny.report) + '" target="_blank" rel="noopener">report raid</a>');
       if (mAny && mAny.report && !(raidAny && raidAny.report === mAny.report)) links.push('<a href="' + esc(mAny.report) + '" target="_blank" rel="noopener">report M+</a>');
@@ -486,7 +488,7 @@ tr.mplus td:first-child { color: var(--mplus); }
       html += parts.length === 2 ? '<div class="pair">' + parts.join("") + "</div>" : parts.join("");
       html += "</details>";
     });
-    return html || '<p class="empty">Zatím žádné simy.</p>';
+    return html || '<p class="empty">' + ($("#q").value.trim() ? "Hledání nic nenašlo." : "Zatím žádné simy.") + "</p>";
   }
 
   function renderBosses() {
