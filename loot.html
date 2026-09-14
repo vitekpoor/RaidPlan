@@ -39,7 +39,7 @@ th .arrow { opacity: .6; margin-left: 4px; }
 td.num { text-align: right; white-space: nowrap; }
 th.num { text-align: right; }
 
-.card { border-radius: var(--radius); background: var(--surface2); margin: 0 0 16px; overflow: hidden; }
+.card { border-radius: var(--radius); background: var(--surface2); margin: 0 0 16px; overflow: hidden; scroll-margin-top: 120px; /* pod sticky hlavičku */ }
 .card > summary, .card .cardhead { list-style: none; cursor: pointer; padding: 14px 20px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; background: var(--surface3); }
 .card > summary::-webkit-details-marker { display: none; }
 .card > summary:hover { background: #232926; }
@@ -100,6 +100,18 @@ tr.mplus td:first-child { color: var(--mplus); }
 .divider { display: flex; align-items: center; gap: 14px; margin: 38px 0 6px; color: var(--mplus); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; }
 .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
 .empty { color: var(--muted); font-style: italic; padding: 10px 16px; }
+
+/* mřížka jmen – klik rozbalí kartu hráče pod mřížkou (rychlá orientace) */
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin: 0 0 18px; }
+.ptile { text-align: left; background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; font: inherit; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
+.ptile:hover { background: var(--surface3); border-color: var(--muted); }
+.ptile.active { border-color: var(--accent); background: var(--accent-soft); }
+.ptile .pname { font-weight: 600; font-size: 15px; }
+.ptile .psub { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.ptile .psub .val { font-weight: 600; }
+.ptile.all { align-items: center; justify-content: center; color: var(--muted); border-style: dashed; }
+.ptile.all.active { color: var(--accent); }
+.pick { color: var(--muted); font-style: italic; padding: 6px 0 12px; }
 
 /* Top Gear – "best overall": nejlepší kombinace z nejlepších raid + M+ itemů */
 .best { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; font-size: 13.5px;
@@ -209,7 +221,7 @@ tr.mplus td:first-child { color: var(--mplus); }
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
 
   var $ = function (s) { return document.querySelector(s); };
-  var state = { view: "players", unit: "pct", kind: "all", rows: [], items: {}, bosses: [], vault: {}, sort: { key: "diff", dir: -1 } };
+  var state = { view: "players", unit: "pct", kind: "all", player: null, rows: [], items: {}, bosses: [], vault: {}, sort: { key: "diff", dir: -1 } };
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
   try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
   if (!LIST_KINDS[state.kind]) state.kind = "all";
@@ -457,20 +469,14 @@ tr.mplus td:first-child { color: var(--mplus); }
     return html + "</div>";
   }
 
-  function renderPlayers() {
-    var by = {};
-    state.rows.forEach(function (r) { (by[r.player] = by[r.player] || { rows: [], any: r }).rows.push(r); });
-    var names = Object.keys(by).sort(function (a, b) { return a.localeCompare(b, "cs"); });
-    var html = "";
-    names.forEach(function (n) {
-      var g = by[n], a = g.rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
+  function playerCardHtml(n, g) {
+      var a = g.rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
       var raidRows = g.rows.filter(function (r) { return r.kind === "raid"; });
       var mRows = g.rows.filter(function (r) { return r.kind === "mplus"; });
       var tgRow = g.rows.filter(function (r) { return r.kind === "topgear"; })[0];
       var raidAny = raidRows[0], mAny = mRows[0];
       var shown = g.rows.filter(passes).sort(byMetricDesc);
-      // při hledání schovat celé karty hráčů, kterých se dotaz netýká (jméno hráče je součástí hledaného textu řádků)
-      if ($("#q").value.trim() && !shown.length) return;
+      var html = "";
       var links = [];
       if (raidAny && raidAny.report) links.push('<a href="' + esc(raidAny.report) + '" target="_blank" rel="noopener">report raid</a>');
       if (mAny && mAny.report && !(raidAny && raidAny.report === mAny.report)) links.push('<a href="' + esc(mAny.report) + '" target="_blank" rel="noopener">report M+</a>');
@@ -487,8 +493,35 @@ tr.mplus td:first-child { color: var(--mplus); }
       if (kindOk("mplus") && (mRows.length || state.kind === "mplus")) parts.push(sectionHtml("mplus", mRows.filter(passes).sort(byMetricDesc), mAny && mAny.report));
       html += parts.length === 2 ? '<div class="pair">' + parts.join("") + "</div>" : parts.join("");
       html += "</details>";
+      return html;
+  }
+
+  function renderPlayers() {
+    var by = {};
+    state.rows.forEach(function (r) { (by[r.player] = by[r.player] || { rows: [], any: r }).rows.push(r); });
+    var q = $("#q").value.trim();
+    // při hledání zůstanou jen hráči, kterých se dotaz týká (jméno hráče je součástí hledaného textu řádků)
+    var names = Object.keys(by).filter(function (n) { return !q || by[n].rows.some(passes); }).sort(function (a, b) { return a.localeCompare(b, "cs"); });
+    if (!names.length) return '<p class="empty">' + (q ? "Hledání nic nenašlo." : "Zatím žádné simy.") + "</p>";
+    if (names.length === 1) state.player = names[0];   // jediný výsledek hledání rovnou rozbalit
+    var html = '<div class="pgrid">';
+    names.forEach(function (n) {
+      var g = by[n], a = g.rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
+      var ups = g.rows.filter(passes).length;
+      var tg = g.rows.filter(function (r) { return r.kind === "topgear"; })[0];
+      var best = g.rows.filter(function (r) { return LIST_KINDS[r.kind] && (metric(r) || 0) > 0; }).sort(byMetricDesc)[0];
+      var sub = ups + " upgradů";
+      if (tg && (metric(tg) || 0) > 0) sub += ' · <span class="val ' + cls(tg) + '">' + fmtVal(tg) + "</span> celkem";
+      else if (best) sub += ' · <span class="val ' + cls(best) + '">' + fmtVal(best) + "</span>";
+      if (state.vault[nkey(n)]) sub += " · 🎁";
+      html += '<button class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" data-player="' + esc(n) + '">' +
+        '<span class="pname">' + playerHtml(a) + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + "</span></button>";
     });
-    return html || '<p class="empty">' + ($("#q").value.trim() ? "Hledání nic nenašlo." : "Zatím žádné simy.") + "</p>";
+    html += '<button class="ptile all' + (state.player === "*" ? " active" : "") + '" data-player="*">' + (state.player === "*" ? "Sbalit všechny" : "Rozbalit všechny") + "</button></div>";
+    var open = state.player === "*" ? names : (state.player && by[state.player] && names.indexOf(state.player) >= 0 ? [state.player] : []);
+    if (!open.length) html += '<p class="pick">Klikni na jméno – rozbalí se upgrady, vault a Top Gear té postavy.</p>';
+    open.forEach(function (n) { html += playerCardHtml(n, by[n]); });
+    return html;
   }
 
   function renderBosses() {
@@ -555,6 +588,14 @@ tr.mplus td:first-child { color: var(--mplus); }
     $("#minunit").textContent = state.unit === "pct" ? "%" : "(DPS / HPS)";
     var v = $("#view");
     v.innerHTML = state.view === "players" ? renderPlayers() : state.view === "bosses" ? renderBosses() : renderItems();
+    v.querySelectorAll(".ptile").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var n = b.getAttribute("data-player");
+        state.player = n === "*" ? (state.player === "*" ? null : "*") : (state.player === n ? null : n);
+        render();
+        if (state.player && state.player !== "*") { var card = $("#view details.card"); if (card) card.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      });
+    });
     v.querySelectorAll("th.sortable").forEach(function (th) {
       th.addEventListener("click", function () {
         var k = th.getAttribute("data-key");
