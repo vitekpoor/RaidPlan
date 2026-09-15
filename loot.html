@@ -62,6 +62,9 @@ th.num { text-align: right; }
 .kind { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 18px; vertical-align: middle; }
 .kind.raid { background: var(--raid-soft); color: var(--raid); border: 1px solid var(--raid); }
 .kind.mplus { background: var(--mplus-soft); color: var(--mplus); border: 1px solid var(--mplus); }
+/* katalyzátor: set kus vyrobený z ne-setového itemu jiného bosse (staty zdrojového itemu) */
+.cat { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; line-height: 18px; vertical-align: middle; color: var(--muted); border: 1px dashed var(--muted); white-space: nowrap; }
+.chip .cat { font-size: 10px; line-height: 15px; padding: 0 4px; }
 /* raid vlevo, M+ vpravo – vedle sebe; na úzké obrazovce pod sebou */
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-top: 1px solid var(--line); }
 .pair > .sect + .sect { border-left: 1px solid var(--line); }
@@ -336,7 +339,12 @@ tr.mplus td:first-child { color: var(--mplus); }
         var bossName = r[idx["Boss"]] || "";
         if (kind === "mplus" && !(bossId > 0) && lib.bosses && lib.bosses.length) { bossId = null; bossName = ""; }
         var bossIds = bossId != null ? [bossId] : (lib.bosses || []);
+        // Katalyzátor: set kus vyrobený z ne-setového itemu (sloupce "Katalyzátor ID" / "Katalyzátor z") – padá
+        // zdrojový item (dropId), set kus s jeho staty je jiný item než ten ze set bosse
+        var catId = idx["Katalyzátor ID"] != null ? String(num(r[idx["Katalyzátor ID"]]) || "") : "";
+        var catFrom = catId ? (String(idx["Katalyzátor z"] != null ? r[idx["Katalyzátor z"]] || "" : "") || (items[catId] || {}).name || ("#" + catId)) : "";
         return {
+          catalystId: catId, catalystFrom: catFrom, dropId: catId || itemId,
           player: r[idx["Postava"]], spec: spec, role: HEALER_SPECS[spec] ? "heal" : "dps",
           src: src, unit: /QE/i.test(src) ? "HPS" : "DPS", kind: kind,
           report: r[idx["Report"]], time: parseDate(r[idx["Čas"]]),
@@ -383,7 +391,7 @@ tr.mplus td:first-child { color: var(--mplus); }
     if (!$("#showneg").checked && v <= 0) return false;
     if (v < min && !($("#showneg").checked && v <= 0)) return false;
     var q = $("#q").value.trim().toLowerCase();
-    if (q && (r.player + " " + r.item + " " + r.boss + " " + r.spec + " " + KIND_LABEL[r.kind]).toLowerCase().indexOf(q) < 0) return false;
+    if (q && (r.player + " " + r.item + " " + (r.catalystFrom || "") + " " + r.boss + " " + r.spec + " " + KIND_LABEL[r.kind]).toLowerCase().indexOf(q) < 0) return false;
     return true;
   }
   function itemHtml(r) {
@@ -391,7 +399,19 @@ tr.mplus td:first-child { color: var(--mplus); }
     var slot = r.slot ? '<span class="slot">' + esc(SLOT_CZ[r.slot] || r.slot) + (r.ilvl ? " · " + r.ilvl : "") + "</span>" : (r.ilvl ? '<span class="slot">' + r.ilvl + "</span>" : "");
     // data-wowhead doplní tooltip (Wowhead Power) o zvolený ilvl, aby staty odpovídaly nasimovanému kusu
     var wh = r.ilvl ? ' data-wowhead="item=' + esc(r.itemId) + '&ilvl=' + esc(r.ilvl) + '"' : "";
-    return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(r.itemId) + '"' + wh + ' target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + "</span>";
+    return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(r.itemId) + '"' + wh + ' target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + catHtml(r) + "</span>";
+  }
+  function catHtml(r) {
+    return r.catalystId ? ' <span class="cat" title="Set kus vyrobený katalyzátorem – padá ' + esc(r.catalystFrom) + ', po přeměně má jeho sekundární staty">⚗ katalyzátor z ' + esc(r.catalystFrom) + "</span>" : "";
+  }
+  /** Název pro text (verdikt vaultu, chipy): u katalyzátoru i zdrojový item. */
+  function itemLabel(r) { return r.item + (r.catalystId ? " (⚗ z " + r.catalystFrom + ")" : ""); }
+  /** Řádek zobrazující padající item skupiny (u katalyzátoru zdrojový item, ne set kus). */
+  function dropRow(rs) {
+    var plain = rs.filter(function (r) { return !r.catalystId; })[0];
+    if (plain) return plain;
+    var r = rs[0], lib = state.items[r.dropId] || {};
+    return { itemId: r.dropId, item: lib.name || r.catalystFrom, icon: lib.icon || "", slot: lib.slot || r.slot, ilvl: r.ilvl };
   }
   function playerHtml(r) {
     var color = CLASS_COLOR[SPEC_CLASS[r.spec] || ""] || "";
@@ -404,8 +424,9 @@ tr.mplus td:first-child { color: var(--mplus); }
   // ---- Great Vault: vzít item z vaultu, nebo si nechat bonus roll na raid? ----
   function vaultHtml(playerRows, vault) {
     // gain každého itemu podle raidového / M+ Droptimizeru (stejné ilvl Myth 6/6); u duplicit lepší hodnota
+    // klíč = padající item (u katalyzátoru zdrojový item – vault nabízí ten, ne hotový set kus)
     var byId = {};
-    playerRows.forEach(function (r) { var c = byId[r.itemId]; if (!c || (metric(r) || 0) > (metric(c) || 0)) byId[r.itemId] = r; });
+    playerRows.forEach(function (r) { var c = byId[r.dropId]; if (!c || (metric(r) || 0) > (metric(c) || 0)) byId[r.dropId] = r; });
     var found = [], ignored = 0;
     vault.items.forEach(function (v) { var r = byId[v.itemId]; if (r) found.push({ v: v, r: r }); else ignored++; });
     found.sort(function (a, b) { return byMetricDesc(a.r, b.r); });
@@ -420,17 +441,17 @@ tr.mplus td:first-child { color: var(--mplus); }
       verdict = "Vault nabízí jen itemy mimo raid a M+ (delvy / world) – ty tu nesimujeme.";
     } else if (bestVault && (!bestRaid || (metric(bestVault.r) || 0) >= (metric(bestRaid) || 0))) {
       mood = "take";
-      verdict = "✅ Vzít z vaultu: " + bestVault.r.item + " (" + fmtVal(bestVault.r) + ")";
-      detail = bestRaid ? "nejlepší raid item " + bestRaid.item + " z " + (bestRaid.boss || "?") + " dá jen " + fmtVal(bestRaid) : "z raidu už nic lepšího nepadá";
+      verdict = "✅ Vzít z vaultu: " + itemLabel(bestVault.r) + " (" + fmtVal(bestVault.r) + ")";
+      detail = bestRaid ? "nejlepší raid item " + itemLabel(bestRaid) + " z " + (bestRaid.boss || "?") + " dá jen " + fmtVal(bestRaid) : "z raidu už nic lepšího nepadá";
     } else if (bestRaid) {
       mood = "roll";
-      verdict = "🎲 Bonus roll na raid je lepší: " + bestRaid.item + " z " + (bestRaid.boss || "?") + " (" + fmtVal(bestRaid) + ")";
-      detail = bestVault ? "vault nabízí nejvýš " + bestVault.r.item + " (" + fmtVal(bestVault.r) + ")" : "nic z vaultu není upgrade";
+      verdict = "🎲 Bonus roll na raid je lepší: " + itemLabel(bestRaid) + " z " + (bestRaid.boss || "?") + " (" + fmtVal(bestRaid) + ")";
+      detail = bestVault ? "vault nabízí nejvýš " + itemLabel(bestVault.r) + " (" + fmtVal(bestVault.r) + ")" : "nic z vaultu není upgrade";
     } else {
       verdict = "Nic z vaultu ani z raidu není upgrade – vezmi si z vaultu, co se hodí (nebo měnu).";
     }
     var chips = found.map(function (f) {
-      return '<span class="chip ' + cls(f.r) + '" title="' + esc(f.r.boss ? "z " + f.r.boss : "") + '">' + kindBadge(f.r.kind) + " " + esc(f.r.item) + ' <span class="v">' + fmtVal(f.r) + "</span></span>";
+      return '<span class="chip ' + cls(f.r) + '" title="' + esc(f.r.boss ? "z " + f.r.boss : "") + '">' + kindBadge(f.r.kind) + " " + esc(f.r.item) + catHtml(f.r) + ' <span class="v">' + fmtVal(f.r) + "</span></span>";
     }).join("");
     if (ignored) chips += '<span class="chip up0" title="itemy z delvů / worldu nebo bez simu">+' + ignored + " mimo raid/M+</span>";
     return '<div class="vault ' + mood + '"><span class="tag">Great Vault</span><span class="verdict">' + esc(verdict) + "</span>" +
@@ -451,7 +472,7 @@ tr.mplus td:first-child { color: var(--mplus); }
       var name = (r && r.item) || lib.name || names[i] || ("#" + id);
       var kind = r ? r.kind : (lib.kind === "mplus" ? "mplus" : (lib.bosses && lib.bosses.length ? "raid" : ""));
       var where = r && r.boss ? " (" + r.boss + ")" : "";
-      return '<span class="chip" title="' + esc(name + where) + '">' + (kind ? kindBadge(kind) + " " : "") + esc(name) +
+      return '<span class="chip" title="' + esc((r ? itemLabel(r) : name) + where) + '">' + (kind ? kindBadge(kind) + " " : "") + esc(name) + (r ? catHtml(r) : "") +
         (r ? ' <span class="v">' + fmtVal(r) + "</span>" : "") + "</span>";
     }).join("");
     var v = metric(tg) || 0;
@@ -537,7 +558,8 @@ tr.mplus td:first-child { color: var(--mplus); }
     var byBoss = {};
     state.rows.filter(passes).forEach(function (r) {
       var ids = r.bossIds.length ? r.bossIds : ["?" + r.kind];
-      ids.forEach(function (id) { var k = String(id); (byBoss[k] = byBoss[k] || { kind: r.kind, items: {} }); (byBoss[k].items[r.itemId] = byBoss[k].items[r.itemId] || []).push(r); });
+      // seskupeno podle padajícího itemu: katalyzátorový set kus patří k ne-setovému itemu, ze kterého vzniká
+      ids.forEach(function (id) { var k = String(id); (byBoss[k] = byBoss[k] || { kind: r.kind, items: {} }); (byBoss[k].items[r.dropId] = byBoss[k].items[r.dropId] || []).push(r); });
     });
     var raidKeys = state.bosses.filter(function (b) { return b.kind !== "mplus"; }).map(function (b) { return String(b.id); });
     var mKeys = state.bosses.filter(function (b) { return b.kind === "mplus"; }).map(function (b) { return String(b.id); });
@@ -551,13 +573,17 @@ tr.mplus td:first-child { color: var(--mplus); }
         '<span class="hint">' + (e ? Object.keys(e.items).length + " itemů se zájemci" : "nikdo nic") + "</span></div>";
       if (!e) return html;
       var list = Object.keys(e.items).map(function (iid) {
-        var rs = e.items[iid].sort(byMetricDesc);
+        // jeden chip na hráče – když má k itemu řádek surový i přes katalyzátor, zůstane lepší
+        var perPlayer = {};
+        e.items[iid].forEach(function (r) { var c = perPlayer[r.player]; if (!c || (metric(r) || 0) > (metric(c) || 0)) perPlayer[r.player] = r; });
+        var rs = Object.keys(perPlayer).map(function (n) { return perPlayer[n]; }).sort(byMetricDesc);
         return { iid: iid, rs: rs, top: metric(rs[0]) || 0 };
       }).sort(function (x, y) { return y.top - x.top; });
       html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Zájemci (seřazeno podle upgradu)</th></tr></thead><tbody>';
       list.forEach(function (en) {
-        html += '<tr class="' + kind + '"><td>' + itemHtml(en.rs[0]) + '</td><td><div class="chips">' + en.rs.map(function (r) {
-          return '<span class="chip ' + cls(r) + '" title="' + esc(r.spec + " · " + r.src) + '">' + playerHtml(r) + ' <span class="v">' + fmtVal(r) + "</span></span>";
+        html += '<tr class="' + kind + '"><td>' + itemHtml(dropRow(en.rs)) + '</td><td><div class="chips">' + en.rs.map(function (r) {
+          return '<span class="chip ' + cls(r) + '" title="' + esc(r.spec + " · " + r.src + (r.catalystId ? " · přes katalyzátor → " + r.item : "")) + '">' + playerHtml(r) +
+            (r.catalystId ? ' <span class="cat" title="' + esc("přes katalyzátor → " + r.item) + '">⚗</span>' : "") + ' <span class="v">' + fmtVal(r) + "</span></span>";
         }).join("") + "</div></td></tr>";
       });
       return html + "</tbody></table></div>";

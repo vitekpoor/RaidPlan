@@ -2568,8 +2568,13 @@ function mergeSimNote_(oldNote, kind, seg) {
 
 var SIM_RESULTS_SHEET_NAME = "Sim výsledky";
 var SIM_RESULTS_HEADER = ["Postava", "Spec", "Zdroj", "Report", "Čas", "Boss ID", "Boss", "Item ID", "Item",
-                          "Slot", "ilvl", "Základ", "S itemem", "Rozdíl", "Rozdíl %", "Původ"];
+                          "Slot", "ilvl", "Základ", "S itemem", "Rozdíl", "Rozdíl %", "Původ", "Katalyzátor ID", "Katalyzátor z"];
 var SIM_RESULTS_ORIGIN_COL = 16;
+// Katalyzátor: Raidbots simuluje i set kusy vyrobené katalyzátorem z ne-setového itemu jiného bosse
+// (profileset "…/legs////268225" – poslední pole = ID zdrojového itemu). Takový kus má ID set itemu,
+// ale sekundární staty zdrojového itemu → je to jiný item než set kus, který padá ze set bosse.
+// Sloupce 17/18 = ID a název zdrojového (padajícího) itemu; prázdné = normální drop.
+var SIM_RESULTS_CATALYST_COL = 17;
 
 function simResultsSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2578,9 +2583,11 @@ function simResultsSheet_() {
     sh = ss.insertSheet(SIM_RESULTS_SHEET_NAME);
     sh.getRange(1, 1, 1, SIM_RESULTS_HEADER.length).setValues([SIM_RESULTS_HEADER]).setFontWeight("bold");
     sh.setFrozenRows(1);
-  } else if (String(sh.getRange(1, SIM_RESULTS_ORIGIN_COL).getValue()) !== SIM_RESULTS_HEADER[SIM_RESULTS_ORIGIN_COL - 1]) {
-    // starší list bez sloupce "Původ" (prázdný = Raid)
-    sh.getRange(1, SIM_RESULTS_ORIGIN_COL).setValue(SIM_RESULTS_HEADER[SIM_RESULTS_ORIGIN_COL - 1]).setFontWeight("bold");
+  } else {
+    // starší list bez sloupců "Původ" (prázdný = Raid) / "Katalyzátor …" – doplnit hlavičky
+    for (var c = SIM_RESULTS_ORIGIN_COL; c <= SIM_RESULTS_HEADER.length; c++) {
+      if (String(sh.getRange(1, c).getValue()) !== SIM_RESULTS_HEADER[c - 1]) sh.getRange(1, c).setValue(SIM_RESULTS_HEADER[c - 1]).setFontWeight("bold");
+    }
   }
   return sh;
 }
@@ -2676,7 +2683,8 @@ function storeSimResults_(character, spec, link, kinds) {
     var out = rows.map(function (r) {
       counts[r.kind] = (counts[r.kind] || 0) + 1;
       return [character, spec, link.kind === "qe" ? "QE Live" : "Raidbots", link.url, now,
-              r.bossId, r.boss, r.itemId, r.item, r.slot, r.ilvl, r.base, r.value, r.diff, r.pct, SIM_KIND_ORIGIN[r.kind]];
+              r.bossId, r.boss, r.itemId, r.item, r.slot, r.ilvl, r.base, r.value, r.diff, r.pct, SIM_KIND_ORIGIN[r.kind],
+              r.catalystId || "", r.catalystFrom || ""];
     });
     // smazat staré řádky postavy téhož původu (odspodu, aby se neposouvaly indexy)
     var last = sh.getLastRow();
@@ -2711,8 +2719,18 @@ function simResultsFromRaidbots_(reportId) {
   var sim = d.sim || {};
   var base = Number(((((sim.players || [])[0] || {}).collected_data || {}).dps || {}).mean);
   if (!base) throw new Error("v reportu chybí základní DPS");
-  var lib = {};
-  (((d.simbot || {}).meta || {}).itemLibrary || []).forEach(function (it) { lib[String(it.id)] = it; });
+  // itemLibrary má jeden záznam na item A ZDROJ: set kus je tam vícekrát (token z každého set bosse
+  // + katalyzátorové verze z ne-setových itemů, tags ["catalyst"], sourceItem = zdrojový item).
+  // Proto klíčujeme id + encounter (+ zdrojový item u katalyzátoru); samotné id je jen záloha.
+  var lib = {}, libAny = {};
+  (((d.simbot || {}).meta || {}).itemLibrary || []).forEach(function (it) {
+    if (!it || it.id == null) return;
+    var id = String(it.id);
+    var cat = isCatalystItem_(it) ? String((it.sourceItem || {}).id || "") : "";
+    lib[id + "/" + String(it.encounterId) + "/" + cat] = it;
+    if (!lib[id + "//" + cat]) lib[id + "//" + cat] = it;
+    if (!libAny[id]) libAny[id] = it;
+  });
   var bosses = {}, instances = {};
   (((d.simbot || {}).meta || {}).instanceLibrary || []).forEach(function (inst) {
     if (inst && inst.id != null) instances[String(inst.id)] = inst.name || "";
@@ -2720,14 +2738,18 @@ function simResultsFromRaidbots_(reportId) {
   });
   var best = {};
   (((sim.profilesets || {}).results) || []).forEach(function (r) {
+    // instance/encounter/obtížnost/itemId/ilvl/enchant/slot/…/…/…/zdrojový item katalyzátoru
     var p = String(r.name || "").split("/");
     if (p.length < 7) return;
     var kind = p[2].indexOf("raid") === 0 ? "raid" : "mplus";
     var itemId = p[3];
+    var catalystId = p.length > 10 && /^\d+$/.test(p[10]) ? p[10] : "";
     var mean = Number(r.mean);
     var encId = Number(p[1]), instId = Number(p[0]);
-    var it = lib[itemId] || {};
-    // raid: jeden řádek na item a bosse (tier kusy padají z více bossů);
+    var it = lib[itemId + "/" + p[1] + "/" + catalystId] || lib[itemId + "//" + catalystId] || libAny[itemId] || {};
+    var srcItem = it.sourceItem || {};
+    if (catalystId && String(srcItem.id || "") !== catalystId) srcItem = libAny[catalystId] || {};
+    // raid: jeden řádek na item, bosse a (u katalyzátoru) zdrojový item;
     // M+: jeden řádek na item a dungeon (Boss ID = instance) – v M+ se stejně dělá celý dungeon;
     // prsteny/trinkety jsou v obou slotech – necháme lepší
     // M+ profilesety mají instance -1 ("Mythic+ Dungeons") – konkrétní dungeon je v itemu:
@@ -2737,21 +2759,31 @@ function simResultsFromRaidbots_(reportId) {
       if (src) instId = Number(src.instanceId);
     }
     var bossId = kind === "raid" ? encId : instId;
-    var key = kind + "/" + itemId + "/" + bossId;
+    var key = kind + "/" + itemId + "/" + bossId + "/" + catalystId;
     if (best[key] && best[key].value >= mean) return;
+    // název bosse podle profilesetu (encounter z názvu), teprve pak z itemu – záznam itemu může
+    // patřit jinému zdroji téhož set kusu
     var boss = kind === "raid"
-      ? ((it.encounter && it.encounter.name) || bosses[String(encId)] || (encId === -97 ? "Trash" : ""))
+      ? (bosses[String(encId)] || (encId === -97 ? "Trash" : "") || (it.encounter && it.encounter.name) || "")
       : ((instId > 0 && instances[String(instId)]) || (it.encounter && it.encounter.name) || (it.instance && it.instance.name) || instances[String(instId)] || "");
     best[key] = {
       kind: kind, bossId: bossId, boss: boss,
       itemId: Number(itemId), item: it.name || "", slot: p[6].replace(/[12]$/, ""),
       ilvl: Number(it.itemLevel) || Number(p[4]) || "",   // itemLibrary má ilvl včetně zvoleného upgradu
       base: Math.round(base), value: Math.round(mean),
-      diff: Math.round(mean - base), pct: Math.round((mean - base) / base * 10000) / 100
+      diff: Math.round(mean - base), pct: Math.round((mean - base) / base * 10000) / 100,
+      catalystId: catalystId ? Number(catalystId) : "", catalystFrom: catalystId ? (srcItem.name || "") : ""
     };
   });
   return Object.keys(best).map(function (k) { return best[k]; })
     .sort(function (a, b) { return b.pct - a.pct; });
+}
+
+/** Záznam itemLibrary je katalyzátorová verze (tags ["catalyst"], příp. redirected_base_stats). */
+function isCatalystItem_(it) {
+  var tags = it.tags || [];
+  for (var i = 0; i < tags.length; i++) if (String(tags[i]).toLowerCase() === "catalyst") return true;
+  return !!(it.redirected_base_stats && it.sourceItem && it.sourceItem.id && !it.fromToken);
 }
 
 function simResultsFromQe_(reportId) {

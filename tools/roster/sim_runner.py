@@ -201,12 +201,23 @@ def droptimizer_best_per_slot(data, kind, min_gain, weapon_min_gain=None):
     lines = {}
     for name, line in PROFILESET_LINE_RE.findall(data.get("_input") or (data.get("simbot") or {}).get("input") or ""):
         lines.setdefault(name, []).append(line.strip())
-    lib = {str(it.get("id")): it for it in (((data.get("simbot") or {}).get("meta") or {}).get("itemLibrary") or [])}
+    # itemLibrary má set kus vícekrát (token z každého bosse + katalyzátorové verze, tags ["catalyst"],
+    # sourceItem = zdrojový item); klíč id/zdroj, samotné id jako záloha
+    lib, lib_cat = {}, {}
+    for it in (((data.get("simbot") or {}).get("meta") or {}).get("itemLibrary") or []):
+        iid = str(it.get("id"))
+        if "catalyst" in [str(t).lower() for t in (it.get("tags") or [])]:
+            lib_cat[(iid, str((it.get("sourceItem") or {}).get("id")))] = it
+        else:
+            lib.setdefault(iid, it)
+        lib.setdefault(iid, it)
     best = {}
     for r in (sim.get("profilesets") or {}).get("results") or []:
         parts = str(r.get("name") or "").split("/")
         if len(parts) < 7:
             continue
+        # poslední pole = zdrojový item katalyzátoru (set kus se staty ne-setového itemu jiného bosse)
+        cat_src = parts[10] if len(parts) > 10 and parts[10].isdigit() else ""
         ls = lines.get(r["name"]) or []
         line = next((l for l in ls if re.match(rf"^{re.escape(parts[6])}=,", l)), ls[0] if ls else None)
         if not line:
@@ -230,12 +241,15 @@ def droptimizer_best_per_slot(data, kind, min_gain, weapon_min_gain=None):
             continue
         m = re.search(r"id=(\d+)", line)
         bonus = re.search(r"bonus_id=([\d/]+)", line)
-        it = lib.get(parts[3], {})
+        it = (lib_cat.get((parts[3], cat_src)) if cat_src else None) or lib.get(parts[3], {})
+        name = it.get("name") or f"#{parts[3]}"
+        if cat_src:
+            name += " (katalyzátor z " + (lib.get(cat_src, {}).get("name") or (it.get("sourceItem") or {}).get("name") or f"#{cat_src}") + ")"
         best[base_slot] = {"kind": kind, "slot": base_slot, "group": slot_group(base_slot), "gain": gain,
                            "id": m.group(1) if m else parts[3], "protected": weapon,
                            "ilvl": int(it.get("itemLevel") or parts[4] or 0),
                            "bonus": set(bonus.group(1).split("/")) if bonus else set(),
-                           "name": it.get("name") or f"#{parts[3]}", "line": line, "extras": extras}
+                           "name": name, "line": line, "extras": extras}
     return best
 
 
