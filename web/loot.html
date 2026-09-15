@@ -245,9 +245,9 @@ a.best:hover .open { color: var(--ink-strong); }
   var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
   var CREST_TAB = "Cresty";    // Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth – plní Apps Script z řádku upgrade_currencies v SimC exportu
   var CREST_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(CREST_TAB);
-  // Sezónní cap Myth crestů: +90 každý týden od prvního resetu sezóny (EU středa 04:00 UTC). 15.9.2026 = 3. týden = 270.
+  // Sezónní cap Myth crestů: +100 každý týden (údaj od raid leadera) od prvního resetu sezóny (EU středa 04:00 UTC).
   var CREST_SEASON_START = Date.UTC(2026, 7, 26, 4, 0, 0);
-  var CREST_PER_WEEK = 90;
+  var CREST_PER_WEEK = 100;
   var CREST_ICON = "inv_121_crest_myth";   // Wowhead ikona Myth Mistcrest (currency 3446)
   var ITEMS_URL = "loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
