@@ -277,6 +277,19 @@ a.best:hover .open { color: var(--ink-strong); }
     return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0));
   }
   function fmtDate(d) { return d ? d.getDate() + "." + (d.getMonth() + 1) + ". " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0") : ""; }
+  // relativní čas do dlaždice hráče: "před 3 dny", "včera", "před 2 h"
+  function fmtAgo(d) {
+    if (!d) return "";
+    var s = Math.round((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return "právě teď";
+    var m = Math.round(s / 60); if (m < 60) return "před " + m + " min";
+    var h = Math.round(m / 60); if (h < 24) return "před " + h + " h";
+    var days = Math.round(h / 24);
+    if (days === 1) return "včera";
+    if (days < 14) return "před " + days + " dny";
+    if (days < 60) return "před " + Math.round(days / 7) + " týdny";
+    var mo = Math.round(days / 30); return mo === 1 ? "před měsícem" : "před " + mo + " měsíci";
+  }
   // poslední týdenní reset (EU: středa 04:00 UTC) – vault poslaný před ním je z minulého týdne
   function lastReset() {
     var d = new Date(); var back = (d.getUTCDay() - 3 + 7) % 7;
@@ -562,6 +575,8 @@ a.best:hover .open { color: var(--ink-strong); }
       if (tg && (metric(tg) || 0) > 0) sub += ' · <span class="val ' + cls(tg) + '">' + fmtVal(tg) + "</span> celkem";
       else if (best) sub += ' · <span class="val ' + cls(best) + '">' + fmtVal(best) + "</span>";
       if (state.vault[nkey(n)]) sub += " · 🎁";
+      var last = g.rows.reduce(function (t, r) { return r.time && (!t || r.time > t) ? r.time : t; }, null);
+      if (last) sub += ' · <span class="ago" title="poslední sim ' + esc(fmtDate(last)) + '">' + esc(fmtAgo(last)) + "</span>";
       html += '<button class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" data-player="' + esc(n) + '">' +
         '<span class="pname">' + playerHtml(a) + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + "</span></button>";
     });
