@@ -132,9 +132,7 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile .psub .ago { margin-left: auto; white-space: nowrap; }
 .crest { white-space: nowrap; color: var(--ink); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
 .ptile .psub .crest { margin-left: auto; }
-.crest .cap { color: var(--muted); font-weight: 400; }
 .crest img { width: 16px; height: 16px; border-radius: 3px; vertical-align: middle; margin-left: 2px; }
-.crest.full, .crest.full .cap { color: var(--accent); }
 .ptile .psub .ago.stale { color: var(--dps); font-weight: 600; }
 .badge.tank { color: var(--tank); border-color: var(--tank); }
 .pick { color: var(--muted); font-style: italic; padding: 6px 0 12px; }
@@ -245,9 +243,6 @@ a.best:hover .open { color: var(--ink-strong); }
   var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
   var CREST_TAB = "Cresty";    // Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth – plní Apps Script z řádku upgrade_currencies v SimC exportu
   var CREST_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(CREST_TAB);
-  // Sezónní cap Myth crestů: +90 každý týden od prvního resetu sezóny (EU středa 04:00 UTC). 15.9.2026 = 3. týden = 270.
-  var CREST_SEASON_START = Date.UTC(2026, 7, 26, 4, 0, 0);
-  var CREST_PER_WEEK = 90;
   var CREST_ICON = "inv_121_crest_myth";   // Wowhead ikona Myth Mistcrest (currency 3446)
   var ITEMS_URL = "web/loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
@@ -451,19 +446,13 @@ a.best:hover .open { color: var(--ink-strong); }
       }
       showStatus();
   }
-  // sezónní cap Myth crestů k dnešku (počet resetů od začátku sezóny × týdenní přírůstek)
-  function crestCap() {
-    var weeks = Math.floor((Date.now() - CREST_SEASON_START) / (7 * 86400000)) + 1;
-    return Math.max(0, weeks) * CREST_PER_WEEK;
-  }
-  // "80 / 270 <ikona>" – Myth cresty postavy proti sezónnímu capu; addon hlásí jen aktuální stav (utracené nevidíme)
+  // "80 <ikona>" – kolik Myth crestů postava má podle posledního SimC exportu (addon hlásí jen aktuální stav,
+  // sezónní cap se počítá ze získaných, ne držených – ten z exportu nezjistíme)
   function crestHtml(name) {
     var c = state.crests[nkey(name)]; if (!c || c.myth == null) return "";
-    var cap = crestCap(), left = Math.max(0, cap - c.myth), full = c.myth >= cap;
-    var tip = "Myth Mistcrest: má " + c.myth + ", sezónní cap " + cap + " (" + CREST_PER_WEEK + "/týden)" +
-      (full ? " – na capu" : " – může získat ještě až " + left) + (c.time ? " · stav z " + fmtDate(c.time) : "") +
+    var tip = "Myth Mistcrest: " + c.myth + (c.time ? " · stav z " + fmtDate(c.time) : "") +
       " · Hero " + (c.hero || 0) + ", Champion " + (c.champion || 0);
-    return '<span class="crest' + (full ? " full" : "") + '" title="' + esc(tip) + '">' + c.myth + ' <span class="cap">/ ' + cap + "</span>" +
+    return '<span class="crest" title="' + esc(tip) + '">' + c.myth +
       '<img src="https://wow.zamimg.com/images/wow/icons/small/' + CREST_ICON + '.jpg" alt="Myth Mistcrest" loading="lazy"></span>';
   }
   // hráči z Rosteru, jejichž main ani alt (ani jméno hráče) nemá žádný řádek v simech
