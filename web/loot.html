@@ -397,9 +397,12 @@ tr.mplus td:first-child { color: var(--mplus); }
   function itemHtml(r) {
     var icon = r.icon ? '<img src="https://wow.zamimg.com/images/wow/icons/small/' + esc(r.icon) + '.jpg" alt="" loading="lazy">' : "";
     var slot = r.slot ? '<span class="slot">' + esc(SLOT_CZ[r.slot] || r.slot) + (r.ilvl ? " · " + r.ilvl : "") + "</span>" : (r.ilvl ? '<span class="slot">' + r.ilvl + "</span>" : "");
-    // data-wowhead doplní tooltip (Wowhead Power) o zvolený ilvl, aby staty odpovídaly nasimovanému kusu
-    var wh = r.ilvl ? ' data-wowhead="item=' + esc(r.itemId) + '&ilvl=' + esc(r.ilvl) + '"' : "";
-    return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(r.itemId) + '"' + wh + ' target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + catHtml(r) + "</span>";
+    // data-wowhead doplní tooltip (Wowhead Power) o zvolený ilvl, aby staty odpovídaly nasimovanému kusu.
+    // Katalyzátorový set kus má sekundární staty ZDROJOVÉHO itemu, ne set kusu ze set bosse – tooltip i odkaz
+    // proto vedou na zdrojový item (stejný ilvl = stejné staty jako po přeměně; navíc je jen set bonus).
+    var whId = r.catalystId || r.itemId;
+    var wh = r.ilvl ? ' data-wowhead="item=' + esc(whId) + '&ilvl=' + esc(r.ilvl) + '"' : "";
+    return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(whId) + '"' + wh + ' target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + catHtml(r) + "</span>";
   }
   function catHtml(r) {
     return r.catalystId ? ' <span class="cat" title="Set kus vyrobený katalyzátorem – padá ' + esc(r.catalystFrom) + ', po přeměně má jeho sekundární staty">⚗ katalyzátor z ' + esc(r.catalystFrom) + "</span>" : "";
