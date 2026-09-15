@@ -116,7 +116,7 @@ tr.mplus td:first-child { color: var(--mplus); }
 .empty { color: var(--muted); font-style: italic; padding: 10px 16px; }
 
 /* mřížka jmen – klik rozbalí kartu hráče pod mřížkou (rychlá orientace) */
-.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin: 0 0 18px; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); gap: 8px; margin: 0 0 18px; }   /* 205px: badge specu + Myth cresty na jednom řádku */
 .ptile { text-align: left; background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; font: inherit; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
 .ptile:hover { background: var(--surface3); border-color: var(--muted); }
 .ptile.active { border-color: var(--accent); background: var(--accent-soft); }
@@ -130,6 +130,11 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile.nosim:hover { background: var(--surface2); border-color: var(--line); }
 .ptile.nosim .psub .none { font-style: italic; }
 .ptile .psub .ago { margin-left: auto; white-space: nowrap; }
+.crest { white-space: nowrap; color: var(--ink); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
+.ptile .psub .crest { margin-left: auto; }
+.crest .cap { color: var(--muted); font-weight: 400; }
+.crest img { width: 16px; height: 16px; border-radius: 3px; vertical-align: middle; margin-left: 2px; }
+.crest.full, .crest.full .cap { color: var(--accent); }
 .ptile .psub .ago.stale { color: var(--dps); font-weight: 600; }
 .badge.tank { color: var(--tank); border-color: var(--tank); }
 .pick { color: var(--muted); font-style: italic; padding: 6px 0 12px; }
@@ -238,6 +243,12 @@ a.best:hover .open { color: var(--ink-strong); }
   var VAULT_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(VAULT_TAB);
   var ROSTER_TAB = "Roster";   // hlavní soupiska (řádky nad „LAVIČKA“) – hráči bez simu se ukážou v mřížce jako prázdné dlaždice
   var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
+  var CREST_TAB = "Cresty";    // Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth – plní Apps Script z řádku upgrade_currencies v SimC exportu
+  var CREST_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(CREST_TAB);
+  // Sezónní cap Myth crestů: +90 každý týden od prvního resetu sezóny (EU středa 04:00 UTC). 15.9.2026 = 3. týden = 270.
+  var CREST_SEASON_START = Date.UTC(2026, 7, 26, 4, 0, 0);
+  var CREST_PER_WEEK = 90;
+  var CREST_ICON = "inv_121_crest_myth";   // Wowhead ikona Myth Mistcrest (currency 3446)
   var ITEMS_URL = "loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
   var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear" };
@@ -256,7 +267,7 @@ a.best:hover .open { color: var(--ink-strong); }
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
 
   var $ = function (s) { return document.querySelector(s); };
-  var state = { view: "players", unit: "pct", kind: "all", player: null, boss: null, rows: [], items: {}, bosses: [], vault: {}, roster: [], sort: { key: "diff", dir: -1 } };
+  var state = { view: "players", unit: "pct", kind: "all", player: null, boss: null, rows: [], items: {}, bosses: [], vault: {}, roster: [], crests: {}, sort: { key: "diff", dir: -1 } };
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
   try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
   if (!LIST_KINDS[state.kind]) state.kind = "all";
@@ -331,12 +342,14 @@ a.best:hover .open { color: var(--ink-strong); }
       fetch(VAULT_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
       // list Roster je volitelný – bez něj se jen neukážou hráči bez simu
       fetch(ROSTER_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
+      // list Cresty je volitelný – bez něj se jen neukáže stav Myth crestů
+      fetch(CREST_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
       loadItems()
     ]).then(function (res) {
-      var combined = res[0] + "\n " + res[1] + "\n " + res[2];
+      var combined = res[0] + "\n " + res[1] + "\n " + res[2] + "\n " + res[3];
       if (combined === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
       lastCsv = combined;
-      applyData(res[0], res[1], res[3], res[2]);
+      applyData(res[0], res[1], res[4], res[2], res[3]);
       render();
     }).catch(function (err) {
       status.textContent = "Nepodařilo se načíst data: " + err.message;
@@ -356,7 +369,7 @@ a.best:hover .open { color: var(--ink-strong); }
     status.className = "status";
   }
 
-  function applyData(csvText, vaultText, lib, rosterText) {
+  function applyData(csvText, vaultText, lib, rosterText, crestText) {
       var table = parseCsv(csvText);
       var head = table.shift() || [];
       var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
@@ -425,7 +438,33 @@ a.best:hover .open { color: var(--ink-strong); }
           if (alt && altClass) state.charClass[nkey(alt)] = altClass.toLowerCase().replace(/\s+/g, "");
         }
       }
+      // Cresty: Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth → { nkey(postava): { time, myth, ... } }
+      state.crests = {};
+      var ct = crestText ? parseCsv(crestText) : [];
+      var chd = ct.shift() || []; var ci = {}; chd.forEach(function (h, i) { ci[h.trim().toLowerCase()] = i; });
+      if (ci["postava"] != null && ci["myth"] != null) {
+        ct.forEach(function (r) {
+          var name = r[ci["postava"]]; if (!name) return;
+          state.crests[nkey(name)] = { player: name, time: parseDate(r[ci["čas"]]), myth: num(r[ci["myth"]]), hero: num(r[ci["hero"]]),
+                                       champion: num(r[ci["champion"]]), veteran: num(r[ci["veteran"]]), adventurer: num(r[ci["adventurer"]]) };
+        });
+      }
       showStatus();
+  }
+  // sezónní cap Myth crestů k dnešku (počet resetů od začátku sezóny × týdenní přírůstek)
+  function crestCap() {
+    var weeks = Math.floor((Date.now() - CREST_SEASON_START) / (7 * 86400000)) + 1;
+    return Math.max(0, weeks) * CREST_PER_WEEK;
+  }
+  // "80 / 270 <ikona>" – Myth cresty postavy proti sezónnímu capu; addon hlásí jen aktuální stav (utracené nevidíme)
+  function crestHtml(name) {
+    var c = state.crests[nkey(name)]; if (!c || c.myth == null) return "";
+    var cap = crestCap(), left = Math.max(0, cap - c.myth), full = c.myth >= cap;
+    var tip = "Myth Mistcrest: má " + c.myth + ", sezónní cap " + cap + " (" + CREST_PER_WEEK + "/týden)" +
+      (full ? " – na capu" : " – může získat ještě až " + left) + (c.time ? " · stav z " + fmtDate(c.time) : "") +
+      " · Hero " + (c.hero || 0) + ", Champion " + (c.champion || 0);
+    return '<span class="crest' + (full ? " full" : "") + '" title="' + esc(tip) + '">' + c.myth + ' <span class="cap">/ ' + cap + "</span>" +
+      '<img src="https://wow.zamimg.com/images/wow/icons/small/' + CREST_ICON + '.jpg" alt="Myth Mistcrest" loading="lazy"></span>';
   }
   // hráči z Rosteru, jejichž main ani alt (ani jméno hráče) nemá žádný řádek v simech
   function rosterWithoutSims() {
@@ -578,6 +617,7 @@ a.best:hover .open { color: var(--ink-strong); }
       if (mAny && mAny.report && !(raidAny && raidAny.report === mAny.report)) links.push('<a href="' + esc(mAny.report) + '" target="_blank" rel="noopener">report M+</a>');
       html += '<details class="card" open><summary><span class="name">' + playerHtml(a) + "</span> " + roleBadge(a) +
         '<span class="meta">' + esc(a.src) + (a.time ? " · " + fmtDate(a.time) : "") + (links.length ? " · " + links.join(" · ") : "") +
+        (crestHtml(n) ? " · Myth cresty " + crestHtml(n) : "") +
         (a.base != null ? ' · základ <span class="mono">' + Math.round(a.base).toLocaleString("cs-CZ") + "</span> " + a.unit : "") + "</span>" +
         '<span class="meta">' + shown.length + " upgradů" + (mRows.length ? "" : " · M+ sim zatím není") + "</span></summary>";
       var vault = state.vault[nkey(n)];
@@ -610,6 +650,7 @@ a.best:hover .open { color: var(--ink-strong); }
       var top = tg && (metric(tg) || 0) > 0 ? tg : best;
       var val = top ? '<span class="val ' + cls(top) + '" title="' + (top === tg ? "Top Gear – všechny upgrady najednou" : "nejlepší jednotlivý item") + '">' + fmtVal(top) + "</span>" : "";
       var sub = ups + " upgradů";
+      var crest = crestHtml(n);   // Myth cresty vpravo na řádku s badgem specu
       if (state.vault[nkey(n)]) sub += " · 🎁";
       var last = g.rows.reduce(function (t, r) { return r.time && (!t || r.time > t) ? r.time : t; }, null);
       // sim starší než 6 dní = zastaralý (nový týden, jiný gear) – červeně
@@ -617,7 +658,7 @@ a.best:hover .open { color: var(--ink-strong); }
       // čas posledního simu vpravo dole (margin-left:auto ve flex řádku)
       var ago = last ? '<span class="ago' + (stale ? " stale" : "") + '" title="poslední sim ' + esc(fmtDate(last)) + (stale ? " – starší než 6 dní" : "") + '">' + esc(fmtAgo(last)) + "</span>" : "";
       html += '<button class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" data-player="' + esc(n) + '">' +
-        '<span class="pname">' + playerHtml(a) + val + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + ago + "</span></button>";
+        '<span class="pname">' + playerHtml(a) + val + "</span>" + '<span class="psub">' + roleBadge(a) + crest + "</span>" + '<span class="psub">' + sub + ago + "</span></button>";
     });
     // hráči z Rosteru bez jediného simu – nerozklikávací dlaždice na konci mřížky (při hledání jen ti, kterých se dotaz týká)
     var ql = q.toLowerCase();

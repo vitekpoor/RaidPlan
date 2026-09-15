@@ -1835,6 +1835,8 @@ function onOpen() {
       .addSeparator()
       .addItem("Vytvořit list Sim výsledky", "buildSimResultsSheet")
       .addItem("Vytvořit list Vault", "buildVaultSheet")
+      .addItem("Vytvořit list Cresty", "buildCrestSheet")
+      .addItem("Doplnit cresty ze Sim fronty", "backfillCrests")
       .addItem("Načíst výsledky ze všech hotových reportů", "rebuildSimResults")
       .addSeparator()
       .addItem("Spustit simy online (GitHub)", "runSimsOnline")
@@ -1866,6 +1868,7 @@ function parseSimc_(text) {
   out.server = sv ? sv[1] : "";
   if (!/^[a-z_0-9]+=,id=\d+/mi.test(s)) { out.error = "Export neobsahuje žádný vybavený item (řádky head=,id=…)."; return out; }
   out.vault = parseVault_(s);   // null = blok chybí (hráč neotevřel Great Vault), [] = otevřel, ale nic nenabízí
+  out.crests = parseCrests_(s); // null = řádek upgrade_currencies chybí (starý addon)
   out.ok = true;
   return out;
 }
@@ -1983,6 +1986,8 @@ function submitSimWeb(data) {
       try { storeVault_(ch.name, p.vault); } catch (err) { /* vault je bonus, nesmí shodit odeslání */ }
       vaultMsg = p.vault.length ? " Vault: " + p.vault.length + (p.vault.length === 1 ? " item." : p.vault.length < 5 ? " itemy." : " itemů.") : "";
     }
+    // cresty (měny z řádku upgrade_currencies) – bonus, nesmí shodit odeslání
+    if (p.crests) { try { storeCrests_(ch.name, p.crests); } catch (err) { /* ignorovat */ } }
     var waiting = countPendingSims_(sh);
     // rovnou spustit runner v GitHub Actions (chyba GitHubu nesmí shodit odeslání formuláře)
     var started = "";
@@ -2906,6 +2911,83 @@ function storeVault_(character, items) {
   sh.getRange(start, 1, out.length, VAULT_HEADER.length).setValues(out);
   sh.getRange(start, 2, out.length, 1).setNumberFormat("d.M.yyyy H:mm");
   return out.length;
+}
+
+// ================== CRESTY (měny ze SimC exportu -> list "Cresty") ==================
+//
+// Addon SimulationCraft přidá do exportu řádek
+//   # upgrade_currencies=c:3442:274/c:3443:430/c:3444:140/c:3445:80/c:3446:210/i:232875:15/...
+// (c:<currency id>:<počet> = měna, i:<item id>:<počet> = předmět). Měny 3442–3446
+// jsou cresty aktuální sezóny (Adventurer/Veteran/Champion/Hero/Myth Mistcrest).
+// Odeslání formuláře uloží počty sem – jeden řádek na postavu (přepisuje se).
+// Stránka Simy z toho ukazuje u hráče Myth cresty proti sezónnímu capu.
+// Addon exportuje jen aktuální stav (kolik hráč MÁ), ne kolik za sezónu získal.
+
+var CREST_SHEET_NAME = "Cresty";
+var CREST_IDS = [["3442", "Adventurer"], ["3443", "Veteran"], ["3444", "Champion"], ["3445", "Hero"], ["3446", "Myth"]];
+var CREST_HEADER = ["Postava", "Čas"].concat(CREST_IDS.map(function (c) { return c[1]; }));
+
+/** { "3442": 274, ... } ze SimC exportu, nebo null když řádek chybí. */
+function parseCrests_(s) {
+  var m = /^#\s*upgrade_currencies=(\S+)/m.exec(String(s || ""));
+  if (!m) return null;
+  var out = {}, any = false;
+  m[1].split("/").forEach(function (part) {
+    var p = part.split(":");   // c:<id>:<count>
+    if (p[0] === "c" && p.length >= 3 && /^\d+$/.test(p[2])) { out[p[1]] = +p[2]; any = true; }
+  });
+  return any ? out : null;
+}
+
+function crestSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(CREST_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(CREST_SHEET_NAME);
+    sh.getRange(1, 1, 1, CREST_HEADER.length).setValues([CREST_HEADER]).setFontWeight("bold");
+    sh.setFrozenRows(1);
+    sh.getRange(1, 3, 1, CREST_IDS.length).setNotes([CREST_IDS.map(function (c) { return "currency id " + c[0]; })]);
+  }
+  return sh;
+}
+
+/** Menu: založí list (idempotentní). */
+function buildCrestSheet() {
+  crestSheet_();
+  SpreadsheetApp.getUi().alert("List „" + CREST_SHEET_NAME + "“ je připravený.");
+}
+
+/** Přepíše řádek postavy (crests = objekt z parseCrests_). */
+function storeCrests_(character, crests, when) {
+  var sh = crestSheet_();
+  var row = [character, when || new Date()].concat(CREST_IDS.map(function (c) { return crests[c[0]] != null ? crests[c[0]] : 0; }));
+  var last = sh.getLastRow(), target = 0;
+  if (last >= 2) {
+    var names = sh.getRange(2, 1, last - 1, 1).getValues(), key = simNameKey_(character);
+    for (var i = 0; i < names.length; i++) if (simNameKey_(names[i][0]) === key) { target = i + 2; break; }
+  }
+  if (!target) target = last + 1;
+  sh.getRange(target, 1, 1, row.length).setValues([row]);
+  sh.getRange(target, 2).setNumberFormat("d.M.yyyy H:mm");
+  return target;
+}
+
+/** Menu: jednorázově doplní cresty z posledního odeslání každé postavy v listu Sim fronta. */
+function backfillCrests() {
+  var sh = simSheet_();
+  if (!sh || sh.getLastRow() < 2) { SpreadsheetApp.getUi().alert("List „" + SIM_SHEET_NAME + "“ je prázdný."); return; }
+  var vals = sh.getRange(2, 1, sh.getLastRow() - 1, SIM_HEADER.length).getValues();
+  var seen = {}, n = 0;
+  for (var i = vals.length - 1; i >= 0; i--) {        // odspodu = nejnovější odeslání první
+    var name = String(vals[i][SIM_COL.character - 1] || ""); if (!name) continue;
+    var key = simNameKey_(name); if (seen[key]) continue;
+    var crests = parseCrests_(vals[i][SIM_COL.simc - 1]); if (!crests) continue;
+    seen[key] = 1;
+    var t = vals[i][SIM_COL.time - 1];
+    storeCrests_(name, crests, t instanceof Date ? t : new Date());
+    n++;
+  }
+  SpreadsheetApp.getUi().alert("Cresty doplněné pro " + n + " postav.");
 }
 
 // ================== SPUŠTĚNÍ SIMŮ ONLINE (GitHub Actions) ==================
