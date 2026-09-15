@@ -1,9 +1,9 @@
 # Raid attendance bot
 
-Every Tuesday evening a GitHub Actions job reads the absence matrix in the guild
+Every day at 18:00 Czech time a GitHub Actions job reads the absence matrix in the guild
 Google Sheet ("Absence přehled" tab) and posts to Discord who is unavailable
 and who arrives late on the raid days (Wednesday, Thursday, Sunday) of the
-coming raid week (Wednesday to Tuesday, following the WoW weekly reset), and
+current or coming raid week (Wednesday to Tuesday, following the WoW weekly reset), and
 whether those players stand in the boss lineups ("Boss sestavy" tab). An empty cell means the player is coming. The message is in
 Czech by default (`REPORT_LANG=en` for English).
 
@@ -77,10 +77,16 @@ of the boss columns are not shown.
 
 ## Schedule
 
-`weekly.yml` runs `0 17 * * 2` = Tuesday 17:00 UTC (19:00 Czech summer time,
-18:00 winter time), the evening before the Wednesday raid. Change the cron line to move it. GitHub may start
-scheduled jobs a few minutes late; GitHub also disables schedules on
-repositories with no activity for 60 days — a manual run re-enables them.
+`weekly.yml` runs every day at **18:00 Czech time**. GitHub cron only
+understands UTC and knows nothing about daylight saving, so the workflow has
+two cron lines, `0 16 * * *` and `0 17 * * *`, and a first "gate" step that
+lets the job continue only when the clock in `Europe/Prague` shows 18:xx
+(16:00 UTC in summer, 17:00 UTC in winter); the other firing ends after a few
+seconds without posting anything. Manual runs (`workflow_dispatch`) skip the
+gate. To move the time, change both cron hours and the `18` in the gate step.
+GitHub may start scheduled jobs a few minutes late (the gate tolerates up to
+59 minutes); GitHub also disables schedules on repositories with no activity
+for 60 days — a manual run re-enables them.
 
 ## Which week is reported
 

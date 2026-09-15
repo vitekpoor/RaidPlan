@@ -2,8 +2,11 @@ name: Weekly raid attendance report
 
 on:
   schedule:
-  # Runs every day at 18:00 UTC.
-  - cron: "0 18 * * *"
+  # Every day at 18:00 Czech time. GitHub cron is UTC only, so the job fires
+  # at both 16:00 and 17:00 UTC and the "gate" step below keeps only the
+  # firing where it is 18:00 in Europe/Prague (16 UTC in summer, 17 in winter).
+  - cron: "0 16 * * *"
+  - cron: "0 17 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -31,16 +34,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Run only at 18:00 Czech time (DST guard for the two UTC crons)
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(TZ=Europe/Prague date +%H)" = "18" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "It is $(TZ=Europe/Prague date +%H:%M) in Europe/Prague, not 18:xx - skipping this cron firing."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
         with:
           python-version: "3.12"
 
       - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
         run: pip install -r tools/attendance/requirements.txt
 
       - name: Build and send the report
+        if: steps.gate.outputs.run == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_MENTIONS: ${{ secrets.DISCORD_MENTIONS }}
