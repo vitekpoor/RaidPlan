@@ -125,6 +125,10 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile .psub .val { font-weight: 600; }
 .ptile.all { align-items: center; justify-content: center; color: var(--muted); border-style: dashed; }
 .ptile.all.active { color: var(--accent); }
+.ptile.nosim { cursor: default; opacity: .55; border-style: dashed; }
+.ptile.nosim:hover { background: var(--surface2); border-color: var(--line); }
+.ptile.nosim .psub .none { font-style: italic; }
+.badge.tank { color: var(--tank); border-color: var(--tank); }
 .pick { color: var(--muted); font-style: italic; padding: 6px 0 12px; }
 .ptile.boss .pname { color: var(--raid); }
 .ptile.boss.mplus .pname { color: var(--mplus); }
@@ -229,6 +233,8 @@ a.best:hover .open { color: var(--ink-strong); }
   var VAULT_TAB = "Vault";
   var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(SHEET_TAB);
   var VAULT_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(VAULT_TAB);
+  var ROSTER_TAB = "Roster";   // hlavní soupiska (řádky nad „LAVIČKA“) – hráči bez simu se ukážou v mřížce jako prázdné dlaždice
+  var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
   var ITEMS_URL = "loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
   var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear" };
@@ -246,7 +252,7 @@ a.best:hover .open { color: var(--ink-strong); }
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
 
   var $ = function (s) { return document.querySelector(s); };
-  var state = { view: "players", unit: "pct", kind: "all", player: null, boss: null, rows: [], items: {}, bosses: [], vault: {}, sort: { key: "diff", dir: -1 } };
+  var state = { view: "players", unit: "pct", kind: "all", player: null, boss: null, rows: [], items: {}, bosses: [], vault: {}, roster: [], sort: { key: "diff", dir: -1 } };
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
   try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
   if (!LIST_KINDS[state.kind]) state.kind = "all";
@@ -319,12 +325,14 @@ a.best:hover .open { color: var(--ink-strong); }
       fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); }),
       // list Vault je volitelný – bez něj stránka funguje, jen bez verdiktu
       fetch(VAULT_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
+      // list Roster je volitelný – bez něj se jen neukážou hráči bez simu
+      fetch(ROSTER_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
       loadItems()
     ]).then(function (res) {
-      var combined = res[0] + "\n " + res[1];
+      var combined = res[0] + "\n " + res[1] + "\n " + res[2];
       if (combined === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
       lastCsv = combined;
-      applyData(res[0], res[1], res[2]);
+      applyData(res[0], res[1], res[3], res[2]);
       render();
     }).catch(function (err) {
       status.textContent = "Nepodařilo se načíst data: " + err.message;
@@ -336,14 +344,15 @@ a.best:hover .open { color: var(--ink-strong); }
   function showStatus() {
     var latest = null; state.rows.forEach(function (r) { if (r.time && (!latest || r.time > latest)) latest = r.time; });
     var players = {}, n = { raid: 0, mplus: 0, topgear: 0 }; state.rows.forEach(function (r) { players[r.player] = 1; n[r.kind]++; });
-    var vaults = Object.keys(state.vault).length;
+    var vaults = Object.keys(state.vault).length, nosim = state.roster.length ? rosterWithoutSims().length : 0;
     var status = $("#status");
     status.textContent = Object.keys(players).length + " postav · " + n.raid + " raid + " + n.mplus + " M+ řádků" + (vaults ? " · " + vaults + " vaultů" : "") +
+      (nosim ? " · " + nosim + " z rosteru bez simu" : "") +
       (latest ? " · poslední sim " + fmtDate(latest) : "") + " · načteno " + fmtDate(new Date()) + " (obnova každou minutu)";
     status.className = "status";
   }
 
-  function applyData(csvText, vaultText, lib) {
+  function applyData(csvText, vaultText, lib, rosterText) {
       var table = parseCsv(csvText);
       var head = table.shift() || [];
       var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
@@ -395,7 +404,26 @@ a.best:hover .open { color: var(--ink-strong); }
                          ilvl: num(r[vi["ilvl"]]), libKind: lib.kind === "mplus" ? "mplus" : (lib.bosses && lib.bosses.length ? "raid" : "") });
         });
       }
+      // Roster: Hráč | Main char | Main classa | Main role | | Alt char | Alt classa | Alt role – jen hlavní soupiska (po řádek „LAVIČKA“)
+      state.roster = [];
+      var rt = rosterText ? parseCsv(rosterText) : [];
+      var rh = rt.shift() || []; var ri = {}; rh.forEach(function (h, i) { ri[h.trim()] = i; });
+      if (ri["Hráč"] != null && ri["Main char"] != null) {
+        for (var i = 0; i < rt.length; i++) {
+          var rr = rt[i], who = String(rr[ri["Hráč"]] || "").trim();
+          if (/^lavi[čc]ka/i.test(who)) break;
+          var main = String(rr[ri["Main char"]] || "").trim();
+          if (!who || !main) continue;
+          state.roster.push({ player: who, main: main, mainClass: String(rr[ri["Main classa"]] || "").trim(), mainRole: String(rr[ri["Main role"]] || "").trim().toLowerCase(),
+                              alt: String(ri["Alt char"] != null ? rr[ri["Alt char"]] || "" : "").trim() });
+        }
+      }
       showStatus();
+  }
+  // hráči z Rosteru, jejichž main ani alt (ani jméno hráče) nemá žádný řádek v simech
+  function rosterWithoutSims() {
+    var have = {}; state.rows.forEach(function (r) { have[nkey(r.player)] = 1; });
+    return state.roster.filter(function (p) { return !have[nkey(p.main)] && !have[nkey(p.alt)] && !have[nkey(p.player)]; });
   }
 
   // ---- helpers for values ----
@@ -580,6 +608,17 @@ a.best:hover .open { color: var(--ink-strong); }
       html += '<button class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" data-player="' + esc(n) + '">' +
         '<span class="pname">' + playerHtml(a) + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + "</span></button>";
     });
+    // hráči z Rosteru bez jediného simu – nerozklikávací dlaždice na konci mřížky (při hledání jen ti, kterých se dotaz týká)
+    var ql = q.toLowerCase();
+    rosterWithoutSims().filter(function (p) { return !ql || (p.player + " " + p.main + " " + p.alt).toLowerCase().indexOf(ql) >= 0; })
+      .sort(function (a, b) { return a.main.localeCompare(b.main, "cs"); }).forEach(function (p) {
+        var color = CLASS_COLOR[p.mainClass.toLowerCase().replace(/\s+/g, "")] || "";
+        var role = p.mainRole === "heal" ? "heal" : p.mainRole === "tank" ? "tank" : "dps";
+        html += '<div class="ptile nosim" title="' + esc(p.player + (p.alt && nkey(p.alt) !== nkey(p.main) ? " · alt " + p.alt : "")) + '">' +
+          '<span class="pname" style="' + (color ? "color:" + color : "") + '">' + esc(p.main) + "</span>" +
+          '<span class="psub"><span class="badge ' + role + '">' + esc(p.mainClass.toLowerCase() + " · " + (p.mainRole || "dps")) + "</span></span>" +
+          '<span class="psub"><span class="none">zatím žádný sim</span></span></div>';
+      });
     html += '<button class="ptile all' + (state.player === "*" ? " active" : "") + '" data-player="*">' + (state.player === "*" ? "Sbalit všechny" : "Rozbalit všechny") + "</button></div>";
     var open = state.player === "*" ? names : (state.player && by[state.player] && names.indexOf(state.player) >= 0 ? [state.player] : []);
     if (!open.length) html += '<p class="pick">Klikni na jméno – rozbalí se upgrady, vault a Top Gear té postavy.</p>';
@@ -683,7 +722,7 @@ a.best:hover .open { color: var(--ink-strong); }
     $("#minunit").textContent = state.unit === "pct" ? "%" : "(DPS / HPS)";
     var v = $("#view");
     v.innerHTML = state.view === "players" ? renderPlayers() : state.view === "bosses" ? renderBosses() : renderItems();
-    v.querySelectorAll(".ptile").forEach(function (b) {
+    v.querySelectorAll(".ptile[data-player]").forEach(function (b) {
       b.addEventListener("click", function () {
         var n = b.getAttribute("data-player");
         state.player = n === "*" ? (state.player === "*" ? null : "*") : (state.player === n ? null : n);
