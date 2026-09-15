@@ -120,7 +120,8 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile { text-align: left; background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; font: inherit; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
 .ptile:hover { background: var(--surface3); border-color: var(--muted); }
 .ptile.active { border-color: var(--accent); background: var(--accent-soft); }
-.ptile .pname { font-weight: 600; font-size: 15px; }
+.ptile .pname { font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ptile .pname .val { font-size: 13px; white-space: nowrap; }
 .ptile .psub { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .ptile .psub .val { font-weight: 600; }
 .ptile.all { align-items: center; justify-content: center; color: var(--muted); border-style: dashed; }
@@ -128,6 +129,7 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile.nosim { cursor: default; opacity: .55; border-style: dashed; }
 .ptile.nosim:hover { background: var(--surface2); border-color: var(--line); }
 .ptile.nosim .psub .none { font-style: italic; }
+.ptile .psub .ago.stale { color: var(--dps); font-weight: 600; }
 .badge.tank { color: var(--tank); border-color: var(--tank); }
 .pick { color: var(--muted); font-style: italic; padding: 6px 0 12px; }
 .ptile.boss .pname { color: var(--raid); }
@@ -238,6 +240,7 @@ a.best:hover .open { color: var(--ink-strong); }
   var ITEMS_URL = "loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
   var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear" };
+  var STALE_MS = 6 * 86400000;             // sim starší než 6 dní se v dlaždici hráče ukáže červeně
   var LIST_KINDS = { raid: 1, mplus: 1 };   // do tabulek jdou jen raid a M+; Top Gear = souhrnný řádek v kartě hráče
   var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
                   legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
@@ -405,7 +408,7 @@ a.best:hover .open { color: var(--ink-strong); }
         });
       }
       // Roster: Hráč | Main char | Main classa | Main role | | Alt char | Alt classa | Alt role – jen hlavní soupiska (po řádek „LAVIČKA“)
-      state.roster = [];
+      state.roster = []; state.charClass = {};   // nkey(postava) → classa (z Rosteru) – dořeší nejednoznačné specy (protection, holy, frost, restoration)
       var rt = rosterText ? parseCsv(rosterText) : [];
       var rh = rt.shift() || []; var ri = {}; rh.forEach(function (h, i) { ri[h.trim()] = i; });
       if (ri["Hráč"] != null && ri["Main char"] != null) {
@@ -414,8 +417,11 @@ a.best:hover .open { color: var(--ink-strong); }
           if (/^lavi[čc]ka/i.test(who)) break;
           var main = String(rr[ri["Main char"]] || "").trim();
           if (!who || !main) continue;
-          state.roster.push({ player: who, main: main, mainClass: String(rr[ri["Main classa"]] || "").trim(), mainRole: String(rr[ri["Main role"]] || "").trim().toLowerCase(),
-                              alt: String(ri["Alt char"] != null ? rr[ri["Alt char"]] || "" : "").trim() });
+          var mainClass = String(rr[ri["Main classa"]] || "").trim(), alt = String(ri["Alt char"] != null ? rr[ri["Alt char"]] || "" : "").trim();
+          var altClass = String(ri["Alt classa"] != null ? rr[ri["Alt classa"]] || "" : "").trim();
+          state.roster.push({ player: who, main: main, mainClass: mainClass, mainRole: String(rr[ri["Main role"]] || "").trim().toLowerCase(), alt: alt });
+          if (mainClass) state.charClass[nkey(main)] = mainClass.toLowerCase().replace(/\s+/g, "");
+          if (alt && altClass) state.charClass[nkey(alt)] = altClass.toLowerCase().replace(/\s+/g, "");
         }
       }
       showStatus();
@@ -471,7 +477,7 @@ a.best:hover .open { color: var(--ink-strong); }
     return { itemId: r.dropId, item: lib.name || r.catalystFrom, icon: lib.icon || "", slot: lib.slot || r.slot, ilvl: r.ilvl };
   }
   function playerHtml(r) {
-    var color = CLASS_COLOR[SPEC_CLASS[r.spec] || ""] || "";
+    var color = CLASS_COLOR[SPEC_CLASS[r.spec] || (state.charClass || {})[nkey(r.player)] || ""] || "";
     return '<span style="' + (color ? "color:" + color : "") + '">' + esc(r.player) + "</span>";
   }
   function roleBadge(r) { return '<span class="badge ' + r.role + '">' + esc(r.spec.replace(/_/g, " ")) + " · " + r.unit + "</span>"; }
@@ -599,14 +605,17 @@ a.best:hover .open { color: var(--ink-strong); }
       var ups = g.rows.filter(passes).length;
       var tg = g.rows.filter(function (r) { return r.kind === "topgear"; })[0];
       var best = g.rows.filter(function (r) { return LIST_KINDS[r.kind] && (metric(r) || 0) > 0; }).sort(byMetricDesc)[0];
+      // hodnota vedle jména: Top Gear (všechny upgrady najednou), jinak nejlepší jednotlivý item
+      var top = tg && (metric(tg) || 0) > 0 ? tg : best;
+      var val = top ? '<span class="val ' + cls(top) + '" title="' + (top === tg ? "Top Gear – všechny upgrady najednou" : "nejlepší jednotlivý item") + '">' + fmtVal(top) + "</span>" : "";
       var sub = ups + " upgradů";
-      if (tg && (metric(tg) || 0) > 0) sub += ' · <span class="val ' + cls(tg) + '">' + fmtVal(tg) + "</span> celkem";
-      else if (best) sub += ' · <span class="val ' + cls(best) + '">' + fmtVal(best) + "</span>";
       if (state.vault[nkey(n)]) sub += " · 🎁";
       var last = g.rows.reduce(function (t, r) { return r.time && (!t || r.time > t) ? r.time : t; }, null);
-      if (last) sub += ' · <span class="ago" title="poslední sim ' + esc(fmtDate(last)) + '">' + esc(fmtAgo(last)) + "</span>";
+      // sim starší než 6 dní = zastaralý (nový týden, jiný gear) – červeně
+      var stale = last && Date.now() - last.getTime() > STALE_MS;
+      if (last) sub += ' · <span class="ago' + (stale ? " stale" : "") + '" title="poslední sim ' + esc(fmtDate(last)) + (stale ? " – starší než 6 dní" : "") + '">' + esc(fmtAgo(last)) + "</span>";
       html += '<button class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" data-player="' + esc(n) + '">' +
-        '<span class="pname">' + playerHtml(a) + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + "</span></button>";
+        '<span class="pname">' + playerHtml(a) + val + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + "</span></button>";
     });
     // hráči z Rosteru bez jediného simu – nerozklikávací dlaždice na konci mřížky (při hledání jen ti, kterých se dotaz týká)
     var ql = q.toLowerCase();
