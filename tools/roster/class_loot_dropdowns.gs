@@ -2573,7 +2573,8 @@ function mergeSimNote_(oldNote, kind, seg) {
 
 var SIM_RESULTS_SHEET_NAME = "Sim výsledky";
 var SIM_RESULTS_HEADER = ["Postava", "Spec", "Zdroj", "Report", "Čas", "Boss ID", "Boss", "Item ID", "Item",
-                          "Slot", "ilvl", "Základ", "S itemem", "Rozdíl", "Rozdíl %", "Původ", "Katalyzátor ID", "Katalyzátor z"];
+                          "Slot", "ilvl", "Základ", "S itemem", "Rozdíl", "Rozdíl %", "Původ", "Katalyzátor ID", "Katalyzátor z",
+                          "ilvl postavy"];   // 19: průměrný ilvl nasazeného gearu z reportu (stránka Simy: „Akka (321)“)
 var SIM_RESULTS_ORIGIN_COL = 16;
 // Katalyzátor: Raidbots simuluje i set kusy vyrobené katalyzátorem z ne-setového itemu jiného bosse
 // (profileset "…/legs////268225" – poslední pole = ID zdrojového itemu). Takový kus má ID set itemu,
@@ -2659,7 +2660,7 @@ function simResultsFromTopgear_(reportId, character) {
     kind: "topgear", bossId: "", boss: "Top Gear",
     itemId: changed.map(function (c) { return c.id; }).join("|"),
     item: changed.map(function (c) { return names[String(c.id)] || ("#" + c.id); }).join(" + "),
-    slot: changed.length, ilvl: "",
+    slot: changed.length, ilvl: "", charIlvl: equippedIlvl_(d),
     base: Math.round(base), value: Math.round(mean),
     diff: Math.round(mean - base), pct: Math.round((mean - base) / base * 10000) / 100
   }];
@@ -2689,7 +2690,7 @@ function storeSimResults_(character, spec, link, kinds) {
       counts[r.kind] = (counts[r.kind] || 0) + 1;
       return [character, spec, link.kind === "qe" ? "QE Live" : "Raidbots", link.url, now,
               r.bossId, r.boss, r.itemId, r.item, r.slot, r.ilvl, r.base, r.value, r.diff, r.pct, SIM_KIND_ORIGIN[r.kind],
-              r.catalystId || "", r.catalystFrom || ""];
+              r.catalystId || "", r.catalystFrom || "", r.charIlvl || ""];
     });
     // smazat staré řádky postavy téhož původu (odspodu, aby se neposouvaly indexy)
     var last = sh.getLastRow();
@@ -2780,8 +2781,27 @@ function simResultsFromRaidbots_(reportId) {
       catalystId: catalystId ? Number(catalystId) : "", catalystFrom: catalystId ? (srcItem.name || "") : ""
     };
   });
-  return Object.keys(best).map(function (k) { return best[k]; })
+  var charIlvl = equippedIlvl_(d);
+  return Object.keys(best).map(function (k) { best[k].charIlvl = charIlvl; return best[k]; })
     .sort(function (a, b) { return b.pct - a.pct; });
+}
+
+/**
+ * Průměrný ilvl nasazeného gearu z Raidbots data.json (sim.players[0].gear[slot].ilevel).
+ * Jako ve hře: 16 slotů, dvouruční zbraň (main_hand bez off_hand) se počítá dvakrát. "" když gear chybí.
+ */
+function equippedIlvl_(d) {
+  var gear = ((((d || {}).sim || {}).players || [])[0] || {}).gear || {};
+  var sum = 0, n = 0, hasOff = false;
+  Object.keys(gear).forEach(function (slot) {
+    var il = Number((gear[slot] || {}).ilevel);
+    if (!(il > 0)) return;
+    if (slot === "off_hand") hasOff = true;
+    if (slot === "shirt" || slot === "tabard") return;
+    sum += il; n++;
+  });
+  if (!hasOff && gear.main_hand && Number(gear.main_hand.ilevel) > 0) { sum += Number(gear.main_hand.ilevel); n++; }
+  return n ? Math.round(sum / n * 10) / 10 : "";
 }
 
 /** Záznam itemLibrary je katalyzátorová verze (tags ["catalyst"], příp. redirected_base_stats). */

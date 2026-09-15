@@ -122,6 +122,7 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile.active { border-color: var(--accent); background: var(--accent-soft); }
 .ptile .pname { font-weight: 600; font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .ptile .pname .val { font-size: 13px; white-space: nowrap; }
+.ilvl { color: var(--muted); font-weight: 500; font-size: 13px; }
 .ptile .psub { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .ptile .psub .val { font-weight: 600; }
 .ptile.all { align-items: center; justify-content: center; color: var(--muted); border-style: dashed; }
@@ -398,7 +399,8 @@ a.best:hover .open { color: var(--ink-strong); }
           bossIds: bossIds, boss: bossName || (bossIds.length && bossById[String(bossIds[0])] ? bossById[String(bossIds[0])].name : ""),
           itemId: itemId, item: r[idx["Item"]] || lib.name || ("#" + itemId), icon: lib.icon || "",
           slot: r[idx["Slot"]] || lib.slot || "", ilvl: num(r[idx["ilvl"]]),
-          base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]])
+          base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]]),
+          charIlvl: idx["ilvl postavy"] != null ? num(r[idx["ilvl postavy"]]) : null   // průměrný ilvl nasazeného gearu (z reportu)
         };
       });
       // Vault: Postava | Čas | Item ID | Item | Slot | ilvl | Bonus ID  → { nkey(postava): { player, time, items[] } }
@@ -445,6 +447,12 @@ a.best:hover .open { color: var(--ink-strong); }
         });
       }
       showStatus();
+  }
+  // "(321)" – průměrný ilvl nasazeného gearu z nejnovějšího reportu postavy, který ho má
+  function ilvlHtml(rows) {
+    var best = null;
+    rows.forEach(function (r) { if (r.charIlvl && (!best || (r.time && best.time && r.time > best.time))) best = r; });
+    return best ? ' <span class="ilvl" title="průměrný ilvl nasazeného gearu (z reportu ' + esc(fmtDate(best.time)) + ')">(' + Math.round(best.charIlvl) + ")</span>" : "";
   }
   // "80 <ikona>" – kolik Myth crestů postava má podle posledního SimC exportu (addon hlásí jen aktuální stav,
   // sezónní cap se počítá ze získaných, ne držených – ten z exportu nezjistíme)
@@ -604,7 +612,7 @@ a.best:hover .open { color: var(--ink-strong); }
       var links = [];
       if (raidAny && raidAny.report) links.push('<a href="' + esc(raidAny.report) + '" target="_blank" rel="noopener">report raid</a>');
       if (mAny && mAny.report && !(raidAny && raidAny.report === mAny.report)) links.push('<a href="' + esc(mAny.report) + '" target="_blank" rel="noopener">report M+</a>');
-      html += '<details class="card" open><summary><span class="name">' + playerHtml(a) + "</span> " + roleBadge(a) +
+      html += '<details class="card" open><summary><span class="name">' + playerHtml(a) + ilvlHtml(g.rows) + "</span> " + roleBadge(a) +
         '<span class="meta">' + esc(a.src) + (a.time ? " · " + fmtDate(a.time) : "") + (links.length ? " · " + links.join(" · ") : "") +
         (crestHtml(n) ? " · Myth cresty " + crestHtml(n) : "") +
         (a.base != null ? ' · základ <span class="mono">' + Math.round(a.base).toLocaleString("cs-CZ") + "</span> " + a.unit : "") + "</span>" +
@@ -647,7 +655,7 @@ a.best:hover .open { color: var(--ink-strong); }
       // čas posledního simu vpravo dole (margin-left:auto ve flex řádku)
       var ago = last ? '<span class="ago' + (stale ? " stale" : "") + '" title="poslední sim ' + esc(fmtDate(last)) + (stale ? " – starší než 6 dní" : "") + '">' + esc(fmtAgo(last)) + "</span>" : "";
       html += '<button class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" data-player="' + esc(n) + '">' +
-        '<span class="pname">' + playerHtml(a) + val + "</span>" + '<span class="psub">' + roleBadge(a) + crest + "</span>" + '<span class="psub">' + sub + ago + "</span></button>";
+        '<span class="pname"><span class="who">' + playerHtml(a) + ilvlHtml(g.rows) + "</span>" + val + "</span>" + '<span class="psub">' + roleBadge(a) + crest + "</span>" + '<span class="psub">' + sub + ago + "</span></button>";
     });
     // hráči z Rosteru bez jediného simu – nerozklikávací dlaždice na konci mřížky (při hledání jen ti, kterých se dotaz týká)
     var ql = q.toLowerCase();
