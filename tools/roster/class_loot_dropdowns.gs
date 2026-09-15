@@ -1849,13 +1849,13 @@ function onOpen() {
 /* ---------- SimC parsing ---------- */
 
 /**
- * Vytáhne z SimC exportu jméno postavy, classu, spec a server. Vrací
- * { name, cls, spec, server, ok, error }. Kontroluje, že jde opravdu o SimC export
+ * Vytáhne z SimC exportu jméno postavy, classu, spec, server a region. Vrací
+ * { name, cls, spec, server, region, ok, error }. Kontroluje, že jde opravdu o SimC export
  * (řádek `<classa>="Jméno"` + aspoň jeden slot s `,id=`).
  */
 function parseSimc_(text) {
   var s = String(text || "").replace(/\r/g, "").trim();
-  var out = { name: "", cls: "", spec: "", server: "", ok: false, error: "" };
+  var out = { name: "", cls: "", spec: "", server: "", region: "", ok: false, error: "" };
   if (!s) { out.error = "SimC string je prázdný."; return out; }
   if (s.length > SIM_MAX_SIMC) { out.error = "SimC string je podezřele dlouhý."; return out; }
   var m = /^(deathknight|demonhunter|druid|evoker|hunter|mage|monk|paladin|priest|rogue|shaman|warlock|warrior)="([^"\n]+)"\s*$/mi.exec(s);
@@ -1866,6 +1866,8 @@ function parseSimc_(text) {
   out.spec = sp ? sp[1].toLowerCase() : "";
   var sv = /^server=([^\s]+)\s*$/mi.exec(s);
   out.server = sv ? sv[1] : "";
+  var rg = /^region=([a-z]+)\s*$/mi.exec(s);
+  out.region = rg ? rg[1].toLowerCase() : "";
   if (!/^[a-z_0-9]+=,id=\d+/mi.test(s)) { out.error = "Export neobsahuje žádný vybavený item (řádky head=,id=…)."; return out; }
   out.vault = parseVault_(s);   // null = blok chybí (hráč neotevřel Great Vault), [] = otevřel, ale nic nenabízí
   out.crests = parseCrests_(s); // null = řádek upgrade_currencies chybí (starý addon)
@@ -1987,7 +1989,7 @@ function submitSimWeb(data) {
       vaultMsg = p.vault.length ? " Vault: " + p.vault.length + (p.vault.length === 1 ? " item." : p.vault.length < 5 ? " itemy." : " itemů.") : "";
     }
     // cresty (měny z řádku upgrade_currencies) – bonus, nesmí shodit odeslání
-    if (p.crests) { try { storeCrests_(ch.name, p.crests); } catch (err) { /* ignorovat */ } }
+    if (p.crests) { try { storeCrests_(ch.name, p.crests, null, p.server, p.region); } catch (err) { /* ignorovat */ } }
     var waiting = countPendingSims_(sh);
     // rovnou spustit runner v GitHub Actions (chyba GitHubu nesmí shodit odeslání formuláře)
     var started = "";
@@ -2941,11 +2943,14 @@ function storeVault_(character, items) {
 // jsou cresty aktuální sezóny (Adventurer/Veteran/Champion/Hero/Myth Mistcrest).
 // Odeslání formuláře uloží počty sem – jeden řádek na postavu (přepisuje se).
 // Stránka Simy z toho ukazuje u hráče Myth cresty proti sezónnímu capu.
+// Navíc se sem ukládá server + region postavy (řádky `server=` a `region=` z exportu) –
+// stránka Simy z nich skládá odkazy na Warcraft Logs, Raider.IO a Armory.
 // Addon exportuje jen aktuální stav (kolik hráč MÁ), ne kolik za sezónu získal.
 
 var CREST_SHEET_NAME = "Cresty";
 var CREST_IDS = [["3442", "Adventurer"], ["3443", "Veteran"], ["3444", "Champion"], ["3445", "Hero"], ["3446", "Myth"]];
-var CREST_HEADER = ["Postava", "Čas"].concat(CREST_IDS.map(function (c) { return c[1]; }));
+var CREST_EXTRA = ["Server", "Region"];   // za cresty: SimC `server=drakthul`, `region=eu`
+var CREST_HEADER = ["Postava", "Čas"].concat(CREST_IDS.map(function (c) { return c[1]; })).concat(CREST_EXTRA);
 
 /** { "3442": 274, ... } ze SimC exportu, nebo null když řádek chybí. */
 function parseCrests_(s) {
@@ -2968,6 +2973,9 @@ function crestSheet_() {
     sh.setFrozenRows(1);
     sh.getRange(1, 3, 1, CREST_IDS.length).setNotes([CREST_IDS.map(function (c) { return "currency id " + c[0]; })]);
   }
+  // starší list bez sloupců Server/Region – doplnit hlavičku
+  var have = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), CREST_HEADER.length)).getValues()[0].map(String);
+  CREST_HEADER.forEach(function (h, i) { if (have[i] !== h) sh.getRange(1, i + 1).setValue(h).setFontWeight("bold"); });
   return sh;
 }
 
@@ -2977,8 +2985,8 @@ function buildCrestSheet() {
   SpreadsheetApp.getUi().alert("List „" + CREST_SHEET_NAME + "“ je připravený.");
 }
 
-/** Přepíše řádek postavy (crests = objekt z parseCrests_). */
-function storeCrests_(character, crests, when) {
+/** Přepíše řádek postavy (crests = objekt z parseCrests_; server/region ze SimC exportu, prázdné = nechat, co tam je). */
+function storeCrests_(character, crests, when, server, region) {
   var sh = crestSheet_();
   var row = [character, when || new Date()].concat(CREST_IDS.map(function (c) { return crests[c[0]] != null ? crests[c[0]] : 0; }));
   var last = sh.getLastRow(), target = 0;
@@ -2989,6 +2997,9 @@ function storeCrests_(character, crests, when) {
   if (!target) target = last + 1;
   sh.getRange(target, 1, 1, row.length).setValues([row]);
   sh.getRange(target, 2).setNumberFormat("d.M.yyyy H:mm");
+  var col = row.length + 1;
+  if (server) sh.getRange(target, col).setValue(String(server).toLowerCase());
+  if (region) sh.getRange(target, col + 1).setValue(String(region).toLowerCase());
   return target;
 }
 
@@ -3001,10 +3012,12 @@ function backfillCrests() {
   for (var i = vals.length - 1; i >= 0; i--) {        // odspodu = nejnovější odeslání první
     var name = String(vals[i][SIM_COL.character - 1] || ""); if (!name) continue;
     var key = simNameKey_(name); if (seen[key]) continue;
-    var crests = parseCrests_(vals[i][SIM_COL.simc - 1]); if (!crests) continue;
+    var simc = vals[i][SIM_COL.simc - 1];
+    var crests = parseCrests_(simc); if (!crests) continue;
     seen[key] = 1;
     var t = vals[i][SIM_COL.time - 1];
-    storeCrests_(name, crests, t instanceof Date ? t : new Date());
+    var sv = /^server=([^\s]+)\s*$/mi.exec(String(simc || "")), rg = /^region=([a-z]+)\s*$/mi.exec(String(simc || ""));
+    storeCrests_(name, crests, t instanceof Date ? t : new Date(), sv ? sv[1] : "", rg ? rg[1] : "");
     n++;
   }
   SpreadsheetApp.getUi().alert("Cresty doplněné pro " + n + " postav.");
