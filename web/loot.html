@@ -141,7 +141,10 @@ tr.mplus td:first-child { color: var(--mplus); }
 .best .verdict { font-weight: 700; color: var(--ink-strong); font-size: 15px; }
 .best .verdict .val { font-size: 18px; }
 .best .vs, .best .when { color: var(--muted); font-size: 12.5px; }
-.best .when a { color: var(--muted); }
+a.best { text-decoration: none; color: inherit; cursor: pointer; transition: background-color .15s, border-color .15s; }
+a.best:hover { background: linear-gradient(90deg, rgba(63, 214, 138, .26), var(--surface2) 55%); }
+a.best .open { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+a.best:hover .open { color: var(--ink-strong); }
 .best .chips { gap: 4px; }
 
 /* Great Vault – řádek nahoře v kartě hráče: vzít item z vaultu, nebo si nechat bonus roll na raid? */
@@ -492,9 +495,11 @@ tr.mplus td:first-child { color: var(--mplus); }
     var verdict = v > 0
       ? 'Všechny najednou: <span class="val ' + cls(tg) + '">' + fmtVal(tg) + "</span>" + (tg.base != null && tg.value != null ? ' <span class="vs">(' + Math.round(tg.base).toLocaleString("cs-CZ") + " → " + Math.round(tg.value).toLocaleString("cs-CZ") + " " + tg.unit + ")</span>" : "")
       : "Žádná kombinace není lepší než současný gear.";
-    return '<div class="best"><span class="tag">🏆 Best overall</span><span class="verdict">' + verdict + "</span>" +
+    // celý řádek je odkaz na Top Gear report (když existuje)
+    var open = tg.report ? '<a class="best" href="' + esc(tg.report) + '" target="_blank" rel="noopener" title="Otevřít Top Gear report na Raidbots">' : '<div class="best">';
+    return open + '<span class="tag">🏆 Best overall</span><span class="verdict">' + verdict + "</span>" +
       (ids.length ? '<span class="vs">· nejlepší kombinace ' + ids.length + (ids.length === 1 ? " itemu" : ids.length < 5 ? " itemů" : " itemů") + ' z raidu a M+:</span><span class="chips">' + chips + "</span>" : "") +
-      '<span class="when">' + (tg.time ? fmtDate(tg.time) : "") + (tg.report ? ' · <a href="' + esc(tg.report) + '" target="_blank" rel="noopener">Top Gear report</a>' : "") + "</span></div>";
+      '<span class="when">' + (tg.time ? fmtDate(tg.time) : "") + (tg.report ? ' · <span class="open">Top Gear report ↗</span>' : "") + "</span>" + (tg.report ? "</a>" : "</div>");
   }
 
   // ---- views ----
