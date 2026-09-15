@@ -405,7 +405,7 @@ tr.mplus td:first-child { color: var(--mplus); }
     return '<span class="item">' + icon + '<a href="https://www.wowhead.com/item=' + esc(whId) + '"' + wh + ' target="_blank" rel="noopener">' + esc(r.item) + "</a> " + slot + catHtml(r) + "</span>";
   }
   function catHtml(r) {
-    return r.catalystId ? ' <span class="cat" title="Katalyzátor: padá ' + esc(r.catalystFrom) + ', set kus si nechá jeho staty">⚗ z ' + esc(r.catalystFrom) + "</span>" : "";
+    return r.catalystId ? ' <span class="cat" title="Katalyzátor: padá ' + esc(r.catalystFrom) + ', set kus si nechá jeho staty">⚗ katalyzátor</span>" : "";
   }
   /** Název pro text (verdikt vaultu, chipy): u katalyzátoru i zdrojový item. */
   function itemLabel(r) { return r.item + (r.catalystId ? " (⚗ z " + r.catalystFrom + ")" : ""); }
