@@ -129,6 +129,7 @@ tr.mplus td:first-child { color: var(--mplus); }
 .ptile.nosim { cursor: default; opacity: .55; border-style: dashed; }
 .ptile.nosim:hover { background: var(--surface2); border-color: var(--line); }
 .ptile.nosim .psub .none { font-style: italic; }
+.ptile .psub .ago { margin-left: auto; white-space: nowrap; }
 .ptile .psub .ago.stale { color: var(--dps); font-weight: 600; }
 .badge.tank { color: var(--tank); border-color: var(--tank); }
 .pick { color: var(--muted); font-style: italic; padding: 6px 0 12px; }
@@ -613,9 +614,10 @@ a.best:hover .open { color: var(--ink-strong); }
       var last = g.rows.reduce(function (t, r) { return r.time && (!t || r.time > t) ? r.time : t; }, null);
       // sim starší než 6 dní = zastaralý (nový týden, jiný gear) – červeně
       var stale = last && Date.now() - last.getTime() > STALE_MS;
-      if (last) sub += ' · <span class="ago' + (stale ? " stale" : "") + '" title="poslední sim ' + esc(fmtDate(last)) + (stale ? " – starší než 6 dní" : "") + '">' + esc(fmtAgo(last)) + "</span>";
+      // čas posledního simu vpravo dole (margin-left:auto ve flex řádku)
+      var ago = last ? '<span class="ago' + (stale ? " stale" : "") + '" title="poslední sim ' + esc(fmtDate(last)) + (stale ? " – starší než 6 dní" : "") + '">' + esc(fmtAgo(last)) + "</span>" : "";
       html += '<button class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" data-player="' + esc(n) + '">' +
-        '<span class="pname">' + playerHtml(a) + val + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + "</span></button>";
+        '<span class="pname">' + playerHtml(a) + val + "</span>" + '<span class="psub">' + roleBadge(a) + "</span>" + '<span class="psub">' + sub + ago + "</span></button>";
     });
     // hráči z Rosteru bez jediného simu – nerozklikávací dlaždice na konci mřížky (při hledání jen ti, kterých se dotaz týká)
     var ql = q.toLowerCase();
