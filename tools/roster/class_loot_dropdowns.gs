@@ -3676,6 +3676,8 @@ var ATT_YES_BG = "#D9EAD3";
 var ATT_NO_BG = "#F4CCCC";
 var ATT_EXCUSED = "omluvenka";      // chybí, ale v „Absence přehled“ má na ten den X
 var ATT_EXCUSED_BG = "#FFE599";
+var ATT_LATE = "pozdě";            // chybí při zápisu, ale hlásil „Přijdu pozdě“
+var ATT_LATE_BG = "#F6B26B";
 var ATT_HEADER_RE = /^\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/;   // "16.9.2026 (20:05)"
 var ATT_RECORD_HEADER = "ESA1";
 
@@ -3796,7 +3798,7 @@ function recordAttendance_(text) {
   var col = findAttendanceDateCol_(sh, rec.date, rec.time, tz);
   var present = 0;
   var absence = absenceMarksForDate_(rec.date, tz);   // hráč (lowercase) -> "X" / "pozdě"
-  var excused = 0;
+  var excused = 0, late = 0;
   rec.players.forEach(function (p) {
     var row = findAbsencePlayerRow_(sh, p.name, roster);
     var cell = sh.getRange(row, col);
@@ -3804,7 +3806,8 @@ function recordAttendance_(text) {
     var value = ATT_NO, bg = ATT_NO_BG, note = "";
     if (p.present) { value = ATT_YES; bg = ATT_YES_BG; note = p.char || ""; present++; }
     else if (mark === ABSENCE_MARK["Nepřijdu"][0]) { value = ATT_EXCUSED; bg = ATT_EXCUSED_BG; note = "hlášená absence"; excused++; }
-    else if (mark) { note = "hlásil: přijdu pozdě"; }
+    else if (mark === ABSENCE_MARK["Přijdu pozdě"][0]) { value = ATT_LATE; bg = ATT_LATE_BG; note = "hlášeno: přijdu pozdě"; late++; }
+    else if (mark) { note = "absence: " + mark; }
     cell.setValue(value).setBackground(bg).setHorizontalAlignment("center").setFontColor("#000000");
     if (note) cell.setNote(note); else cell.clearNote();
   });
@@ -3813,7 +3816,7 @@ function recordAttendance_(text) {
   var label = Utilities.formatDate(rec.date, tz, "d.M.yyyy") + " (" + rec.time + ")";
   return { ok: true,
            message: "✔ Docházka " + label + ": " + present + "/" + rec.players.length + " hráčů v raidu" +
-                    (excused ? ", " + excused + " omluvenka" : "") +
+                    (excused ? ", " + excused + " omluvenka" : "") + (late ? ", " + late + " pozdě" : "") +
                     (rec.unknown.length ? " · mimo roster: " + rec.unknown.join(", ") : "") };
 }
 
