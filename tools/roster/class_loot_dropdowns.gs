@@ -1844,6 +1844,9 @@ function onOpen() {
       .addItem("Vytvořit list Sim výsledky", "buildSimResultsSheet")
       .addItem("Vytvořit list Vault", "buildVaultSheet")
       .addItem("Vytvořit list Cresty", "buildCrestSheet")
+      .addItem("Vytvořit list Discord (místnosti hráčů)", "buildDiscordSheet")
+      .addItem("Nastavit Discord bot token / společný webhook…", "setDiscordSecrets")
+      .addItem("Test Discord notifikace pro postavu…", "testDiscordNotify")
       .addItem("Doplnit cresty ze Sim fronty", "backfillCrests")
       .addItem("Načíst výsledky ze všech hotových reportů", "rebuildSimResults")
       .addItem("Znovu nasimovat označené řádky fronty", "requeueSelectedSims")
@@ -2103,8 +2106,10 @@ function setSimStatus_(sh, row, status, note) {
  * nahrát do wowaudit. Řádek je ✅, když se povedlo aspoň jedno.
  * Vrací { ok, message }. Používá dialog, onEdit trigger i sim_runner (simapi done).
  */
-function uploadSimReport_(sh, row, reportUrl, kind) {
+function uploadSimReport_(sh, row, reportUrl, kind, opts) {
+  opts = opts || {};
   var vals = sh.getRange(row, 1, 1, SIM_HEADER.length).getValues()[0];
+  var wasComplete = String(vals[SIM_COL.status - 1] || "").indexOf("✅") === 0;
   var character = String(vals[SIM_COL.character - 1] || "");
   var spec = String(vals[SIM_COL.spec - 1] || "");
   var charId = Number(vals[SIM_COL.id - 1]);
@@ -2147,6 +2152,11 @@ function uploadSimReport_(sh, row, reportUrl, kind) {
   var note = mergeSimNote_(vals[SIM_COL.note - 1], kind, seg);
   var ok = stored.ok || wa.ok;
   if (ok && !complete) note += " | čeká na " + missing + " sim";
+  // Discord: jen když se řádek právě teď stal kompletním (ne při přepočtu hotových řádků)
+  if (ok && complete && !wasComplete && opts.notify !== false) {
+    var dn = notifySimDone_(character, spec);
+    if (dn) note += " | " + dn;
+  }
   setSimStatus_(sh, row, !ok ? SIM_STATUS.error : (complete ? SIM_STATUS.done : SIM_STATUS.running), note);
   var msg = ok
     ? "✅ " + character + " [" + SIM_KIND_LABEL[kind] + "]: " + (stored.ok ? stored.message + " ve výsledcích" : "výsledky se nenačetly") +
@@ -2549,8 +2559,12 @@ function simApi_(e) {
         // Top Gear nemá kandidáty (nic není upgrade) – sloupec vyplnit, aby byl řádek kompletní
         sh.getRange(row, SIM_COL.reportTopgear).setValue(SIM_TOPGEAR_SKIP);
         var doneNow = simRowComplete_(sh, row);
-        setSimStatus_(sh, row, doneNow ? SIM_STATUS.done : SIM_STATUS.running,
-          mergeSimNote_(vals[SIM_COL.note - 1], "topgear", "Top Gear přeskočen: nic není upgrade"));
+        var skipNote = mergeSimNote_(vals[SIM_COL.note - 1], "topgear", "Top Gear přeskočen: nic není upgrade");
+        if (doneNow && String(vals[SIM_COL.status - 1] || "").indexOf("✅") !== 0) {
+          var dn2 = notifySimDone_(character, String(vals[SIM_COL.spec - 1] || ""));
+          if (dn2) skipNote += " | " + dn2;
+        }
+        setSimStatus_(sh, row, doneNow ? SIM_STATUS.done : SIM_STATUS.running, skipNote);
         return simApiJson_({ ok: true, message: "Top Gear přeskočen", complete: doneNow });
       }
       if (action === "done") {
@@ -2980,10 +2994,11 @@ function rebuildSimResults() {
         if (hLink && hLink.kind === "raidbots") results.push(storeSimResults_(character, spec, hLink, ["raidhc"]));
       } else {
         // opraví i stav řádku
-        if (raidLink) results.push(uploadSimReport_(sh, e.row, raidLink.url, "raid"));
-        if (mLink && !(raidLink && mLink.id === raidLink.id)) results.push(uploadSimReport_(sh, e.row, mLink.url, "mplus"));
-        if (tLink && tLink.kind === "raidbots") results.push(uploadSimReport_(sh, e.row, tLink.url, "topgear"));
-        if (hLink && hLink.kind === "raidbots") results.push(uploadSimReport_(sh, e.row, hLink.url, "raidhc"));
+        var quiet = { notify: false };
+        if (raidLink) results.push(uploadSimReport_(sh, e.row, raidLink.url, "raid", quiet));
+        if (mLink && !(raidLink && mLink.id === raidLink.id)) results.push(uploadSimReport_(sh, e.row, mLink.url, "mplus", quiet));
+        if (tLink && tLink.kind === "raidbots") results.push(uploadSimReport_(sh, e.row, tLink.url, "topgear", quiet));
+        if (hLink && hLink.kind === "raidbots") results.push(uploadSimReport_(sh, e.row, hLink.url, "raidhc", quiet));
       }
       var bad = results.filter(function (r) { return !r.ok; });
       if (!bad.length) done++; else failed.push(character + " (" + bad.map(function (r) { return r.message; }).join("; ") + ")");
@@ -3053,6 +3068,183 @@ function storeVault_(character, items) {
 // Navíc se sem ukládá server + region postavy (řádky `server=` a `region=` z exportu) –
 // stránka Simy z nich skládá odkazy na Warcraft Logs, Raider.IO a Armory.
 // Addon exportuje jen aktuální stav (kolik hráč MÁ), ne kolik za sezónu získal.
+
+// ================== DISCORD NOTIFIKACE (místnosti hráčů) ==================
+//
+// Každý hráč může mít na Discordu vlastní místnost. List "Discord" (menu Simy → Vytvořit list Discord):
+//   Hráč | Kanál URL | Webhook URL | Discord user ID
+//   - Hráč = jméno z listu Roster (sloupec "Hráč"); postavy (main i alt) se na hráče mapují přes Roster
+//   - Kanál URL = odkaz na místnost (Discord → pravý klik na kanál → Kopírovat odkaz), stránka Simy z něj
+//     dělá ikonu u postavy; s bot tokenem se do ní i posílá
+//   - Webhook URL = webhook té místnosti (Upravit kanál → Integrace → Webhooky) – bez bota stačí tohle
+//   - Discord user ID = pro @zmínku (Developer Mode → pravý klik na uživatele → Copy User ID)
+// Posílání: 1) webhook místnosti, 2) bot token (Script Property DISCORD_BOT_TOKEN, bot musí mít v místnosti
+// Send Messages) + channel id z Kanál URL, 3) společný webhook (Script Property DISCORD_SIM_WEBHOOK) se zmínkou.
+// Zpráva odejde, když se řádek fronty PRÁVĚ stal kompletním (všechny simy hotové) – ne při přepočtu hotových.
+
+var DISCORD_SHEET_NAME = "Discord";
+var DISCORD_HEADER = ["Hráč", "Kanál URL", "Webhook URL", "Discord user ID"];
+var DISCORD_BOT_TOKEN_PROP = "DISCORD_BOT_TOKEN";
+var DISCORD_DEFAULT_WEBHOOK_PROP = "DISCORD_SIM_WEBHOOK";
+var SIM_NOTIFY = true;                                             // false = žádné Discord zprávy
+var SIM_PAGE_URL = "https://vitekpoor.github.io/RaidPlan/loot.html";
+
+function discordSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(DISCORD_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(DISCORD_SHEET_NAME);
+    sh.getRange(1, 1, 1, DISCORD_HEADER.length).setValues([DISCORD_HEADER]).setFontWeight("bold").setBackground("#24322C").setFontColor("#FFFFFF");
+    sh.setFrozenRows(1);
+    [140, 420, 420, 200].forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+    sh.getRange(1, 1).setNote("Jméno hráče přesně jako v listu Roster (sloupec Hráč). Postavy (main i alt) se dohledají přes Roster.");
+    sh.getRange(1, 2).setNote("Odkaz na místnost hráče: Discord → pravý klik na kanál → Kopírovat odkaz (https://discord.com/channels/<server>/<kanál>). Stránka Simy z něj dělá ikonu; s bot tokenem se do ní posílají zprávy.");
+    sh.getRange(1, 3).setNote("Webhook místnosti: Upravit kanál → Integrace → Webhooky → Nový webhook → Kopírovat URL. Když je vyplněný, posílá se přes něj (bot není potřeba).");
+    sh.getRange(1, 4).setNote("Discord ID uživatele pro @zmínku (User Settings → Advanced → Developer Mode, pak pravý klik na uživatele → Copy User ID). Nepovinné.");
+    // předvyplnit hráče z Rosteru
+    try {
+      var roster = getRoster_() || [];
+      if (roster.length) sh.getRange(2, 1, roster.length, 1).setValues(roster.map(function (r) { return [r.player]; }));
+    } catch (err) { /* roster je nepovinný */ }
+  }
+  return sh;
+}
+
+function buildDiscordSheet() {
+  discordSheet_();
+  SpreadsheetApp.getUi().alert("List „" + DISCORD_SHEET_NAME + "“ je připravený – doplň ke hráčům odkaz na místnost a webhook (nebo nastav bot token).");
+}
+
+/** Jednorázově: bot token a/nebo společný webhook do Script Properties (nikdy do kódu). */
+function setDiscordSecrets() {
+  var ui = SpreadsheetApp.getUi(), props = PropertiesService.getScriptProperties();
+  var t = ui.prompt("Discord bot token", "Token bota (Discord Developer Portal → Bot → Reset Token). Bot musí být na serveru a mít v místnostech hráčů právo Send Messages.\nPrázdné = nechat stávající, \"-\" = smazat.", ui.ButtonSet.OK_CANCEL);
+  if (t.getSelectedButton() !== ui.Button.OK) return;
+  var tok = t.getResponseText().trim();
+  if (tok === "-") props.deleteProperty(DISCORD_BOT_TOKEN_PROP); else if (tok) props.setProperty(DISCORD_BOT_TOKEN_PROP, tok);
+  var w = ui.prompt("Společný webhook", "Webhook společného kanálu pro hráče bez vlastní místnosti (nepovinné).\nPrázdné = nechat stávající, \"-\" = smazat.", ui.ButtonSet.OK_CANCEL);
+  if (w.getSelectedButton() !== ui.Button.OK) return;
+  var wh = w.getResponseText().trim();
+  if (wh === "-") props.deleteProperty(DISCORD_DEFAULT_WEBHOOK_PROP); else if (wh) props.setProperty(DISCORD_DEFAULT_WEBHOOK_PROP, wh);
+  ui.alert("Uloženo. Bot token: " + (props.getProperty(DISCORD_BOT_TOKEN_PROP) ? "nastaven" : "–") + ", společný webhook: " + (props.getProperty(DISCORD_DEFAULT_WEBHOOK_PROP) ? "nastaven" : "–"));
+}
+
+/** Pošle testovací zprávu pro zadanou postavu (stejná cesta jako po dokončení simů). */
+function testDiscordNotify() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt("Test Discord notifikace", "Jméno postavy (podle listu Sim výsledky / Roster):", ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var character = r.getResponseText().trim();
+  if (!character) return;
+  var target = discordTargetFor_(character);
+  var res = notifySimDone_(character, "", { test: true });
+  ui.alert("Postava " + character + " → hráč " + (target && target.player ? target.player : "(nenalezen v Rosteru)") +
+    "\nCíl: " + (target && target.webhook ? "webhook místnosti" : target && target.channelId ? "kanál " + target.channelId + " (bot)" : "společný webhook / nic") +
+    "\nVýsledek: " + (res || "nikam se neposlalo – chybí webhook / token / společný webhook"));
+}
+
+/** { nkey(hráč): { player, channelUrl, channelId, webhook, userId } } z listu Discord. */
+function getDiscordRooms_() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DISCORD_SHEET_NAME);
+  var out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  var head = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), DISCORD_HEADER.length)).getValues()[0].map(function (h) { return String(h || "").trim().toLowerCase(); });
+  var col = {};
+  DISCORD_HEADER.forEach(function (h, i) { var j = head.indexOf(h.toLowerCase()); col[h] = j >= 0 ? j : i; });
+  sh.getRange(2, 1, sh.getLastRow() - 1, head.length).getValues().forEach(function (v) {
+    var g = function (h) { return String(v[col[h]] == null ? "" : v[col[h]]).trim(); };
+    var player = g("Hráč");
+    if (!player) return;
+    var url = g("Kanál URL");
+    var m = /channels\/\d+\/(\d+)/.exec(url) || /^(\d{15,25})$/.exec(url);
+    out[simNameKey_(player)] = { player: player, channelUrl: url, channelId: m ? m[1] : "", webhook: g("Webhook URL"), userId: g("Discord user ID").replace(/\D/g, "") };
+  });
+  return out;
+}
+
+/** Místnost hráče pro postavu: postava → hráč přes Roster (main/alt), jinak přímo jméno postavy = jméno hráče. */
+function discordTargetFor_(character) {
+  var rooms = getDiscordRooms_();
+  var key = simNameKey_(character), player = "";
+  (getRoster_() || []).forEach(function (r) {
+    if (!player && ((r.main && simNameKey_(r.main) === key) || (r.alt && simNameKey_(r.alt) === key))) player = r.player;
+  });
+  var room = (player && rooms[simNameKey_(player)]) || rooms[key] || null;
+  if (room) return room;
+  return player ? { player: player, channelUrl: "", channelId: "", webhook: "", userId: "" } : null;
+}
+
+/** Souhrn hotových simů postavy z listu "Sim výsledky" (nejlepší raid / M+ item, Top Gear). */
+function simSummaryFor_(character) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SIM_RESULTS_SHEET_NAME);
+  var out = { raid: null, mplus: null, topgear: null, nRaid: 0, nMplus: 0, hc: false };
+  if (!sh || sh.getLastRow() < 2) return out;
+  var key = simNameKey_(character);
+  var vals = sh.getRange(2, 1, sh.getLastRow() - 1, SIM_RESULTS_HEADER.length).getValues();
+  vals.forEach(function (v) {
+    if (simNameKey_(v[0]) !== key) return;
+    var kind = originKind_(v[SIM_RESULTS_ORIGIN_COL - 1]);
+    var pct = Number(v[14]);
+    var it = { item: String(v[8] || ""), boss: String(v[6] || ""), pct: isNaN(pct) ? 0 : pct, catalystFrom: String(v[17] || "") };
+    if (kind === "topgear") { out.topgear = it; return; }
+    if (kind === "raidhc") { out.hc = true; return; }
+    if (kind !== "raid" && kind !== "mplus") return;
+    if (it.pct > 0) out[kind === "raid" ? "nRaid" : "nMplus"]++;
+    if (!out[kind] || it.pct > out[kind].pct) out[kind] = it;
+  });
+  return out;
+}
+
+function pctText_(p) { return (p > 0 ? "+" : "") + (Math.round(p * 100) / 100).toFixed(2) + " %"; }
+
+function simDoneMessage_(character, spec, room, opts) {
+  var s = simSummaryFor_(character);
+  var lines = [];
+  var head = (room && room.userId ? "<@" + room.userId + "> " : "") + "🧪 **" + character + "**" + (spec ? " (" + spec + ")" : "") + (opts && opts.test ? " – TEST notifikace" : " – simy jsou hotové!");
+  lines.push(head);
+  var itemText = function (it) { return it.item + (it.catalystFrom ? " (katalyzátor z " + it.catalystFrom + ")" : "") + (it.boss ? " – " + it.boss : "") + " " + pctText_(it.pct); };
+  if (s.raid) lines.push("• Raid: " + s.nRaid + " upgradů, nejlepší " + itemText(s.raid));
+  if (s.mplus) lines.push("• M+: " + s.nMplus + " upgradů, nejlepší " + itemText(s.mplus));
+  if (s.topgear) lines.push("• Top Gear (best overall): " + pctText_(s.topgear.pct));
+  if (s.hc) lines.push("• Great Vault: verdikt vault vs. bonus roll je na webu");
+  lines.push("→ " + SIM_PAGE_URL + "#" + encodeURIComponent(character));
+  return lines.join("\n");
+}
+
+function discordPostWebhook_(webhook, text, userId) {
+  var payload = { content: text, allowed_mentions: { users: userId ? [userId] : [] } };
+  var resp = UrlFetchApp.fetch(webhook, { method: "post", contentType: "application/json", payload: JSON.stringify(payload), muteHttpExceptions: true });
+  var code = resp.getResponseCode();
+  if (code < 200 || code >= 300) throw new Error("webhook HTTP " + code + " " + resp.getContentText().slice(0, 120));
+}
+
+function discordPostBot_(token, channelId, text, userId) {
+  var payload = { content: text, allowed_mentions: { users: userId ? [userId] : [] } };
+  var resp = UrlFetchApp.fetch("https://discord.com/api/v10/channels/" + channelId + "/messages",
+    { method: "post", contentType: "application/json", headers: { Authorization: "Bot " + token }, payload: JSON.stringify(payload), muteHttpExceptions: true });
+  var code = resp.getResponseCode();
+  if (code < 200 || code >= 300) throw new Error("bot HTTP " + code + " " + resp.getContentText().slice(0, 120));
+}
+
+/**
+ * Pošle zprávu o dokončených simech postavy do místnosti hráče. Vrací text do poznámky
+ * ("Discord ✔ #místnost" / "Discord ✖ důvod") nebo "" když není kam posílat. Nikdy nehází.
+ */
+function notifySimDone_(character, spec, opts) {
+  if (!SIM_NOTIFY) return "";
+  try {
+    var room = discordTargetFor_(character);
+    var props = PropertiesService.getScriptProperties();
+    var token = props.getProperty(DISCORD_BOT_TOKEN_PROP), fallback = props.getProperty(DISCORD_DEFAULT_WEBHOOK_PROP);
+    var text = simDoneMessage_(character, spec, room, opts);
+    if (room && room.webhook) { discordPostWebhook_(room.webhook, text, room.userId); return "Discord ✔ " + room.player; }
+    if (room && room.channelId && token) { discordPostBot_(token, room.channelId, text, room.userId); return "Discord ✔ " + room.player + " (bot)"; }
+    if (fallback) { discordPostWebhook_(fallback, text, room && room.userId); return "Discord ✔ společný kanál"; }
+    return "";
+  } catch (err) {
+    return "Discord ✖ " + String(err && err.message || err).slice(0, 150);
+  }
+}
 
 var CREST_SHEET_NAME = "Cresty";
 var CREST_IDS = [["3442", "Adventurer"], ["3443", "Veteran"], ["3444", "Champion"], ["3445", "Hero"], ["3446", "Myth"]];

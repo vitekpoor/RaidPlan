@@ -290,6 +290,9 @@ a.best:hover .open { color: var(--ink-strong); }
   var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
   var CREST_TAB = "Cresty";    // Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth – plní Apps Script z řádku upgrade_currencies v SimC exportu
   var CREST_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(CREST_TAB);
+  var DISCORD_TAB = "Discord";  // Hráč | Kanál URL | Webhook URL | Discord user ID – místnosti hráčů (hráč = sloupec Hráč v Rosteru); stránka bere jen Kanál URL
+  var DISCORD_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(DISCORD_TAB);
+  var DISCORD_ICON = "https://www.google.com/s2/favicons?domain=discord.com&sz=32";
   var CREST_ICON = "inv_121_crest_myth";   // Wowhead ikona Myth Mistcrest (currency 3446)
   // odkazy na postavu (server/region z listu Cresty – SimC `server=`/`region=`; když chybí, nejčastější server týmu)
   var DEFAULT_REGION = "eu", DEFAULT_SERVER = "drakthul";
@@ -403,12 +406,15 @@ a.best:hover .open { color: var(--ink-strong); }
       fetch(ROSTER_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
       // list Cresty je volitelný – bez něj se jen neukáže stav Myth crestů
       fetch(CREST_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
-      loadItems()
+      loadItems(),
+      // list Discord je volitelný – bez něj jen chybí ikonka místnosti hráče
+      fetch(DISCORD_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; })
     ]).then(function (res) {
-      var combined = res[0] + "\n " + res[1] + "\n " + res[2] + "\n " + res[3];
+      var combined = res[0] + "\n " + res[1] + "\n " + res[2] + "\n " + res[3] + "\n " + res[5];
       if (combined === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
       lastCsv = combined;
-      applyData(res[0], res[1], res[4], res[2], res[3]);
+      applyData(res[0], res[1], res[4], res[2], res[3], res[5]);
+      openFromHash();
       render();
     }).catch(function (err) {
       status.textContent = "Nepodařilo se načíst data: " + err.message;
@@ -428,7 +434,17 @@ a.best:hover .open { color: var(--ink-strong); }
     status.className = "status";
   }
 
-  function applyData(csvText, vaultText, lib, rosterText, crestText) {
+  // #Postava v URL (odkaz z Discord notifikace) → rozbalit kartu té postavy (jen při prvním načtení)
+  var hashDone = false;
+  function openFromHash() {
+    if (hashDone) return; hashDone = true;
+    var h = decodeURIComponent((location.hash || "").replace(/^#/, "")).trim();
+    if (!h) return;
+    var k = nkey(h), hit = null;
+    state.rows.forEach(function (r) { if (!hit && nkey(r.player) === k) hit = r.player; });
+    if (hit) { state.view = "players"; state.player = hit; }
+  }
+  function applyData(csvText, vaultText, lib, rosterText, crestText, discordText) {
       var table = parseCsv(csvText);
       var head = table.shift() || [];
       var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
@@ -500,6 +516,16 @@ a.best:hover .open { color: var(--ink-strong); }
           if (alt && altClass) state.charClass[nkey(alt)] = altClass.toLowerCase().replace(/\s+/g, "");
         }
       }
+      // Discord: Hráč | Kanál URL … → { nkey(hráč): { player, url } } (hlídá hlavičku – gviz bez listu vrací default tab)
+      state.discord = {};
+      var dt = discordText ? parseCsv(discordText) : [];
+      var dh = dt.shift() || []; var di = {}; dh.forEach(function (h, i) { di[h.trim().toLowerCase()] = i; });
+      if (di["hráč"] != null && di["kanál url"] != null) {
+        dt.forEach(function (r) {
+          var who = String(r[di["hráč"]] || "").trim(), url = String(r[di["kanál url"]] || "").trim();
+          if (who && /^https?:\/\/(www\.)?(discord\.com|discordapp\.com|ptb\.discord\.com|canary\.discord\.com)\//.test(url)) state.discord[nkey(who)] = { player: who, url: url };
+        });
+      }
       // Cresty: Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth | Server | Region → { nkey(postava): { time, myth, ..., server, region } }
       state.crests = {};
       var ct = crestText ? parseCsv(crestText) : [];
@@ -534,14 +560,24 @@ a.best:hover .open { color: var(--ink-strong); }
       '<img src="https://wow.zamimg.com/images/wow/icons/small/' + CREST_ICON + '.jpg" alt="Myth Mistcrest" loading="lazy"></span>';
   }
   // ikonky s odkazy na postavu: Warcraft Logs, Raider.IO, Armory (server ve tvaru Blizzard slugu: SimC `tarren_mill` → `tarren-mill`)
+  /** Discord místnost hráče pro postavu: postava → hráč přes Roster (main/alt), jinak jméno postavy = jméno hráče. */
+  function discordRoom(name) {
+    var k = nkey(name), player = null;
+    (state.roster || []).forEach(function (p) { if (!player && (nkey(p.main) === k || nkey(p.alt) === k)) player = p.player; });
+    var d = state.discord || {};
+    return (player && d[nkey(player)]) || d[k] || null;
+  }
   function charLinksHtml(name) {
     var c = state.crests[nkey(name)] || {};
     var sv = (c.server || state.defaultServer || DEFAULT_SERVER).replace(/_/g, "-"), rg = c.region || DEFAULT_REGION;
     var n = encodeURIComponent(String(name || "").trim());
+    var room = discordRoom(name);
     return '<span class="links">' + CHAR_SITES.map(function (s) {
       return '<a class="clink ' + s.key + '" href="' + esc(s.url(rg, sv, n)) + '" target="_blank" rel="noopener" title="' + esc(s.label + " – " + name + "-" + sv) + '">' +
         '<img src="' + s.icon + '" alt="' + esc(s.label) + '" loading="lazy"></a>';
-    }).join("") + "</span>";
+    }).join("") +
+      (room ? '<a class="clink discord" href="' + esc(room.url) + '" target="_blank" rel="noopener" title="' + esc("Discord místnost – " + room.player) + '"><img src="' + DISCORD_ICON + '" alt="Discord" loading="lazy"></a>' : "") +
+      "</span>";
   }
   // hráči z Rosteru, jejichž main ani alt (ani jméno hráče) nemá žádný řádek v simech
   function rosterWithoutSims() {
@@ -1050,6 +1086,8 @@ a.best:hover .open { color: var(--ink-strong); }
         if (e.target && e.target.closest && e.target.closest("a")) return;   // klik na ikonku odkazu – jen otevřít odkaz
         var n = b.getAttribute("data-player");
         state.player = n === "*" ? (state.player === "*" ? null : "*") : (state.player === n ? null : n);
+        // #Postava v URL, aby šel odkaz na kartu poslat (stejný tvar používá Discord notifikace)
+        try { history.replaceState(null, "", state.player && state.player !== "*" ? "#" + encodeURIComponent(state.player) : location.pathname + location.search); } catch (e) {}
         render();
         if (state.player && state.player !== "*") { var card = $("#view details.card"); if (card) card.scrollIntoView({ behavior: "smooth", block: "start" }); }
       });
