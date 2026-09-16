@@ -1663,8 +1663,8 @@ function applyClassDropdowns() {
 // Smart Sim (high precision).
 
 var SIM_SHEET_NAME = "Sim fronta";
-var SIM_HEADER = ["Čas", "Postava", "Spec", "SimC string", "Report URL", "Stav", "Poznámka", "wowaudit ID", "Report M+ URL", "Vault", "Report Top Gear URL"];
-var SIM_COL = { time: 1, character: 2, spec: 3, simc: 4, report: 5, status: 6, note: 7, id: 8, reportMplus: 9, vault: 10, reportTopgear: 11 };
+var SIM_HEADER = ["Čas", "Postava", "Spec", "SimC string", "Report URL", "Stav", "Poznámka", "wowaudit ID", "Report M+ URL", "Vault", "Report Top Gear URL", "Report HC raid URL"];
+var SIM_COL = { time: 1, character: 2, spec: 3, simc: 4, report: 5, status: 6, note: 7, id: 8, reportMplus: 9, vault: 10, reportTopgear: 11, reportRaidhc: 12 };
 // Za každou postavu běží DVA Droptimizery: raid (Season 2 Raids, Mythic) a Mythic+ dungeony
 // ("+10 Vault" = Myth track), oba s "Upgrade up to" Myth 6/6 – stejné ilvl, férové srovnání.
 // QE Live (healeři) má raid i dungeony v jednom reportu (kind "qe" = oba).
@@ -1673,8 +1673,15 @@ var SIM_MPLUS = true;                 // řádek je ✅ až s raidovým i M+ rep
 // pustí, až má oba Droptimizery; výsledek = jeden souhrnný řádek "Top Gear" (best overall).
 var SIM_TOPGEAR = true;               // řádek je ✅ až i s Top Gear reportem (QE Live healeři ho nemají)
 var SIM_TOPGEAR_SKIP = "– (nic není upgrade)";   // hodnota sloupce, když Top Gear nemá kandidáty
-var SIM_KIND_LABEL = { raid: "raid", mplus: "M+", qe: "raid+M+", topgear: "Top Gear" };
-var SIM_KIND_ORIGIN = { raid: "Raid", mplus: "M+", topgear: "Top Gear" };   // hodnota sloupce "Původ" v listu "Sim výsledky"
+// Čtvrtý sim jen u postav s Great Vaultem (sloupec "Vault" není prázdný): raidový Droptimizer
+// s obtížností "Heroic Vault" (Myth 1/6) + Upgrade up to Myth 6/6 = všechny raidové itemy max 334.
+// Bonus roll na HC (a na mythic bossech, které zabíjíme) dává mythic item, ale max 334 – 344 base
+// dropí jen poslední mythic bossové (Coiled Altar, Ula'tek), kde bonus roll ještě dlouho nepůjde.
+// Stránka Simy proto verdikt "vzít z vaultu vs. nechat si bonus roll" počítá z tohohle reportu
+// (Původ "Raid HC"), ne z plného mythic Droptimizeru. QE Live (healeři) má raid už na 334 (dropType max).
+var SIM_RAIDHC = true;                // řádek s vaultem je ✅ až i s HC raid reportem
+var SIM_KIND_LABEL = { raid: "raid", mplus: "M+", qe: "raid+M+", topgear: "Top Gear", raidhc: "HC raid" };   // label "HC raid" nesmí začínat "raid " (mergeSimNote_)
+var SIM_KIND_ORIGIN = { raid: "Raid", mplus: "M+", topgear: "Top Gear", raidhc: "Raid HC" };   // hodnota sloupce "Původ" v listu "Sim výsledky"
 var SIM_STATUS = { pending: "⏳ čeká na sim", running: "🔄 simuluje", done: "✅ hotovo", error: "⚠ chyba", dropped: "❌ zahozeno" };
 var SIM_STATUS_BG = { "⏳ čeká na sim": "#FFF2CC", "🔄 simuluje": "#CFE2F3", "✅ hotovo": "#D9EAD3", "✅ ve wowaudit": "#D9EAD3", "⚠ chyba": "#F4CCCC", "❌ zahozeno": "#EFEFEF" };
 var SIM_MAX_SIMC = 200000;         // pojistka na velikost vstupu (SimC export má ~10–20 kB)
@@ -1696,6 +1703,7 @@ var SIM_RAIDBOTS_STEPS = [
   "Smart Sim: zapnuto, High precision: zapnuto.",
   "Run Droptimizer → po dokončení zkopíruj URL reportu (…/simbot/report/XXXX), vyber Raid / M+ a ulož.",
   "Třetí sim (dělá sim_runner sám): Top Gear z nejlepších raid + M+ itemů → odkaz ulož jako Top Gear (best overall řádek na stránce Simy).",
+  "Postava s Great Vaultem: ještě jeden raidový Droptimizer – Source „Season 2 Raids“, Difficulty „Heroic Vault“ (Myth 1/6), Upgrade up to: Myth 6/6 (všechno max 334 = co dá bonus roll na HC) → odkaz ulož jako HC raid; z něj je verdikt vault vs. bonus roll.",
   "Healeři: místo Raidbots použij QE Live Upgrade Finder (questionablyepic.com/live/upgradefinder) – Import → SimC string, Raid: Mythic, M+: +10, Generate → odkaz reportu pokrývá raid i dungeony najednou."
 ];
 var QE_UPGRADE_FINDER_URL = "https://questionablyepic.com/live/upgradefinder";
@@ -1795,7 +1803,7 @@ function buildSimSheet() {
   sh.getRange(1, 1, 1, SIM_HEADER.length).setValues([SIM_HEADER])
     .setFontWeight("bold").setBackground("#24322C").setFontColor("#FFFFFF");
   sh.setFrozenRows(1);
-  var widths = [130, 130, 110, 260, 300, 120, 260, 90, 300, 160, 300];
+  var widths = [130, 130, 110, 260, 300, 120, 260, 90, 300, 160, 300, 300];
   widths.forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
   sh.getRange(1, 1, Math.max(sh.getMaxRows(), 2), SIM_HEADER.length)
     .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP).setVerticalAlignment("middle");
@@ -2101,13 +2109,14 @@ function uploadSimReport_(sh, row, reportUrl, kind) {
   var charId = Number(vals[SIM_COL.id - 1]);
   var link = parseReportLink_(reportUrl);
   if (!link) { setSimStatus_(sh, row, SIM_STATUS.error, "Neplatný odkaz na report (Raidbots / QE Live): " + reportUrl); return { ok: false, message: "⚠ Neplatný odkaz – vlož odkaz na Raidbots Droptimizer nebo QE Live Upgrade Finder report." }; }
-  // druh reportu: raid | mplus | topgear (Raidbots) | qe (QE Live = raid i dungeony v jednom, Top Gear nemá)
+  // druh reportu: raid | mplus | topgear | raidhc (Raidbots) | qe (QE Live = raid i dungeony v jednom, Top Gear nemá)
   kind = String(kind || "");
-  kind = link.kind === "qe" ? "qe" : (kind === "mplus" || kind === "topgear" ? kind : "raid");
+  kind = link.kind === "qe" ? "qe" : (kind === "mplus" || kind === "topgear" || kind === "raidhc" ? kind : "raid");
   var kinds = kind === "qe" ? ["raid", "mplus"] : [kind];
   if (kinds.indexOf("raid") >= 0) sh.getRange(row, SIM_COL.report).setValue(link.url);
   if (kinds.indexOf("mplus") >= 0) sh.getRange(row, SIM_COL.reportMplus).setValue(link.url);
   if (kinds.indexOf("topgear") >= 0) sh.getRange(row, SIM_COL.reportTopgear).setValue(link.url);
+  if (kinds.indexOf("raidhc") >= 0) sh.getRange(row, SIM_COL.reportRaidhc).setValue(link.url);
   if (kind === "qe") sh.getRange(row, SIM_COL.reportTopgear).setValue("– (QE Live)");
 
   // 1) primární cíl: list "Sim výsledky" (čte ho stránka Simy)
@@ -2127,7 +2136,7 @@ function uploadSimReport_(sh, row, reportUrl, kind) {
     } catch (err) { wa = { ok: false, skipped: false, message: String(err && err.message || err) }; }
   }
 
-  // 3) hotovo, až když má řádek raidový, M+ i Top Gear report (SIM_MPLUS / SIM_TOPGEAR); QE pokrývá vše
+  // 3) hotovo, až když má řádek raidový, M+ i Top Gear report (SIM_MPLUS / SIM_TOPGEAR) a u vaultu HC raid (SIM_RAIDHC); QE pokrývá vše
   var complete = simRowComplete_(sh, row);
   var missing = simRowMissing_(sh, row);
   var when = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "d.M. H:mm");
@@ -2147,14 +2156,19 @@ function uploadSimReport_(sh, row, reportUrl, kind) {
 
 /** Které simy řádku ještě chybí ("M+", "M+ a Top Gear", …); "" = kompletní. */
 function simRowMissing_(sh, row) {
-  var raidLink = parseReportLink_(sh.getRange(row, SIM_COL.report).getValue());
-  var hasMplus = !!parseReportLink_(sh.getRange(row, SIM_COL.reportMplus).getValue());
-  var hasTopgear = !!String(sh.getRange(row, SIM_COL.reportTopgear).getValue() || "").trim();
+  var vals = sh.getRange(row, 1, 1, SIM_HEADER.length).getValues()[0];
+  var raidLink = parseReportLink_(vals[SIM_COL.report - 1]);
+  var hasMplus = !!parseReportLink_(vals[SIM_COL.reportMplus - 1]);
+  var hasTopgear = !!String(vals[SIM_COL.reportTopgear - 1] || "").trim();
+  var hasRaidhc = !!parseReportLink_(vals[SIM_COL.reportRaidhc - 1]);
+  var hasVault = !!String(vals[SIM_COL.vault - 1] || "").trim();
+  var isQe = !!(raidLink && raidLink.kind === "qe");
   var miss = [];
   if (!raidLink) miss.push("raid");
   if (SIM_MPLUS && !hasMplus) miss.push("M+");
-  if (SIM_TOPGEAR && !hasTopgear && !(raidLink && raidLink.kind === "qe")) miss.push("Top Gear");
-  return miss.join(" a ");
+  if (SIM_TOPGEAR && !hasTopgear && !isQe) miss.push("Top Gear");
+  if (SIM_RAIDHC && hasVault && !hasRaidhc && !isQe) miss.push("HC raid");
+  return miss.length > 1 ? miss.slice(0, -1).join(", ") + " a " + miss[miss.length - 1] : miss.join("");
 }
 
 function simRowComplete_(sh, row) {
@@ -2233,7 +2247,9 @@ function getSimQueue() {
       simcLength: String(v[SIM_COL.simc - 1] || "").length,
       hasRaid: !!parseReportLink_(v[SIM_COL.report - 1]),
       hasMplus: !!parseReportLink_(v[SIM_COL.reportMplus - 1]),
-      hasTopgear: !!String(v[SIM_COL.reportTopgear - 1] || "").trim()
+      hasTopgear: !!String(v[SIM_COL.reportTopgear - 1] || "").trim(),
+      hasRaidhc: !!parseReportLink_(v[SIM_COL.reportRaidhc - 1]),
+      hasVault: !!String(v[SIM_COL.vault - 1] || "").trim()
     });
   });
   return out;
@@ -2317,7 +2333,7 @@ function render(items) {\
   if (!items.length) { list.innerHTML = "<div class=\\"empty\\">Fronta je prázdná 🎉</div>"; return; }\
   items.forEach(function (it) {\
     var div = document.createElement("div"); div.className = "item" + (it.status.indexOf("chyba") >= 0 ? " err" : "");\
-    var have = (it.hasRaid ? " · raid ✅" : " · raid –") + (it.hasMplus ? " · M+ ✅" : " · M+ –") + (it.hasTopgear ? " · Top Gear ✅" : " · Top Gear –");\
+    var have = (it.hasRaid ? " · raid ✅" : " · raid –") + (it.hasMplus ? " · M+ ✅" : " · M+ –") + (it.hasTopgear ? " · Top Gear ✅" : " · Top Gear –") + (it.hasVault ? (it.hasRaidhc ? " · HC raid ✅" : " · HC raid –") : "");\
     div.innerHTML = "<div class=\\"head\\"><span class=\\"name\\">" + esc(it.character) + "</span><span class=\\"meta\\">" + esc(it.spec) + " · " + esc(it.time) + " · " + esc(it.status) + have + "</span></div>" +\
       (it.note ? "<div class=\\"note\\">" + esc(it.note) + "</div>" : "") +\
       "<div class=\\"row\\"><button class=\\"copy\\">📋 Kopírovat SimC</button>" +\
@@ -2325,7 +2341,7 @@ function render(items) {\
       "<a class=\\"btn\\" href=\\"" + QE + "\\" target=\\"_blank\\" rel=\\"noopener\\" title=\\"Healeři\\">💚 QE Live</a>" +\
       "<button class=\\"drop danger\\" title=\\"Zahodit tento řádek\\">✖</button></div>" +\
       "<div class=\\"row\\"><input type=\\"text\\" class=\\"url\\" placeholder=\\"https://www.raidbots.com/simbot/report/…\\">" +\
-      "<select class=\\"kind\\" title=\\"Který sim to je (QE Live odkaz pokrývá raid i M+)\\"><option value=\\"raid\\"" + (it.hasRaid ? "" : " selected") + ">Raid</option><option value=\\"mplus\\"" + (it.hasRaid && !it.hasMplus ? " selected" : "") + ">M+</option><option value=\\"topgear\\"" + (it.hasRaid && it.hasMplus && !it.hasTopgear ? " selected" : "") + ">Top Gear</option></select>" +\
+      "<select class=\\"kind\\" title=\\"Který sim to je (QE Live odkaz pokrývá raid i M+)\\"><option value=\\"raid\\"" + (it.hasRaid ? "" : " selected") + ">Raid</option><option value=\\"mplus\\"" + (it.hasRaid && !it.hasMplus ? " selected" : "") + ">M+</option><option value=\\"topgear\\"" + (it.hasRaid && it.hasMplus && !it.hasTopgear ? " selected" : "") + ">Top Gear</option><option value=\\"raidhc\\"" + (it.hasRaid && it.hasMplus && it.hasTopgear && it.hasVault && !it.hasRaidhc ? " selected" : "") + ">HC raid (vault)</option></select>" +\
       "<button class=\\"up primary\\">⬆ Uložit report</button></div><div class=\\"msg\\"></div>";\
     var copyBtn = div.querySelector(".copy"), upBtn = div.querySelector(".up"), dropBtn = div.querySelector(".drop"), url = div.querySelector(".url"), kindSel = div.querySelector(".kind"), msg = div.querySelector(".msg");\
     copyBtn.addEventListener("click", function () {\
@@ -2426,10 +2442,11 @@ $("send").addEventListener("click", function () {\
  * Raidbots spustí Droptimizer a hotový report nahlásí zpět; upload do
  * wowaudit dělá stejná funkce jako dialog. Přístup chrání token ve Script
  * Properties (menu Simy → Token pro sim_runner.py…). Volání:
- *   ?p=simapi&token=…&action=queue                      → { ok, rows:[{row, character, spec, simc, id, status, report_raid, report_mplus}] }
- *   ?p=simapi&token=…&action=running&row=N&character=…&url=…&kind=raid|mplus|qe → stav 🔄 (odkaz do Poznámky)
- *   ?p=simapi&token=…&action=done&row=N&character=…&url=…&kind=raid|mplus|qe    → výsledky do "Sim výsledky" (+ wowaudit u raidu);
- *                                                        řádek je ✅, až když má raidový i M+ report (QE = oboje)
+ *   ?p=simapi&token=…&action=queue                      → { ok, rows:[{row, character, spec, simc, id, status, report_raid, report_mplus,
+ *                                                                        report_topgear, report_raidhc, vault}] }
+ *   ?p=simapi&token=…&action=running&row=N&character=…&url=…&kind=raid|mplus|topgear|raidhc|qe → stav 🔄 (odkaz do Poznámky)
+ *   ?p=simapi&token=…&action=done&row=N&character=…&url=…&kind=raid|mplus|topgear|raidhc|qe    → výsledky do "Sim výsledky" (+ wowaudit u raidu);
+ *                                                        řádek je ✅, až když má raidový, M+ a Top Gear report, u vaultu i HC raid (QE = vše)
  *   ?p=simapi&token=…&action=error&row=N&character=…&note=…    → stav ⚠ + poznámka
  *   ?p=simapi&token=…&action=note&row=N&character=…&note=…     → jen poznámka (stav se nemění)
  * `character` slouží jako kontrola, že se řádky mezitím neposunuly.
@@ -2531,7 +2548,9 @@ function simApiQueue_(sh) {
       note: String(v[SIM_COL.note - 1] || ""),
       report_raid: parseReportLink_(v[SIM_COL.report - 1]) ? String(v[SIM_COL.report - 1]) : "",
       report_mplus: parseReportLink_(v[SIM_COL.reportMplus - 1]) ? String(v[SIM_COL.reportMplus - 1]) : "",
-      report_topgear: String(v[SIM_COL.reportTopgear - 1] || "").trim()
+      report_topgear: String(v[SIM_COL.reportTopgear - 1] || "").trim(),
+      report_raidhc: parseReportLink_(v[SIM_COL.reportRaidhc - 1]) ? String(v[SIM_COL.reportRaidhc - 1]) : "",
+      vault: String(v[SIM_COL.vault - 1] || "").trim()   // neprázdné = postava má Great Vault → runner pustí i HC raid sim
     });
   });
   return out;
@@ -2603,7 +2622,7 @@ function simResultsSheet_() {
 /** Hodnota sloupce "Původ" → kind (prázdná = raid, kvůli starším řádkům). */
 function originKind_(v) {
   v = String(v || "");
-  return v === SIM_KIND_ORIGIN.mplus ? "mplus" : (v === SIM_KIND_ORIGIN.topgear ? "topgear" : "raid");
+  return v === SIM_KIND_ORIGIN.mplus ? "mplus" : (v === SIM_KIND_ORIGIN.topgear ? "topgear" : (v === SIM_KIND_ORIGIN.raidhc ? "raidhc" : "raid"));
 }
 
 /**
@@ -2683,8 +2702,10 @@ function storeSimResults_(character, spec, link, kinds) {
   try {
     kinds = kinds && kinds.length ? kinds : ["raid"];
     var rows = (kinds.indexOf("topgear") >= 0 ? simResultsFromTopgear_(link.id, character)
-                : link.kind === "qe" ? simResultsFromQe_(link.id) : simResultsFromRaidbots_(link.id))
-      .filter(function (r) { return kinds.indexOf(r.kind) >= 0; });
+                : link.kind === "qe" ? simResultsFromQe_(link.id) : simResultsFromRaidbots_(link.id));
+    // HC raid report je stejný raidový Droptimizer (jen obtížnost "Heroic Vault"), parser ho vrátí jako "raid"
+    if (kinds.indexOf("raidhc") >= 0) rows.forEach(function (r) { if (r.kind === "raid") r.kind = "raidhc"; });
+    rows = rows.filter(function (r) { return kinds.indexOf(r.kind) >= 0; });
     var sh = simResultsSheet_();
     var now = new Date();
     var counts = {};
@@ -2857,7 +2878,7 @@ function rebuildSimResults() {
     vals.forEach(function (v, i) {
       var status = String(v[SIM_COL.status - 1]);
       if (status === SIM_STATUS.dropped || status === SIM_STATUS.pending) return;
-      if (!parseReportLink_(v[SIM_COL.report - 1]) && !parseReportLink_(v[SIM_COL.reportMplus - 1]) && !parseReportLink_(v[SIM_COL.reportTopgear - 1])) return;
+      if (!parseReportLink_(v[SIM_COL.report - 1]) && !parseReportLink_(v[SIM_COL.reportMplus - 1]) && !parseReportLink_(v[SIM_COL.reportTopgear - 1]) && !parseReportLink_(v[SIM_COL.reportRaidhc - 1])) return;
       latest[simNameKey_(v[SIM_COL.character - 1])] = { v: v, row: i + 2, status: status };
     });
     Object.keys(latest).forEach(function (k) {
@@ -2868,15 +2889,18 @@ function rebuildSimResults() {
       var mLink = parseReportLink_(v[SIM_COL.reportMplus - 1]);
       var results = [];
       var tLink = parseReportLink_(v[SIM_COL.reportTopgear - 1]);
+      var hLink = parseReportLink_(v[SIM_COL.reportRaidhc - 1]);
       if (e.status.indexOf("✅") === 0) {
         if (raidLink) results.push(storeSimResults_(character, spec, raidLink, raidLink.kind === "qe" ? ["raid", "mplus"] : ["raid"]));
         if (mLink && !(raidLink && mLink.id === raidLink.id)) results.push(storeSimResults_(character, spec, mLink, ["mplus"]));
         if (tLink && tLink.kind === "raidbots") results.push(storeSimResults_(character, spec, tLink, ["topgear"]));
+        if (hLink && hLink.kind === "raidbots") results.push(storeSimResults_(character, spec, hLink, ["raidhc"]));
       } else {
         // opraví i stav řádku
         if (raidLink) results.push(uploadSimReport_(sh, e.row, raidLink.url, "raid"));
         if (mLink && !(raidLink && mLink.id === raidLink.id)) results.push(uploadSimReport_(sh, e.row, mLink.url, "mplus"));
         if (tLink && tLink.kind === "raidbots") results.push(uploadSimReport_(sh, e.row, tLink.url, "topgear"));
+        if (hLink && hLink.kind === "raidbots") results.push(uploadSimReport_(sh, e.row, hLink.url, "raidhc"));
       }
       var bad = results.filter(function (r) { return !r.ok; });
       if (!bad.length) done++; else failed.push(character + " (" + bad.map(function (r) { return r.message; }).join("; ") + ")");

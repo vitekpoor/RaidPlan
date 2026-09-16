@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <!-- ZDROJ stránky Loot simy. build.bat ji kopíruje do kořene repa jako loot.html
      (s cestami web/loot_items.json a web/assets/). Data čte živě z Google Sheets:
-     list "Sim výsledky" (raid + Mythic+ Droptimizer / QE Live, sloupec "Původ" = Raid | M+)
+     list "Sim výsledky" (raid + Mythic+ Droptimizer / QE Live, sloupec "Původ" = Raid | M+ | Top Gear | Raid HC)
      a list "Vault" (Great Vault ze SimC exportu) – oba plní Apps Script, čte se přes gviz CSV.
+     "Raid HC" = raidový Droptimizer s obtížností "Heroic Vault" (Myth 1/6 → Myth 6/6 = všechno max 334): bonus roll
+     na HC (a na mythic bossech, které zabíjíme) dá mythic item max 334, 344 base dropí jen poslední mythic bossové.
+     Tyhle řádky nejdou do tabulek, slouží jen verdiktu "vzít z vaultu vs. nechat si bonus roll".
      Společný vzhled: assets/css/site.css (odvozeno ze šablony TemplateMo 579 Cyborg Gaming). -->
 <html lang="cs">
 <head>
@@ -71,6 +74,7 @@ th.num { text-align: right; }
 .kind { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 18px; vertical-align: middle; }
 .kind.raid { background: var(--raid-soft); color: var(--raid); border: 1px solid var(--raid); }
 .kind.mplus { background: var(--mplus-soft); color: var(--mplus); border: 1px solid var(--mplus); }
+.kind.raidhc { background: var(--raid-soft); color: var(--raid); border: 1px dashed var(--raid); }
 /* katalyzátor: set kus vyrobený z ne-setového itemu jiného bosse (staty zdrojového itemu) */
 .cat { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 11px; line-height: 18px; vertical-align: middle; color: var(--muted); border: 1px dashed var(--muted); white-space: nowrap; }
 .chip .cat { font-size: 10px; line-height: 15px; padding: 0 4px; }
@@ -174,6 +178,8 @@ a.best:hover .open { color: var(--ink-strong); }
 .vault .chips { gap: 4px; }
 .vault .stale { color: var(--dps); font-size: 12.5px; }
 .vault .when { color: var(--muted); font-size: 12px; }
+.vault .basis { color: var(--muted); font-size: 12px; }
+.vault .basis.warn { color: var(--dps); }
 </style>
 </head>
 <body>
@@ -232,7 +238,7 @@ a.best:hover .open { color: var(--ink-strong); }
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: listy „Sim výsledky“ a „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+) a QE Live (healeři) · itemy z Wowheadu.</p>
+  <p>Data: listy „Sim výsledky“ a „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+, u vaultu i HC raid max 334 pro srovnání s bonus rollem) a QE Live (healeři) · itemy z Wowheadu.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
@@ -258,9 +264,9 @@ a.best:hover .open { color: var(--ink-strong); }
   ];
   var ITEMS_URL = "loot_items.json";
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
-  var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear" };
+  var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear", raidhc: "Raid HC" };
   var STALE_MS = 6 * 86400000;             // sim starší než 6 dní se v dlaždici hráče ukáže červeně
-  var LIST_KINDS = { raid: 1, mplus: 1 };   // do tabulek jdou jen raid a M+; Top Gear = souhrnný řádek v kartě hráče
+  var LIST_KINDS = { raid: 1, mplus: 1 };   // do tabulek jdou jen raid a M+; Top Gear = souhrnný řádek v kartě hráče, Raid HC = jen verdikt vaultu
   var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
                   legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
                   one_hand: "1H zbraň", two_hand: "2H zbraň", ranged: "ranged", token: "tier token", relic: "relic" };
@@ -367,7 +373,7 @@ a.best:hover .open { color: var(--ink-strong); }
 
   function showStatus() {
     var latest = null; state.rows.forEach(function (r) { if (r.time && (!latest || r.time > latest)) latest = r.time; });
-    var players = {}, n = { raid: 0, mplus: 0, topgear: 0 }; state.rows.forEach(function (r) { players[r.player] = 1; n[r.kind]++; });
+    var players = {}, n = { raid: 0, mplus: 0, topgear: 0, raidhc: 0 }; state.rows.forEach(function (r) { players[r.player] = 1; n[r.kind] = (n[r.kind] || 0) + 1; });
     var vaults = Object.keys(state.vault).length, nosim = state.roster.length ? rosterWithoutSims().length : 0;
     var status = $("#status");
     status.textContent = Object.keys(players).length + " postav · " + n.raid + " raid + " + n.mplus + " M+ řádků" + (vaults ? " · " + vaults + " vaultů" : "") +
@@ -391,9 +397,10 @@ a.best:hover .open { color: var(--ink-strong); }
         var bossId = num(r[idx["Boss ID"]]);
         var spec = String(r[idx["Spec"]] || "").toLowerCase();
         var src = String(r[idx["Zdroj"]] || "");
-        // "Původ" = Raid | M+ (starší řádky bez sloupce = raid); u QE řádků bez bosse rozhodne loot_items.json
+        // "Původ" = Raid | M+ | Top Gear | Raid HC (starší řádky bez sloupce = raid); u QE řádků bez bosse rozhodne loot_items.json
         var origin = idx["Původ"] != null ? String(r[idx["Původ"]] || "").trim() : "";
-        var kind = origin === "M+" ? "mplus" : origin === "Top Gear" ? "topgear" : (origin ? "raid" : (lib.kind === "mplus" ? "mplus" : "raid"));
+        var kind = origin === "M+" ? "mplus" : origin === "Top Gear" ? "topgear" : origin === "Raid HC" ? "raidhc"
+                 : (origin ? "raid" : (lib.kind === "mplus" ? "mplus" : "raid"));
         // M+ řádky ze staršího parseru mají Boss ID -1 ("Mythic+ Dungeons") – dungeon vezmeme z loot_items.json
         var bossName = r[idx["Boss"]] || "";
         if (kind === "mplus" && !(bossId > 0) && lib.bosses && lib.bosses.length) { bossId = null; bossName = ""; }
@@ -549,15 +556,29 @@ a.best:hover .open { color: var(--ink-strong); }
 
   // ---- Great Vault: vzít item z vaultu, nebo si nechat bonus roll na raid? ----
   function vaultHtml(playerRows, vault) {
-    // gain každého itemu podle raidového / M+ Droptimizeru (stejné ilvl Myth 6/6); u duplicit lepší hodnota
-    // klíč = padající item (u katalyzátoru zdrojový item – vault nabízí ten, ne hotový set kus)
+    // Základ pro srovnání s bonus rollem = "Raid HC" Droptimizer (obtížnost "Heroic Vault" Myth 1/6 → Myth 6/6,
+    // všechno max 334): bonus roll na HC (a na mythic bossech, které zabíjíme) dá mythic item max 334, 344 base
+    // dropí jen poslední mythic bossové (Coiled Altar, Ula'tek), kde bonus roll ještě dlouho nepůjde. Bez HC
+    // reportu (starší sim, healer s QE Live – ten má raid na 334 rovnou) se bere plný mythic Droptimizer.
+    var hcRows = playerRows.filter(function (r) { return r.kind === "raidhc"; });
+    var useHc = hcRows.length > 0;
+    var raidRows = (useHc ? hcRows : playerRows.filter(function (r) { return r.kind === "raid"; })).slice().sort(byMetricDesc);
+    // gain každého itemu z vaultu: raidové ze stejného základu jako bonus roll (HC 334), M+ z M+ Droptimizeru;
+    // u duplicit lepší hodnota, klíč = padající item (u katalyzátoru zdrojový item – vault nabízí ten, ne hotový set kus)
     var byId = {};
-    playerRows.forEach(function (r) { var c = byId[r.dropId]; if (!c || (metric(r) || 0) > (metric(c) || 0)) byId[r.dropId] = r; });
+    playerRows.forEach(function (r) {
+      if (!LIST_KINDS[r.kind] && r.kind !== "raidhc") return;                 // Top Gear apod. sem nepatří
+      if (useHc ? r.kind === "raid" : r.kind === "raidhc") return;             // raid vs. Raid HC – jen jeden základ
+      var c = byId[r.dropId]; if (!c || (metric(r) || 0) > (metric(c) || 0)) byId[r.dropId] = r;
+    });
     var found = [], ignored = 0;
     vault.items.forEach(function (v) { var r = byId[v.itemId]; if (r) found.push({ v: v, r: r }); else ignored++; });
     found.sort(function (a, b) { return byMetricDesc(a.r, b.r); });
-    var raidRows = playerRows.filter(function (r) { return r.kind === "raid"; }).sort(byMetricDesc);
     var bestRaid = raidRows[0] && (metric(raidRows[0]) || 0) > 0 ? raidRows[0] : null;
+    var isQe = playerRows.some(function (r) { return /QE/i.test(r.src || ""); });
+    var basis = useHc ? '<span class="basis" title="Raidový Droptimizer s obtížností Heroic Vault (Myth 1/6) a upgradem na Myth 6/6 – všechno max 334, jako bonus roll na HC nebo na mythic bossech, které zabíjíme.">srovnání: HC raid, max 334</span>'
+      : isQe ? '<span class="basis" title="QE Live počítá raidové itemy na 334 (Myth 6/6) – stejný základ jako bonus roll na HC.">srovnání: raid na 334</span>'
+      : '<span class="basis warn" title="Chybí HC raid sim (Heroic Vault → Myth 6/6, max 334). Plný mythic Droptimizer nadhodnocuje poslední bossy (344). Pošli nový SimC string s otevřeným vaultem.">⚠ srovnání s Mythic raidem (344) – HC sim chybí</span>';
     var bestVault = found[0] && (metric(found[0].r) || 0) > 0 ? found[0] : null;
     var stale = vault.time && vault.time < lastReset();
     var mood = "none", verdict, detail = "";
@@ -568,7 +589,9 @@ a.best:hover .open { color: var(--ink-strong); }
     } else if (bestVault && (!bestRaid || (metric(bestVault.r) || 0) >= (metric(bestRaid) || 0))) {
       mood = "take";
       verdict = "✅ Vzít z vaultu: " + itemLabel(bestVault.r) + " (" + fmtVal(bestVault.r) + ")";
-      detail = bestRaid ? "nejlepší raid item " + itemLabel(bestRaid) + " z " + (bestRaid.boss || "?") + " dá jen " + fmtVal(bestRaid) : "z raidu už nic lepšího nepadá";
+      detail = !bestRaid ? "z raidu už nic lepšího nepadá"
+        : bestRaid.dropId === bestVault.r.dropId ? "je to zároveň nejlepší item, co z raidu padá (bonus roll by ho jen mohl nedat)"
+        : "nejlepší raid item " + itemLabel(bestRaid) + " z " + (bestRaid.boss || "?") + " dá jen " + fmtVal(bestRaid);
     } else if (bestRaid) {
       mood = "roll";
       verdict = "🎲 Bonus roll na raid je lepší: " + itemLabel(bestRaid) + " z " + (bestRaid.boss || "?") + " (" + fmtVal(bestRaid) + ")";
@@ -584,6 +607,7 @@ a.best:hover .open { color: var(--ink-strong); }
       (detail ? '<span class="vs">· ' + esc(detail) + "</span>" : "") +
       '<span class="chips">' + chips + "</span>" +
       (vault.time ? '<span class="when">vault z ' + fmtDate(vault.time) + "</span>" : "") +
+      (found.length ? basis : "") +
       (stale ? '<span class="stale">⚠ z minulého týdne – pošli nový SimC string</span>' : "") + "</div>";
   }
 
