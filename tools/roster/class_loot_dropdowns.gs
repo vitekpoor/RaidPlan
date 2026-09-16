@@ -1846,6 +1846,7 @@ function onOpen() {
       .addItem("Vytvořit list Cresty", "buildCrestSheet")
       .addItem("Doplnit cresty ze Sim fronty", "backfillCrests")
       .addItem("Načíst výsledky ze všech hotových reportů", "rebuildSimResults")
+      .addItem("Znovu nasimovat označené řádky fronty", "requeueSelectedSims")
       .addSeparator()
       .addItem("Spustit simy online (GitHub)", "runSimsOnline")
       .addItem("Nastavit GitHub token…", "setGithubToken")
@@ -2212,6 +2213,47 @@ function onSimEdit(e) {
   } catch (err) {
     try { e.range.getSheet().getRange(e.range.getRow(), SIM_COL.note).setValue("⚠ " + err.message); } catch (e2) { /* ignore */ }
   }
+}
+
+/**
+ * Menu Simy → "Znovu nasimovat označené řádky fronty": označ v listu "Sim fronta" řádky (klidně víc
+ * bloků přes Ctrl), funkce jim smaže reporty (raid, M+, Top Gear, HC raid), dá stav ⏳ a jedním
+ * spuštěním pošle runner online. Hodí se po změně kódu (nový druh simu, opravený parser), aby se
+ * hotové postavy přepočítaly aktuální logikou. SimC string a Vault zůstávají, takže se pustí i HC raid.
+ */
+function requeueSelectedSims() {
+  var ui = SpreadsheetApp.getUi();
+  var sh = SpreadsheetApp.getActiveSheet();
+  if (sh.getName() !== SIM_SHEET_NAME) { ui.alert("Označ řádky v listu „" + SIM_SHEET_NAME + "“ a spusť to znovu."); return; }
+  var rl = sh.getActiveRangeList();
+  var ranges = rl ? rl.getRanges() : [sh.getActiveRange()];
+  var rowSet = {};
+  ranges.forEach(function (rg) {
+    for (var r = rg.getRow(); r < rg.getRow() + rg.getNumRows(); r++) if (r >= 2) rowSet[r] = 1;
+  });
+  var rows = Object.keys(rowSet).map(Number).sort(function (a, b) { return a - b; });
+  if (rows.length > 60) { ui.alert("Označeno je " + rows.length + " řádků – to je moc najednou (max 60)."); return; }
+  var items = rows.map(function (r) {
+    var v = sh.getRange(r, 1, 1, SIM_HEADER.length).getValues()[0];
+    return { row: r, character: String(v[SIM_COL.character - 1] || ""), spec: String(v[SIM_COL.spec - 1] || ""),
+             status: String(v[SIM_COL.status - 1] || ""), simc: String(v[SIM_COL.simc - 1] || ""), vault: String(v[SIM_COL.vault - 1] || "").trim() };
+  }).filter(function (it) { return it.character && it.simc; });
+  if (!items.length) { ui.alert("V označení není žádný řádek s postavou a SimC stringem."); return; }
+  var resp = ui.alert("Znovu nasimovat " + items.length + " řádků?",
+    items.map(function (it) { return "• " + it.character + " (" + it.spec + ", řádek " + it.row + (it.vault ? ", s vaultem" : "") + ")"; }).join("\n") +
+    "\n\nSmažou se jejich reporty (raid, M+, Top Gear, HC raid), stav bude ⏳ a simy se spustí online najednou.",
+    ui.ButtonSet.OK_CANCEL);
+  if (resp !== ui.Button.OK) return;
+  var when = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "d.M. H:mm");
+  items.forEach(function (it) {
+    [SIM_COL.report, SIM_COL.reportMplus, SIM_COL.reportTopgear, SIM_COL.reportRaidhc].forEach(function (c) { sh.getRange(it.row, c).clearContent(); });
+    setSimStatus_(sh, it.row, SIM_STATUS.pending, "znovu do fronty " + when);
+  });
+  var r;
+  try { r = runSimsOnline_("requeue:" + items.length); }
+  catch (err) { r = { ok: false, message: String(err && err.message || err) }; }
+  ui.alert(items.length + " řádků je zpět ve frontě.\n" + (r.ok ? r.message
+    : "Spuštění online selhalo: " + r.message + "\nSpusť simy ručně (menu Simy → Spustit simy online, nebo sim_runner.py)."));
 }
 
 /* ---------- dialog pro raid leadera (menu Simy → Zpracovat frontu) ---------- */
