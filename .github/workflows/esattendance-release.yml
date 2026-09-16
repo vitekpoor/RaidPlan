@@ -1,0 +1,44 @@
+name: ES Attendance release
+
+# Push a tag like ESAttendance-v1.0.0 and this packages addon/ESAttendance into
+# ESAttendance-v1.0.0.zip (folder ESAttendance/ at the zip root, ready for Interface/AddOns)
+# and publishes a GitHub Release with it. The version in ESAttendance.toc is checked against the tag.
+on:
+  push:
+    tags: ["ESAttendance-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check toc version matches the tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#ESAttendance-v}"
+          TOC_VERSION="$(sed -n 's/^## Version: *//p' addon/ESAttendance/ESAttendance.toc | tr -d '\r')"
+          echo "tag=$TAG_VERSION toc=$TOC_VERSION"
+          if [ "$TAG_VERSION" != "$TOC_VERSION" ]; then
+            echo "::error::ESAttendance.toc says $TOC_VERSION but the tag is $TAG_VERSION"; exit 1
+          fi
+
+      - name: Build zip
+        run: |
+          mkdir -p dist
+          cd addon
+          zip -r "../dist/${GITHUB_REF_NAME}.zip" ESAttendance -i 'ESAttendance/*.toc' 'ESAttendance/*.lua' 'ESAttendance/*.tga' 'ESAttendance/*.blp' 'ESAttendance/*.xml'
+          unzip -l "../dist/${GITHUB_REF_NAME}.zip"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ES Attendance ${{ github.ref_name }}
+          files: dist/${{ github.ref_name }}.zip
+          body: |
+            WoW addon **ES Attendance** – roster vs. raid group, invites, attendance record.
+
+            Install: unzip so that `Interface/AddOns/ESAttendance/ESAttendance.toc` exists, then `/reload`.
+            Docs: `addon/README.md` in this repo.
