@@ -239,6 +239,7 @@ local function createMain()
   main.lastRecord:SetTextColor(0.55, 0.6, 0.57)
 
   main:SetScript("OnShow", function() ns.RequestGuildRoster(); ns.ReadGuildRoster(); ns.ScanGroup(); refreshList() end)
+  main:Hide()   -- CreateFrame returns a visible frame; Toggle() decides when to show it
 end
 
 function ns.Toggle()
@@ -276,6 +277,7 @@ local function createTextFrame()
   textFrame:SetScript("OnDragStart", textFrame.StartMoving)
   textFrame:SetScript("OnDragStop", textFrame.StopMovingOrSizing)
   tinsert(UISpecialFrames, "ESAttendanceTextFrame")
+  textFrame:Hide()
 
   textFrame.title = textFrame:CreateFontString(nil, "OVERLAY", "ESAttendanceFontLarge")
   textFrame.title:SetPoint("TOPLEFT", 14, -12)
