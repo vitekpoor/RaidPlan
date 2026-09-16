@@ -1846,6 +1846,7 @@ function onOpen() {
       .addItem("Vytvořit list Cresty", "buildCrestSheet")
       .addItem("Vytvořit list Discord (místnosti hráčů)", "buildDiscordSheet")
       .addItem("Nastavit Discord bot token / společný webhook…", "setDiscordSecrets")
+      .addItem("Načíst místnosti hráčů z Discordu (bot)", "syncDiscordRooms")
       .addItem("Test Discord notifikace pro postavu…", "testDiscordNotify")
       .addItem("Doplnit cresty ze Sim fronty", "backfillCrests")
       .addItem("Načíst výsledky ze všech hotových reportů", "rebuildSimResults")
@@ -3127,6 +3128,83 @@ function setDiscordSecrets() {
   var wh = w.getResponseText().trim();
   if (wh === "-") props.deleteProperty(DISCORD_DEFAULT_WEBHOOK_PROP); else if (wh) props.setProperty(DISCORD_DEFAULT_WEBHOOK_PROP, wh);
   ui.alert("Uloženo. Bot token: " + (props.getProperty(DISCORD_BOT_TOKEN_PROP) ? "nastaven" : "–") + ", společný webhook: " + (props.getProperty(DISCORD_DEFAULT_WEBHOOK_PROP) ? "nastaven" : "–"));
+}
+
+var DISCORD_GUILD_PROP = "DISCORD_GUILD_ID";
+var DISCORD_CATEGORY_PROP = "DISCORD_PLAYERS_CATEGORY";   // název kategorie s místnostmi hráčů (výchozí "Players")
+var DISCORD_VIEW_CHANNEL = 1024;                           // permission bit VIEW_CHANNEL (1 << 10)
+
+function discordGet_(token, path) {
+  var resp = UrlFetchApp.fetch("https://discord.com/api/v10" + path, { headers: { Authorization: "Bot " + token }, muteHttpExceptions: true });
+  var code = resp.getResponseCode();
+  if (code < 200 || code >= 300) throw new Error("Discord API HTTP " + code + " " + resp.getContentText().slice(0, 160));
+  return JSON.parse(resp.getContentText());
+}
+
+/**
+ * Menu: bot vypíše kanály serveru, vezme textové kanály v kategorii "Players" (místnosti hráčů) a do listu
+ * "Discord" doplní Kanál URL + Discord user ID hráče (z oprávnění místnosti: jediný člen s View Channel,
+ * který není bot). Jméno místnosti se páruje se jménem hráče z Rosteru (bez diakritiky, "akka" ~ "Akka",
+ * "mistnost-akka" ~ "Akka"). Existující ručně vyplněné hodnoty (webhook) zůstávají.
+ */
+function syncDiscordRooms() {
+  var ui = SpreadsheetApp.getUi(), props = PropertiesService.getScriptProperties();
+  var token = props.getProperty(DISCORD_BOT_TOKEN_PROP);
+  if (!token) { ui.alert("Nejdřív nastav bot token (menu Simy → Nastavit Discord bot token…)."); return; }
+  var guild = props.getProperty(DISCORD_GUILD_PROP);
+  if (!guild) {
+    var g = ui.prompt("ID Discord serveru", "Discord → pravý klik na název serveru → Copy Server ID (zapnutý Developer Mode).", ui.ButtonSet.OK_CANCEL);
+    if (g.getSelectedButton() !== ui.Button.OK) return;
+    guild = g.getResponseText().replace(/\D/g, "");
+    if (!guild) return;
+    props.setProperty(DISCORD_GUILD_PROP, guild);
+  }
+  var catName = props.getProperty(DISCORD_CATEGORY_PROP) || "Players";
+  var channels;
+  try { channels = discordGet_(token, "/guilds/" + guild + "/channels"); }
+  catch (err) { ui.alert("Nepodařilo se načíst kanály: " + err.message + "\nJe bot pozvaný na server? Je správné ID serveru (Script Property " + DISCORD_GUILD_PROP + ")?"); return; }
+  var me = null;
+  try { me = discordGet_(token, "/users/@me"); } catch (err) { /* jen kvůli vyloučení bota z oprávnění */ }
+  var cats = channels.filter(function (c) { return c.type === 4 && simNameKey_(c.name) === simNameKey_(catName); });
+  if (!cats.length) {
+    ui.alert("Kategorie „" + catName + "“ na serveru není. Kategorie: " + channels.filter(function (c) { return c.type === 4; }).map(function (c) { return c.name; }).join(", ") +
+      "\n(název lze změnit ve Script Property " + DISCORD_CATEGORY_PROP + ")");
+    return;
+  }
+  var catIds = {}; cats.forEach(function (c) { catIds[c.id] = 1; });
+  var rooms = channels.filter(function (c) { return (c.type === 0 || c.type === 5) && catIds[c.parent_id]; });
+  var roster = getRoster_() || [];
+  var sh = discordSheet_();
+  var last = sh.getLastRow();
+  var rowsByPlayer = {};
+  if (last >= 2) sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (v, i) { if (String(v[0]).trim()) rowsByPlayer[simNameKey_(v[0])] = i + 2; });
+  var matched = [], unmatched = [];
+  rooms.forEach(function (ch) {
+    var tokens = String(ch.name || "").toLowerCase().split(/[^a-z0-9á-žÁ-Ž]+/).filter(Boolean).map(simNameKey_);
+    var chKey = simNameKey_(ch.name);
+    var player = null;
+    roster.forEach(function (r) {
+      if (player) return;
+      var pk = simNameKey_(r.player);
+      if (pk && (chKey === pk || tokens.indexOf(pk) >= 0)) player = r.player;
+    });
+    if (!player) { unmatched.push("#" + ch.name); return; }
+    // hráč = jediný člen (type 1) s povoleným View Channel, který není bot
+    var members = (ch.permission_overwrites || []).filter(function (o) {
+      return Number(o.type) === 1 && (!me || o.id !== me.id) && (Number(o.allow) & DISCORD_VIEW_CHANNEL) !== 0;
+    });
+    var userId = members.length === 1 ? members[0].id : "";
+    var url = "https://discord.com/channels/" + guild + "/" + ch.id;
+    var row = rowsByPlayer[simNameKey_(player)];
+    if (!row) { row = sh.getLastRow() + 1; sh.getRange(row, 1).setValue(player); rowsByPlayer[simNameKey_(player)] = row; }
+    sh.getRange(row, 2).setValue(url);
+    if (userId && !String(sh.getRange(row, 4).getValue() || "").trim()) sh.getRange(row, 4).setValue(userId);
+    matched.push(player + " ← #" + ch.name + (userId ? "" : " (user ID nenalezeno)"));
+  });
+  var noRoom = roster.filter(function (r) { return !matched.some(function (m) { return m.indexOf(r.player + " ←") === 0; }); }).map(function (r) { return r.player; });
+  ui.alert("Načteno " + matched.length + " místností z kategorie „" + catName + "“.\n\n" + matched.join("\n") +
+    (unmatched.length ? "\n\nNespárované místnosti (jméno neodpovídá hráči v Rosteru): " + unmatched.join(", ") : "") +
+    (noRoom.length ? "\n\nHráči bez místnosti: " + noRoom.join(", ") : ""));
 }
 
 /** Pošle testovací zprávu pro zadanou postavu (stejná cesta jako po dokončení simů). */
