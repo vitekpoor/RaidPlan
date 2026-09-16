@@ -3145,7 +3145,9 @@ function setDiscordSecrets() {
 }
 
 var DISCORD_GUILD_PROP = "DISCORD_GUILD_ID";
-var DISCORD_CATEGORY_PROP = "DISCORD_PLAYERS_CATEGORY";   // název kategorie s místnostmi hráčů (výchozí "Players")
+var DISCORD_CATEGORY_PROP = "DISCORD_PLAYERS_CATEGORY";   // název kategorie s místnostmi hráčů (více názvů oddělených čárkou)
+var DISCORD_CATEGORY_DEFAULT = "TVOJE ROMKA, Players";     // porovnává se bez emoji/diakritiky/mezer ("🫜 TVOJE ROMKA ⚧" = "tvojeromka")
+function discordCatKey_(name) { return simNameKey_(name).replace(/[^a-z0-9]+/g, ""); }
 var DISCORD_VIEW_CHANNEL = 1024;                           // permission bit VIEW_CHANNEL (1 << 10)
 
 function discordGet_(token, path) {
@@ -3163,8 +3165,13 @@ function discordGet_(token, path) {
  * Ručně vyplněné hodnoty (webhook, existující user ID) zůstávají. Vrací { category, matched, unmatched, noRoom }.
  */
 function applyDiscordRooms_(guild, channels, meId) {
-  var catName = PropertiesService.getScriptProperties().getProperty(DISCORD_CATEGORY_PROP) || "Players";
-  var cats = channels.filter(function (c) { return c && c.type === 4 && simNameKey_(c.name) === simNameKey_(catName); });
+  var catName = PropertiesService.getScriptProperties().getProperty(DISCORD_CATEGORY_PROP) || DISCORD_CATEGORY_DEFAULT;
+  var wanted = catName.split(",").map(discordCatKey_).filter(Boolean);
+  var cats = channels.filter(function (c) {
+    if (!c || c.type !== 4) return false;
+    var k = discordCatKey_(c.name);
+    return wanted.some(function (w) { return k === w || (w.length >= 4 && k.indexOf(w) >= 0); });
+  });
   if (!cats.length) {
     throw new Error("Kategorie „" + catName + "“ na serveru není. Kategorie: " +
       channels.filter(function (c) { return c && c.type === 4; }).map(function (c) { return c.name; }).join(", ") +
@@ -3201,7 +3208,7 @@ function applyDiscordRooms_(guild, channels, meId) {
     matched.push(player + " ← #" + ch.name + (userId ? "" : " (user ID nenalezeno)"));
   });
   var noRoom = roster.filter(function (r) { return !matchedPlayers[simNameKey_(r.player)]; }).map(function (r) { return r.player; });
-  return { category: catName, matched: matched, unmatched: unmatched, noRoom: noRoom };
+  return { category: cats.map(function (c) { return c.name; }).join(", "), matched: matched, unmatched: unmatched, noRoom: noRoom };
 }
 
 function discordRoomsSummary_(sm) {
