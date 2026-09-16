@@ -214,6 +214,8 @@ a.best:hover .open { color: var(--ink-strong); }
 .rolls tr.worn .item a { color: var(--muted); }
 .rolls .worn-tag { color: var(--muted); font-size: 11.5px; }
 .rolls .val.down { color: var(--muted); }
+.tmp { color: var(--muted); font-size: 11px; border: 1px dashed var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; white-space: nowrap; }
+.rolls tr.tmprow .val { opacity: .6; }
 </style>
 </head>
 <body>
@@ -301,6 +303,11 @@ a.best:hover .open { color: var(--ink-strong); }
   var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear", raidhc: "Raid HC" };
   var STALE_MS = 6 * 86400000;             // sim starší než 6 dní se v dlaždici hráče ukáže červeně
   var NO_BONUS_ROLL = {};            // bossové, na které bonus roll použít nejde (encounter id → 1); zatím žádný, Ula'tek jde
+  // Dlouhodobá hodnota: item, který v svém slotu NENÍ mezi nejlepšími (prsteny/trinkety 2 sloty, jinak 1) napříč
+  // raidovými dropy + vaultem, je jen dočasný – nakonec ho nahradí lepší kus z jiného bosse. Do průměru rollu
+  // a do ceny itemu z vaultu se počítá jen za TEMP_WEIGHT (okamžitý upgrade něco stojí, ale ne plnou cenu).
+  var TEMP_WEIGHT = 0.3;
+  var SLOT_COUNT = { finger: 2, trinket: 2 };
   var ROLL_OTHER_MIN = 0.25;         // % – součet OSTATNÍCH upgradů bosse, od kterého se vyplatí rollovat i o item, co je zároveň ve vaultu
   var CURIO_BOSS = 2895;             // Ula'tek: set kusy z něj jsou přes Slumbering Coil Curio (vyměnitelný za tier kus) – Curio z bonus rollu NEPADÁ,
                                      // takže do jeho bonus roll tabulky přímé tier kusy nepatří (katalyzátor z jeho normálního itemu ano – padá zdrojový item)
@@ -609,6 +616,36 @@ a.best:hover .open { color: var(--ink-strong); }
    * info (noRoll) a doporučit se nedají. Tier kusy z Ula'teka (CURIO_BOSS) jdou přes Curio, které z bonus rollu nepadá →
    * přímé tier řádky se u něj vynechají. Vrací bossy seřazené podle zisku, noRoll nakonec.
    */
+  function slotGroup(slot) { return /^(main_hand|two_hand|one_hand|ranged)$/.test(slot) ? "weapon" : (slot || "?"); }
+  /**
+   * Označí řádky poolu (raidové dropy + itemy z vaultu) jako trvalé / dočasné: v každém slotu jsou trvalé jen
+   * nejlepší SLOT_COUNT různé itemy (stejný item z více bossů = jeden). Dočasný item dostane betterBy = itemy,
+   * které ho nakonec nahradí. Zhoršení se neřeší (v průměru je stejně 0).
+   */
+  function markLasting(pool) {
+    var groups = {};
+    pool.forEach(function (r) { (groups[slotGroup(r.slot)] = groups[slotGroup(r.slot)] || []).push(r); });
+    Object.keys(groups).forEach(function (g) {
+      var k = SLOT_COUNT[g] || 1, bestById = {};
+      groups[g].forEach(function (r) { var c = bestById[r.itemId]; if (!c || (r.pct || 0) > (c.pct || 0)) bestById[r.itemId] = r; });
+      var top = Object.keys(bestById).map(function (id) { return bestById[id]; })
+        .filter(function (r) { return (r.pct || 0) > 0; }).sort(function (a, b) { return (b.pct || 0) - (a.pct || 0); }).slice(0, k);
+      var topIds = {}; top.forEach(function (r) { topIds[r.itemId] = 1; });
+      groups[g].forEach(function (r) {
+        r.lasting = !!topIds[r.itemId];
+        r.betterBy = r.lasting ? [] : top.filter(function (t) { return (t.pct || 0) > (r.pct || 0); });
+      });
+    });
+  }
+  /** Dlouhodobá hodnota itemu v aktuální jednotce: zhoršení 0, dočasný item jen za TEMP_WEIGHT. */
+  function ltv(r) { var v = metric(r) || 0; return v <= 0 ? 0 : (r.lasting === false ? v * TEMP_WEIGHT : v); }
+  function ltvPct(r) { var v = r.pct || 0; return v <= 0 ? 0 : (r.lasting === false ? v * TEMP_WEIGHT : v); }
+  function byLtvDesc(a, b) { return ltv(b) - ltv(a) || byMetricDesc(a, b); }
+  function tmpHtml(r) {
+    if (r.lasting !== false || (metric(r) || 0) <= 0) return "";
+    var by = (r.betterBy || []).map(function (t) { return t.item + (t.boss ? " (" + t.boss + ")" : ""); }).join(", ");
+    return '<span class="tmp" title="Dočasný upgrade: v tomhle slotu ho nakonec nahradí ' + esc(by || "lepší item") + ' – počítá se jen za ' + Math.round(TEMP_WEIGHT * 100) + ' %">dočasný' + (by ? " → " + esc((r.betterBy[0] || {}).item || "") : "") + "</span>";
+  }
   function rollBosses(rollRows) {
     var byBoss = {};
     rollRows.forEach(function (r) {
@@ -630,31 +667,33 @@ a.best:hover .open { color: var(--ink-strong); }
     });
     return Object.keys(byBoss).map(function (k) {
       var b = byBoss[k];
-      b.list = Object.keys(b.items).map(function (id) { return b.items[id]; }).sort(byMetricDesc);
-      var gains = b.list.map(function (r) { return Math.max(0, metric(r) || 0); });
+      b.list = Object.keys(b.items).map(function (id) { return b.items[id]; }).sort(byLtvDesc);
+      var gains = b.list.map(ltv);   // dlouhodobá hodnota: dočasné itemy jen za TEMP_WEIGHT
       b.n = b.list.length;
-      b.up = gains.filter(function (g) { return g > 0; }).length;
+      b.up = b.list.filter(function (r) { return (metric(r) || 0) > 0; }).length;
+      b.lastingUp = b.list.filter(function (r) { return (metric(r) || 0) > 0 && r.lasting !== false; }).length;
       b.ev = b.n ? gains.reduce(function (a, c) { return a + c; }, 0) / b.n : 0;
-      b.evPct = b.n ? b.list.reduce(function (a, r) { return a + Math.max(0, r.pct || 0); }, 0) / b.n : 0;
-      b.best = b.list[0] && (metric(b.list[0]) || 0) > 0 ? b.list[0] : null;
+      b.evPct = b.n ? b.list.reduce(function (a, r) { return a + ltvPct(r); }, 0) / b.n : 0;
+      b.best = b.list[0] && ltv(b.list[0]) > 0 ? b.list[0] : null;
       b.noRoll = b.id != null && !!NO_BONUS_ROLL[String(b.id)];
       return b;
     }).filter(function (b) { return b.n; }).sort(function (a, b) { return (a.noRoll - b.noRoll) || (b.ev - a.ev) || (b.up - a.up); });
   }
   function rollsHtml(bosses, recBoss, mood) {
     if (!bosses.length) return "";
-    var html = '<div class="rolls ' + mood + '"><div class="rhead">Bonus roll podle bosse<span class="hint" title="Bonus roll dá náhodný item z lootu bosse pro tvůj spec. Ø = průměrný zisk jednoho rollu (zhoršení a itemy, které už máš, = 0). Co padne, z poolu bosse zmizí.">Ø = průměr jednoho rollu · rozklikni bosse pro všechny itemy</span></div>';
+    var html = '<div class="rolls ' + mood + '"><div class="rhead">Bonus roll podle bosse<span class="hint" title="Bonus roll dá náhodný item z lootu bosse pro tvůj spec. Ø = průměrný zisk jednoho rollu (zhoršení a itemy, které už máš, = 0). Co padne, z poolu bosse zmizí.">Ø = průměr jednoho rollu, dočasné itemy (nahradí je lepší kus do stejného slotu) jen za ' + Math.round(TEMP_WEIGHT * 100) + ' % · rozklikni bosse</span></div>';
     bosses.forEach(function (b) {
       var rec = recBoss && b === recBoss;
       html += "<details" + (rec ? " open" : "") + (b.noRoll ? ' class="noroll"' : "") + "><summary><b>" + esc(b.name) + "</b>" +
-        '<span class="ev ' + clsPct(b.evPct) + '" title="Očekávaný zisk: průměr přes všechny itemy bosse (zhoršení a itemy, které už máš, = 0)">Ø ' + fmtNum(b.ev) + "</span>" +
-        '<span class="odds">' + b.up + "/" + b.n + " upgrade" + (b.best ? " · nejlepší " + esc(itemLabel(b.best)) + " " + fmtVal(b.best) : "") + "</span>" +
+        '<span class="ev ' + clsPct(b.evPct) + '" title="Očekávaný dlouhodobý zisk: průměr přes všechny itemy bosse (zhoršení a itemy, které už máš, = 0; dočasné itemy jen za ' + Math.round(TEMP_WEIGHT * 100) + ' %)">Ø ' + fmtNum(b.ev) + "</span>" +
+        '<span class="odds">' + b.up + "/" + b.n + " upgrade" + (b.up !== b.lastingUp ? " (" + b.lastingUp + " trval" + (b.lastingUp === 1 ? "ý" : b.lastingUp >= 2 && b.lastingUp <= 4 ? "é" : "ých") + ")" : "") +
+          (b.best ? " · nejlepší " + esc(itemLabel(b.best)) + " " + fmtVal(b.best) : "") + "</span>" +
         (rec ? '<span class="rec">doporučeno</span>' : "") +
         (b.noRoll ? '<span class="noroll-tag" title="Na posledního bosse se bonus roll použít nedá – jen pro srovnání">bonus roll nejde</span>' : "") + "</summary>";
       html += '<div class="tablewrap"><table><tbody>';
       b.list.forEach(function (r) {
-        var v = metric(r) || 0;
-        html += "<tr" + (r.worn ? ' class="worn"' : "") + "><td>" + itemHtml(r) + "</td>" +
+        var v = metric(r) || 0, tmp = tmpHtml(r);
+        html += "<tr" + (r.worn ? ' class="worn"' : tmp ? ' class="tmprow"' : "") + "><td>" + itemHtml(r) + tmp + "</td>" +
           '<td class="num">' + (r.worn ? '<span class="worn-tag" title="Raidbots item nesimoval – tenhle (nebo lepší) už máš">máš / lepší nasazený</span>'
                                 : '<span class="val ' + (v > 0 ? cls(r) : "down") + '">' + fmtVal(r) + "</span>") + "</td></tr>";
       });
@@ -680,8 +719,10 @@ a.best:hover .open { color: var(--ink-strong); }
     });
     var found = [], ignored = 0;
     vault.items.forEach(function (v) { var r = byId[v.itemId]; if (r) found.push({ v: v, r: r }); else ignored++; });
-    found.sort(function (a, b) { return byMetricDesc(a.r, b.r); });
-    // bonus roll = náhodný item z bosse → boss se hodnotí očekávaným ziskem, ne nejlepším itemem
+    // trvalé vs. dočasné itemy: pořadí ve slotu napříč raidovými dropy a vaultem (M+ item z vaultu soutěží taky)
+    markLasting(raidRows.concat(found.map(function (f) { return f.r; })));
+    found.sort(function (a, b) { return byLtvDesc(a.r, b.r); });
+    // bonus roll = náhodný item z bosse → boss se hodnotí očekávaným dlouhodobým ziskem, ne nejlepším itemem
     var bosses = rollBosses(raidRows);
     var rollable = bosses.filter(function (b) { return !b.noRoll; });
     var bestBoss = rollable[0] && rollable[0].ev > 0 ? rollable[0] : null;
@@ -690,6 +731,11 @@ a.best:hover .open { color: var(--ink-strong); }
       : isQe ? '<span class="basis" title="QE Live počítá raidové itemy na 334 (Myth 6/6) – stejný základ jako bonus roll na HC.">srovnání: raid na 334</span>'
       : '<span class="basis warn" title="Chybí HC raid sim (Heroic Vault → Myth 6/6, max 334). Plný mythic Droptimizer nadhodnocuje poslední bossy (344). Pošli nový SimC string s otevřeným vaultem.">⚠ srovnání s Mythic raidem (344) – HC sim chybí</span>';
     var bestVault = found[0] && (metric(found[0].r) || 0) > 0 ? found[0] : null;
+    var vaultLtv = bestVault ? ltv(bestVault.r) : 0;   // dlouhodobá cena itemu z vaultu (dočasný jen za TEMP_WEIGHT)
+    var tmpNote = bestVault && bestVault.r.lasting === false
+      ? " <b>" + esc(itemLabel(bestVault.r)) + "</b> je jen dočasný – slot ti nakonec obsadí " +
+        (bestVault.r.betterBy || []).slice(0, 2).map(function (t) { return "<b>" + esc(t.item) + "</b>" + (t.boss ? " (" + esc(t.boss) + ")" : ""); }).join(" a ") + "."
+      : "";
     var stale = vault.time && vault.time < lastReset();
     // Pravidlo z raidu: co padne z bonus rollu, z poolu bosse ZMIZÍ (příští roll má kratší pool a vyšší šanci na zbylé
     // itemy); item vzatý z vaultu v poolu zůstává. Když tedy item z vaultu padá i z bosse, který má KROMĚ něj další
@@ -698,7 +744,7 @@ a.best:hover .open { color: var(--ink-strong); }
     var poolBoss = bestVault ? rollable.filter(function (b) { return b.items[bestVault.r.dropId]; })
       .sort(function (a, b) { return b.ev - a.ev; })[0] || null : null;
     var poolOthers = poolBoss ? poolBoss.list.filter(function (r) { return r.dropId !== bestVault.r.dropId && (r.pct || 0) > 0; }) : [];
-    var poolRule = poolBoss && poolOthers.reduce(function (a, r) { return a + (r.pct || 0); }, 0) >= ROLL_OTHER_MIN;
+    var poolRule = poolBoss && poolOthers.reduce(function (a, r) { return a + ltvPct(r); }, 0) >= ROLL_OTHER_MIN;
     function itemsList(rs, max) {
       return rs.slice(0, max).map(function (r) { return "<b>" + esc(itemLabel(r)) + "</b> " + fmtVal(r); }).join(", ") + (rs.length > max ? ", …" : "");
     }
@@ -708,25 +754,26 @@ a.best:hover .open { color: var(--ink-strong); }
     } else if (!found.length) {
       verdict = "Vault nabízí jen itemy mimo raid a M+";
       why = "Delvy a world itemy tu nesimujeme – vezmi, co se hodí.";
-    } else if (bestVault && poolRule && !(bestBoss && bestBoss !== poolBoss && bestBoss.ev > poolBoss.ev && bestBoss.ev > (metric(bestVault.r) || 0))) {
+    } else if (bestVault && poolRule && !(bestBoss && bestBoss !== poolBoss && bestBoss.ev > poolBoss.ev && bestBoss.ev > vaultLtv)) {
       // item z vaultu padá i z bosse, který má další upgrady → rollovat toho bosse (pool se zkracuje o to, co padne);
       // když je ale jiný boss v průměru lepší než ten i než item z vaultu, doporučí se ten (větev níž)
       mood = "roll"; recBoss = poolBoss;
       verdict = "🎲 Bonus roll na " + poolBoss.name;
       why = "<b>" + esc(itemLabel(bestVault.r)) + "</b> (" + fmtVal(bestVault.r) + ") z vaultu padá i z tohohle bosse a ten má další upgrady: " + itemsList(poolOthers, 3) +
-        ". Co padne z rollu, z poolu zmizí – item z vaultu by tam zůstal a jeden příští roll by padl naprázdno.";
-    } else if (bestVault && (!bestBoss || (metric(bestVault.r) || 0) >= bestBoss.ev)) {
+        ". Co padne z rollu, z poolu zmizí – item z vaultu by tam zůstal a jeden příští roll by padl naprázdno." + tmpNote;
+    } else if (bestVault && (!bestBoss || vaultLtv >= bestBoss.ev)) {
       // jistý item z vaultu vs. průměr náhodného itemu z nejlepšího bosse
       mood = "take";
       verdict = "✅ Vzít z vaultu: " + itemLabel(bestVault.r) + " (" + fmtVal(bestVault.r) + ")";
       why = bestBoss ? "Bonus roll je loterie – nejlepší boss <b>" + esc(bestBoss.name) + "</b> dá v průměru jen " + fmtNum(bestBoss.ev) + " (" + bestBoss.up + "/" + bestBoss.n + " upgrade)."
         : "Žádný boss nedá v průměru nic lepšího.";
       if (poolBoss && !poolOthers.length) why += " Z " + esc(poolBoss.name) + " kromě něj nic dalšího není upgrade, tak není na co rollovat.";
+      why += tmpNote;
     } else if (bestBoss) {
       mood = "roll"; recBoss = bestBoss;
       verdict = "🎲 Bonus roll na " + bestBoss.name;
       why = "Průměrný roll " + fmtNum(bestBoss.ev) + " (" + bestBoss.up + "/" + bestBoss.n + " upgrade" + (bestBoss.best ? ", nejlepší <b>" + esc(itemLabel(bestBoss.best)) + "</b> " + fmtVal(bestBoss.best) : "") + ")" +
-        (bestVault ? " je víc než nejlepší item z vaultu <b>" + esc(itemLabel(bestVault.r)) + "</b> " + fmtVal(bestVault.r) + "." : " – z vaultu není nic upgrade.");
+        (bestVault ? " je dlouhodobě víc než nejlepší item z vaultu <b>" + esc(itemLabel(bestVault.r)) + "</b> " + fmtVal(bestVault.r) + "." + tmpNote : " – z vaultu není nic upgrade.");
     } else {
       verdict = "Nic z vaultu ani z raidu není upgrade";
       why = "Vezmi si z vaultu, co se hodí (nebo měnu).";
@@ -738,7 +785,7 @@ a.best:hover .open { color: var(--ink-strong); }
       return '<span class="chip ' + cls(r) + '" title="' + esc(r.boss ? "z " + r.boss : "") + '">' + kindBadge(r.kind) +
         (icon ? ' <img src="https://wow.zamimg.com/images/wow/icons/small/' + esc(icon) + '.jpg" alt="" loading="lazy">' : "") +
         ' <a href="https://www.wowhead.com/item=' + esc(whId) + '"' + (ilvl ? ' data-wowhead="item=' + esc(whId) + '&ilvl=' + esc(ilvl) + '"' : "") +
-        ' target="_blank" rel="noopener">' + esc(r.item) + "</a>" + catHtml(r) + ' <span class="v">' + fmtVal(r) + "</span></span>";
+        ' target="_blank" rel="noopener">' + esc(r.item) + "</a>" + catHtml(r) + ' <span class="v">' + fmtVal(r) + "</span>" + tmpHtml(r) + "</span>";
     }).join("");
     if (ignored) chips += '<span class="chip up0" title="itemy z delvů / worldu nebo bez simu">+' + ignored + " mimo raid/M+</span>";
     return '<div class="vault ' + mood + '">' +
