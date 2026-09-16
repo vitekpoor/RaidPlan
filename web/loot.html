@@ -646,6 +646,38 @@ a.best:hover .open { color: var(--ink-strong); }
     var by = (r.betterBy || []).map(function (t) { return t.item + (t.boss ? " (" + t.boss + ")" : ""); }).join(", ");
     return '<span class="tmp" title="Dočasný upgrade: v tomhle slotu ho nakonec nahradí ' + esc(by || "lepší item") + ' – počítá se jen za ' + Math.round(TEMP_WEIGHT * 100) + ' %">dočasný' + (by ? " → " + esc((r.betterBy[0] || {}).item || "") : "") + "</span>";
   }
+  /**
+   * Raidbots v HC vault reportu VYNECHÁ katalyzátorovou verzi ne-setového itemu, když ze stejného bosse padá tier kus
+   * ve stejném ilvl přímo (Ula'tek: curio Visage 334 vs. katalyzovaný Gaze 334 – stejný název profilesetu bez zdroje).
+   * V mythic reportu obě verze jsou (jiný ilvl), tak se rozdíl set bonusu (katalyzátor − surový item) vezme odtud
+   * a přičte k surovému HC itemu. Vrací odhadnuté řádky (estimated: true) k doplnění do HC poolu.
+   */
+  function estimateMissingCatalyst(hcRows, playerRows) {
+    var hcCat = {}, myCat = {}, myRaw = {};
+    hcRows.forEach(function (r) { if (r.catalystId) hcCat[r.catalystId] = 1; });
+    playerRows.forEach(function (r) {
+      if (r.kind !== "raid") return;
+      if (r.catalystId) myCat[r.catalystId] = r; else if (!myRaw[r.itemId] || (r.pct || 0) > (myRaw[r.itemId].pct || 0)) myRaw[r.itemId] = r;
+    });
+    var out = [];
+    hcRows.forEach(function (raw) {
+      if (raw.catalystId || raw.worn || hcCat[raw.itemId]) return;
+      var cat = myCat[raw.itemId], base = myRaw[raw.itemId];
+      if (!cat || !base || raw.pct == null || cat.pct == null || base.pct == null) return;
+      var est = {};
+      Object.keys(cat).forEach(function (k) { est[k] = cat[k]; });
+      est.kind = "raidhc"; est.estimated = true; est.worn = false;
+      est.bossIds = raw.bossIds; est.boss = raw.boss; est.ilvl = raw.ilvl; est.report = raw.report; est.time = raw.time;
+      est.pct = Math.round((raw.pct + (cat.pct - base.pct)) * 100) / 100;
+      est.diff = raw.diff != null && cat.diff != null && base.diff != null ? Math.round(raw.diff + (cat.diff - base.diff)) : null;
+      est.value = raw.base != null && est.diff != null ? raw.base + est.diff : null; est.base = raw.base;
+      out.push(est);
+    });
+    return out;
+  }
+  function estHtml(r) {
+    return r.estimated ? '<span class="tmp" title="Odhad: Raidbots v HC reportu katalyzátorovou verzi vynechal (tier kus ze stejného bosse má stejný ilvl). Hodnota = surový item v HC + rozdíl set bonusu z mythic reportu.">≈ odhad</span>' : "";
+  }
   function rollBosses(rollRows) {
     var byBoss = {};
     rollRows.forEach(function (r) {
@@ -693,7 +725,7 @@ a.best:hover .open { color: var(--ink-strong); }
       html += '<div class="tablewrap"><table><tbody>';
       b.list.forEach(function (r) {
         var v = metric(r) || 0, tmp = tmpHtml(r);
-        html += "<tr" + (r.worn ? ' class="worn"' : tmp ? ' class="tmprow"' : "") + "><td>" + itemHtml(r) + tmp + "</td>" +
+        html += "<tr" + (r.worn ? ' class="worn"' : tmp ? ' class="tmprow"' : "") + "><td>" + itemHtml(r) + estHtml(r) + tmp + "</td>" +
           '<td class="num">' + (r.worn ? '<span class="worn-tag" title="Raidbots item nesimoval – tenhle (nebo lepší) už máš">máš / lepší nasazený</span>'
                                 : '<span class="val ' + (v > 0 ? cls(r) : "down") + '">' + fmtVal(r) + "</span>") + "</td></tr>";
       });
@@ -708,6 +740,10 @@ a.best:hover .open { color: var(--ink-strong); }
     // reportu (starší sim, healer s QE Live – ten má raid na 334 rovnou) se bere plný mythic Droptimizer.
     var hcRows = playerRows.filter(function (r) { return r.kind === "raidhc"; });
     var useHc = hcRows.length > 0;
+    if (useHc) {
+      var est = estimateMissingCatalyst(hcRows, playerRows);
+      if (est.length) { hcRows = hcRows.concat(est); playerRows = playerRows.concat(est); }
+    }
     var raidRows = (useHc ? hcRows : playerRows.filter(function (r) { return r.kind === "raid"; })).slice().sort(byMetricDesc);
     // gain každého itemu z vaultu: raidové ze stejného základu jako bonus roll (HC 334), M+ z M+ Droptimizeru;
     // u duplicit lepší hodnota, klíč = padající item (u katalyzátoru zdrojový item – vault nabízí ten, ne hotový set kus)
@@ -785,7 +821,7 @@ a.best:hover .open { color: var(--ink-strong); }
       return '<span class="chip ' + cls(r) + '" title="' + esc(r.boss ? "z " + r.boss : "") + '">' + kindBadge(r.kind) +
         (icon ? ' <img src="https://wow.zamimg.com/images/wow/icons/small/' + esc(icon) + '.jpg" alt="" loading="lazy">' : "") +
         ' <a href="https://www.wowhead.com/item=' + esc(whId) + '"' + (ilvl ? ' data-wowhead="item=' + esc(whId) + '&ilvl=' + esc(ilvl) + '"' : "") +
-        ' target="_blank" rel="noopener">' + esc(r.item) + "</a>" + catHtml(r) + ' <span class="v">' + fmtVal(r) + "</span>" + tmpHtml(r) + "</span>";
+        ' target="_blank" rel="noopener">' + esc(r.item) + "</a>" + catHtml(r) + ' <span class="v">' + fmtVal(r) + "</span>" + estHtml(r) + tmpHtml(r) + "</span>";
     }).join("");
     if (ignored) chips += '<span class="chip up0" title="itemy z delvů / worldu nebo bez simu">+' + ignored + " mimo raid/M+</span>";
     return '<div class="vault ' + mood + '">' +
