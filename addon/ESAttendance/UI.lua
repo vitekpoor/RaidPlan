@@ -390,15 +390,26 @@ end
 -- ---------------------------------------------------------------- minimap button
 -- Round "ES" icon (same picture as the web favicon: icon.tga) on the minimap edge.
 -- Left click = window, right click = write attendance, drag = move around the rim.
-local MINIMAP_RADIUS = 80
+local MINIMAP_GAP = 12    -- px between the minimap rim and the button centre (outside the map)
 local minimapBtn
 
 local function minimapAngle() return (ESAttendanceDB.minimapAngle or 225) end
 
+--- Button centre sits MINIMAP_GAP px outside the actual minimap edge, for round and square maps.
 local function placeMinimapButton()
   local a = math.rad(minimapAngle())
+  local x, y = math.cos(a), math.sin(a)
+  local rx = (Minimap:GetWidth() or 140) / 2 + MINIMAP_GAP
+  local ry = (Minimap:GetHeight() or 140) / 2 + MINIMAP_GAP
+  local shape = GetMinimapShape and GetMinimapShape() or "ROUND"
+  if shape == "ROUND" then
+    x, y = x * rx, y * ry
+  else
+    local q = math.max(math.abs(x), math.abs(y))   -- project onto the square edge
+    x, y = x / q * rx, y / q * ry
+  end
   minimapBtn:ClearAllPoints()
-  minimapBtn:SetPoint("CENTER", Minimap, "CENTER", math.cos(a) * MINIMAP_RADIUS, math.sin(a) * MINIMAP_RADIUS)
+  minimapBtn:SetPoint("CENTER", Minimap, "CENTER", x, y)
 end
 
 local function createMinimapButton()
@@ -458,6 +469,7 @@ end
 function ns.UpdateMinimapButton()
   if not Minimap then return end
   if not minimapBtn then createMinimapButton() end
+  placeMinimapButton()   -- minimap size may have changed (edit mode)
   minimapBtn:SetShown(not ESAttendanceDB.minimapHidden)
 end
 

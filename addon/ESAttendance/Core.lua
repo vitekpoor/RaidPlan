@@ -393,6 +393,7 @@ f:SetScript("OnEvent", function(_, event, arg1)
   elseif event == "PLAYER_ENTERING_WORLD" then
     ns.ScanGroup()
     ns.RequestGuildRoster()
+    if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end   -- minimap has its final size now
   elseif event == "GROUP_ROSTER_UPDATE" or event == "UNIT_CONNECTION" then
     ns.ScanGroup()
   elseif event == "GUILD_ROSTER_UPDATE" then
