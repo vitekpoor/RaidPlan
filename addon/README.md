@@ -35,10 +35,16 @@ credentials), writes `ESAttendance/RosterData.lua` and copies the addon into
 `G:\World of Warcraft\_retail_\Interface\AddOns\ESAttendance` (auto-detected next to the repo;
 `--wow PATH` or `WOW_ADDONS` override). Then `/reload` in game. Re-run after every Roster change.
 
-Without the script: in game `/esa import`, paste the text from `…/exec?p=esroster` (the Apps
-Script web app URL that serves the absence and sim forms) and click **Načíst roster**. The
-imported roster is kept in SavedVariables; a newer `RosterData.lua` wins again automatically,
-`/esa roster reset` drops the import.
+**Without the script, from inside the game (two shortcuts):** `/esa` → **Import rosteru**.
+The dialog opens with the ready-made roster URL preselected in its URL box (the web app
+`/exec` address is compiled into `Core.lua`, `/esa url <…/exec>` overrides it). Ctrl+C,
+Alt-Tab, Ctrl+V into the browser address bar: the page `…/exec?p=esroster` copies the current
+roster to the clipboard by itself. Back in game Ctrl+V into the dialog: a pasted roster loads
+immediately, no button. The imported roster is kept in SavedVariables; a newer `RosterData.lua`
+wins again automatically, `/esa roster reset` drops the import. The window shows an orange
+"N dní starý – Import rosteru" hint when the active roster is older than 7 days.
+`…/exec?p=esroster&raw=1` returns the plain text for scripts. The addon itself cannot fetch it:
+WoW addons have no network, file or process access, so a copy step is unavoidable.
 
 ## In game
 

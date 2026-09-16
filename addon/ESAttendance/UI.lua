@@ -8,6 +8,7 @@ local ICON_MISSING = "Interface\\RaidFrame\\ReadyCheck-NotReady"
 local ICON_ONLINE = "Interface\\RaidFrame\\ReadyCheck-Waiting"
 
 local main, textFrame
+local textMode, importing   -- text dialog state: "import" / "export", re-entry guard
 local rows = {}
 local onlyMissing = false
 
@@ -107,7 +108,9 @@ local function refreshList()
 
   local n, total = ns.CountPresent()
   main.summary:SetText(("V raidu |cff3fd68a%d|r / %d hráčů rosteru · skupina %d"):format(n, total, GetNumGroupMembers()))
-  main.rosterInfo:SetText(("Roster: %d hráčů · verze %s (%s)"):format(#ns.roster, ns.rosterVersion ~= "" and ns.rosterVersion or "?", ns.rosterSource or ""))
+  local stale, age = ns.RosterIsStale()
+  main.rosterInfo:SetText(("Roster: %d hráčů · verze %s (%s)%s"):format(#ns.roster, ns.rosterVersion ~= "" and ns.rosterVersion or "?",
+    ns.rosterSource or "", stale and (" · |cffffa040" .. (age and (age .. " dní starý") or "neznámé stáří") .. " – Import rosteru|r") or ""))
   local extra = {}
   if #ns.unknown > 0 then extra[#extra + 1] = "|cffffd100Mimo roster:|r " .. table.concat(ns.unknown, ", ") end
   local q = ns.QueuedInvites()
@@ -224,6 +227,19 @@ function ns.Toggle()
 end
 
 -- ---------------------------------------------------------------- text dialog
+--- Pasted roster text loads itself (import mode). Returns true when the text was a roster.
+local function tryImport(text)
+  if textMode ~= "import" or importing then return false end
+  if not (text:match("^%s*ESROSTER;") and text:find("\n", 1, true)) then return false end
+  importing = true
+  local ok, msg = ns.ImportRoster(text)
+  ns.Print(msg)
+  textFrame.status:SetText((ok and "|cff3fd68a" or "|cffff5555") .. msg .. "|r")
+  if ok then refreshList() end
+  importing = false
+  return true
+end
+
 local function createTextFrame()
   textFrame = CreateFrame("Frame", "ESAttendanceTextFrame", UIParent, "BackdropTemplate")
   textFrame:SetSize(560, 380)
@@ -251,8 +267,33 @@ local function createTextFrame()
   local close = CreateFrame("Button", nil, textFrame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -4, -4)
 
+  -- URL row: ready-made link to copy into the browser (roster text / attendance form)
+  textFrame.urlLabel = textFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  textFrame.urlLabel:SetPoint("TOPLEFT", 14, -62)
+  textFrame.urlLabel:SetText("URL:")
+  local urlBox = CreateFrame("EditBox", nil, textFrame, "InputBoxTemplate")
+  urlBox:SetHeight(20)
+  urlBox:SetPoint("LEFT", textFrame.urlLabel, "RIGHT", 10, 0)
+  urlBox:SetPoint("RIGHT", textFrame, "RIGHT", -120, 0)
+  urlBox:SetAutoFocus(false)
+  urlBox:SetFontObject(GameFontHighlightSmall)
+  urlBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  urlBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  urlBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+  urlBox:SetScript("OnTextChanged", function(self, user)
+    if not user then return end
+    -- read-only box: typing/pasting restores the URL; a pasted roster is imported anyway
+    local pasted = self:GetText()
+    self:SetText(self.url or "")
+    self:HighlightText()
+    if tryImport(pasted) then textFrame.edit:SetText(pasted) end
+  end)
+  textFrame.urlBox = urlBox
+  textFrame.urlBtn = button(textFrame, "Kopírovat URL", 100, function() urlBox:SetFocus(); urlBox:HighlightText() end)
+  textFrame.urlBtn:SetPoint("LEFT", urlBox, "RIGHT", 6, 0)
+
   local scroll = CreateFrame("ScrollFrame", "ESAttendanceTextScroll", textFrame, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", 14, -62)
+  scroll:SetPoint("TOPLEFT", 14, -90)
   scroll:SetPoint("BOTTOMRIGHT", -32, 44)
   local bg = textFrame:CreateTexture(nil, "BACKGROUND")
   bg:SetPoint("TOPLEFT", scroll, -4, 4)
@@ -266,7 +307,11 @@ local function createTextFrame()
   edit:SetAutoFocus(false)
   edit:SetMaxLetters(0)
   edit:SetScript("OnEscapePressed", function() textFrame:Hide() end)
-  edit:SetScript("OnTextChanged", function(self) scroll:UpdateScrollChildRect() end)
+  edit:SetScript("OnTextChanged", function(self, user)
+    scroll:UpdateScrollChildRect()
+    -- import mode: a pasted roster loads itself, no button needed
+    if user then tryImport(self:GetText()) end
+  end)
   scroll:SetScrollChild(edit)
   textFrame.edit = edit
   scroll:EnableMouse(true)
@@ -291,22 +336,33 @@ end
 function ns.ShowText(mode, text)
   if not textFrame then createTextFrame() end
   textFrame.status:SetText("")
+  textMode = mode
   if mode == "import" then
     textFrame.title:SetText("Import rosteru")
-    textFrame.hint:SetText("Vlož roster (řádky Hráč;postava;classa;role;alt;classa;role) z webu …/exec?p=esroster nebo z build_roster.py --string a klikni Načíst roster.")
+    textFrame.hint:SetText("1) Kopírovat URL → otevři ji v prohlížeči (stránka roster sama zkopíruje)  2) sem Ctrl+V – roster se načte hned.")
+    textFrame.urlBox.url = ns.RosterUrl()
     textFrame.edit:SetText("")
     textFrame.action:Show()
     textFrame.selectBtn:Hide()
   else
     textFrame.title:SetText("Export")
-    textFrame.hint:SetText("Text je označený – Ctrl+C a vlož ho do formuláře docházky (…/exec?p=attendance). Zápis se zároveň ukládá do SavedVariables pro sync_attendance.py.")
+    textFrame.hint:SetText("Text je označený – Ctrl+C, pak Kopírovat URL → formulář docházky v prohlížeči → Ctrl+V. (Nebo po /reload spusť sync_attendance.bat.)")
+    textFrame.urlBox.url = ns.AttendanceUrl()
     textFrame.edit:SetText(text or "")
     textFrame.action:Hide()
     textFrame.selectBtn:Show()
   end
+  textFrame.urlBox:SetText(textFrame.urlBox.url)
+  textFrame.urlBox:SetCursorPosition(0)
   textFrame:Show()
-  textFrame.edit:SetFocus()
-  if mode ~= "import" then textFrame.edit:HighlightText() end
+  if mode == "import" then
+    -- the first thing to grab is the URL, so preselect it
+    textFrame.urlBox:SetFocus()
+    textFrame.urlBox:HighlightText()
+  else
+    textFrame.edit:SetFocus()
+    textFrame.edit:HighlightText()
+  end
 end
 
 ns.callbacks[#ns.callbacks + 1] = function(event)

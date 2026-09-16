@@ -1301,7 +1301,7 @@ function doGet(e) {
   if (page === "sim") return simFormPage_();
   if (page === "simapi") return simApi_(e);
   if (page === "attendance") return attendanceFormPage_();   // zápis docházky z addonu ES Attendance
-  if (page === "esroster") return esRosterText_();           // roster pro import v addonu (/esa import)
+  if (page === "esroster") return esRosterText_(e);          // roster pro import v addonu (/esa import); &raw=1 = holý text
   var roster = getRoster_() || [];
   var names = roster.map(function (p) { return p.player; });
   var html = ABSENCE_FORM_HTML_
@@ -3809,7 +3809,7 @@ function recordAttendance_(text) {
 }
 
 /** Text rosteru pro import v addonu (/esa import): ESROSTER;verze + Hráč;postava;classa;role;alt;classa;role */
-function esRosterText_() {
+function esRosterString_() {
   var roster = getRoster_() || [];
   var lines = ["ESROSTER;" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm")];
   roster.forEach(function (p) {
@@ -3817,8 +3817,62 @@ function esRosterText_() {
     if (p.alt) parts.push(p.alt, p.altClass, p.altRole);
     lines.push(parts.join(";"));
   });
-  return ContentService.createTextOutput(lines.join("\n")).setMimeType(ContentService.MimeType.TEXT);
+  return lines.join("\n");
 }
+
+/**
+ * …/exec?p=esroster = stránka, která roster rovnou zkopíruje do schránky (ve hře pak jen
+ * /esa → Import rosteru → Ctrl+V). …/exec?p=esroster&raw=1 = holý text (skripty).
+ */
+function esRosterText_(e) {
+  var text = esRosterString_();
+  if (e && e.parameter && e.parameter.raw)
+    return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.TEXT);
+  var html = ESROSTER_PAGE_HTML_.replace("__ROSTER__", JSON.stringify(text).replace(/<\//g, "<\\/"));
+  return HtmlService.createHtmlOutput(html)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .setTitle("Roster pro ES Attendance")
+    .addMetaTag("viewport", "width=device-width, initial-scale=1");
+}
+
+var ESROSTER_PAGE_HTML_ = '<!DOCTYPE html>\
+<html lang="cs"><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><title>Roster pro ES Attendance</title>\
+<style>\
+  :root { color-scheme: dark; }\
+  * { box-sizing: border-box; }\
+  body { background:#111413; color:#e4eae6; font-family:"Inter","Segoe UI",-apple-system,sans-serif; margin:0; padding:1.25rem; line-height:1.5; }\
+  .card { max-width:34rem; margin:0 auto; background:#171b19; border:1px solid #242a27; border-radius:10px; padding:1.5rem 1.5rem 1.25rem; }\
+  h1 { font-size:1.25rem; margin:0 0 .5rem; color:#3fd68a; }\
+  textarea { width:100%; min-height:12rem; font-size:.8rem; padding:.55rem .7rem; background:#0a0c0b; color:#e4eae6; border:1px solid #242a27; border-radius:6px; font-family:ui-monospace,Consolas,monospace; resize:vertical; }\
+  button { width:100%; margin-top:1rem; padding:.7rem; font-size:1.05rem; font-weight:700; background:#3fd68a; color:#07110c; border:none; border-radius:999px; cursor:pointer; }\
+  #status { margin:.8rem 0; font-weight:600; min-height:1.4em; }\
+  #status.ok { color:#3fd68a; } #status.err { color:#f0857a; }\
+  .hint { color:#8b968f; font-size:.78rem; margin:.25rem 0 0; }\
+</style></head><body><div class="card">\
+<h1>📋 Roster pro addon ES Attendance</h1>\
+<div id="status">⏳ Kopíruji do schránky…</div>\
+<button id="copy">Zkopírovat znovu</button>\
+<p class="hint">Ve hře: <b>/esa</b> → <b>Import rosteru</b> → Ctrl+V do velkého pole – roster se načte sám.</p>\
+<textarea id="text" readonly spellcheck="false"></textarea>\
+</div>\
+<script>\
+var TEXT = __ROSTER__;\
+var $ = function (id) { return document.getElementById(id); };\
+$("text").value = TEXT;\
+var players = TEXT.split("\\n").length - 1;\
+function show(ok, msg) { var s = $("status"); s.className = ok ? "ok" : "err"; s.textContent = msg; }\
+function copy() {\
+  var done = function () { show(true, "✔ Roster (" + players + " hráčů) je ve schránce – ve hře /esa → Import rosteru → Ctrl+V."); };\
+  var fallback = function () {\
+    try { $("text").focus(); $("text").select(); if (document.execCommand("copy")) return done(); } catch (e) {}\
+    show(false, "⚠ Prohlížeč nepovolil kopírování – klikni na tlačítko, nebo text označ (je vybraný) a Ctrl+C.");\
+    $("text").focus(); $("text").select();\
+  };\
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(TEXT).then(done, fallback); else fallback();\
+}\
+$("copy").addEventListener("click", copy);\
+copy();\
+</script></body></html>';
 
 /** Formulář pro vložení řetězce ze hry. Heslo = stejné jako web tlačítko simů (SIM_RUN_PASSWORD), pokud je nastavené. */
 function attendanceFormPage_() {

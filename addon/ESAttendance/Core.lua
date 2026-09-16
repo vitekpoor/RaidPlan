@@ -4,6 +4,10 @@ local ADDON, ns = ...
 ESAttendance = ns
 
 local ROSTER_HEADER = "ESROSTER"
+-- Apps Script web app (same /exec URL as the absence / sim forms). ?p=esroster serves the roster
+-- import text. Override in game: /esa url <https://…/exec>
+local WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec"
+local ROSTER_MAX_AGE_DAYS = 7   -- older roster -> orange hint in the window
 local RECORD_HEADER = "ESA1"
 local INVITE_INTERVAL = 0.6    -- s between invites
 local INVITE_WAIT_MAX = 90     -- s to wait for the first accept / raid conversion
@@ -22,6 +26,23 @@ ns.present = {}         -- player index -> { char = "Name", unit = "raid3", onli
 ns.unknown = {}         -- group members not in the roster: { "Name", ... }
 ns.guildOnline = {}     -- normalized char name -> "Name-Realm" of online guild members
 ns.callbacks = {}
+
+function ns.WebAppUrl() return (ESAttendanceDB and ESAttendanceDB.webappUrl) or WEBAPP_URL end
+function ns.RosterUrl() return ns.WebAppUrl() .. "?p=esroster" end
+function ns.AttendanceUrl() return ns.WebAppUrl() .. "?p=attendance" end
+
+--- Days since the active roster version ("yyyy-mm-dd …"), or nil when unknown.
+function ns.RosterAgeDays()
+  local y, m, d = tostring(ns.rosterVersion or ""):match("^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+  if not y then return nil end
+  local stamp = time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = 12 })
+  return math.floor((time() - stamp) / 86400)
+end
+
+function ns.RosterIsStale()
+  local age = ns.RosterAgeDays()
+  return age == nil or age > ROSTER_MAX_AGE_DAYS, age
+end
 
 -- ---------------------------------------------------------------- helpers
 local function trim(s) return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", "")) end
@@ -391,6 +412,16 @@ SlashCmdList.ESATTENDANCE = function(msg)
   elseif cmd == "export" then
     local rec = rest ~= "" and ESAttendanceDB.records[rest] or ns.LatestRecord()
     if rec then ns.ShowText("export", rec.export) else ns.Print("žádný záznam docházky") end
+  elseif cmd == "url" then
+    if rest:match("^https://") then
+      ESAttendanceDB.webappUrl = rest:gsub("%?.*$", "")
+      ns.Print("web app URL nastavena: " .. ESAttendanceDB.webappUrl)
+    elseif rest == "reset" then
+      ESAttendanceDB.webappUrl = nil
+      ns.Print("web app URL vrácena na výchozí")
+    else
+      ns.Print("roster: " .. ns.RosterUrl() .. "  |  docházka: " .. ns.AttendanceUrl() .. "  (/esa url <https://…/exec> | /esa url reset)")
+    end
   elseif cmd == "roster" then
     if rest == "reset" then ns.ResetRoster(); ns.Print("importovaný roster smazán, platí RosterData.lua")
     else ns.ShowText("export", ns.RosterToString(ns.roster, ns.rosterVersion)) end
