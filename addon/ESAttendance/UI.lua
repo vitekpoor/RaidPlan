@@ -67,7 +67,7 @@ local function acquireRow(i)
   row.invite:SetNormalFontObject(ESAttendanceFontNormal)
   row.invite:SetHighlightFontObject(ESAttendanceFontHighlight)
   row.invite:SetText("Pozvat")
-  row.invite:SetScript("OnClick", function(self) ns.InvitePlayer(self.playerIndex) end)
+  row.invite:SetScript("OnClick", function(self) ns.InvitePlayer(self:GetParent().playerIndex) end)
 
   row:SetScript("OnEnter", function(self)
     local p = ns.roster[self.playerIndex]

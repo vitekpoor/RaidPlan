@@ -327,7 +327,7 @@ function ns.QueuedInvites() return #queue end
 function ns.InvitePlayer(idx)
   ns.RequestGuildRoster()
   local target, online, source = ns.InviteTargetFor(idx)
-  if not target then return end
+  if not target then return ns.Print("pozvánka: hráč " .. tostring(idx) .. " není v rosteru / nemá postavu") end
   if not canInvite() then return ns.Print("nejsi leader ani assist – nemůžu zvát") end
   if IsInGroup() and not IsInRaid() and GetNumGroupMembers() >= 5 and UnitIsGroupLeader("player") then
     convertToRaid()
