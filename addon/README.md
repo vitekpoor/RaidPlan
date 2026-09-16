@@ -59,6 +59,11 @@ drag = move it along the rim, `/esa minimap` hides/shows it. Every roster player
   **Pozvat jen online** only those with an online guild character. Invites are sent one per
   0.6 s; when you start alone the addon sends four party invites, waits for the first accept,
   converts to raid and continues. You must be leader or assist. **Zrušit** empties the queue.
+- Invites use the guild list to get the realm-qualified `Name-Realm` for every guild member,
+  online or offline. The roster sheet has no realms, so a character that is not in the guild is
+  invited by plain name, which only works on the leader's own realm. Every invite is echoed in
+  chat with its target; `/esa debug [player]` prints what the addon knows (guild lookup, online
+  state, chosen invite target, group state) when something does not arrive.
 - Group members that are not in the roster are listed under the table ("Mimo roster").
 - **jen chybějící** filters the list; hovering a row shows all characters and their online state.
 

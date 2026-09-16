@@ -12,7 +12,7 @@ local RECORD_HEADER = "ESA1"
 -- ";" and not "|": a WoW EditBox eats "|r" / "|n" (colour reset / newline escapes), so a "|"-separated
 -- string copied from the export box would lose every player whose name starts with R or N.
 local RECORD_SEP = ";"
-local INVITE_INTERVAL = 0.6    -- s between invites
+local INVITE_INTERVAL = 0.4    -- s between invites
 local INVITE_WAIT_MAX = 90     -- s to wait for the first accept / raid conversion
 local GUILD_REFRESH_MIN = 10   -- s between C_GuildInfo.GuildRoster() requests
 
@@ -28,6 +28,7 @@ ns.charToPlayer = {}    -- normalized char name -> player index
 ns.present = {}         -- player index -> { char = "Name", unit = "raid3", online = bool }
 ns.unknown = {}         -- group members not in the roster: { "Name", ... }
 ns.guildOnline = {}     -- normalized char name -> "Name-Realm" of online guild members
+ns.guildChars = {}      -- normalized char name -> "Name-Realm" of every guild member (realm lookup)
 ns.callbacks = {}
 
 function ns.WebAppUrl() return (ESAttendanceDB and ESAttendanceDB.webappUrl) or WEBAPP_URL end
@@ -225,31 +226,45 @@ function ns.RequestGuildRoster()
   if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
 end
 
+--- Reads the whole guild list (online AND offline) so every guild character gets its
+--- realm-qualified "Name-Realm" – the roster sheet has no realms and the guild spans several
+--- connected realms, so a plain name would only reach characters on the leader's own realm.
 function ns.ReadGuildRoster()
   wipe(ns.guildOnline)
+  wipe(ns.guildChars)
   if not IsInGuild() then return end
+  local showOffline = GetGuildRosterShowOffline and GetGuildRosterShowOffline()
+  if SetGuildRosterShowOffline and not showOffline then SetGuildRosterShowOffline(true) end
   local total = GetNumGuildMembers()
   for i = 1, (total or 0) do
     local name, _, _, _, _, _, _, _, online = GetGuildRosterInfo(i)
-    if name and online then ns.guildOnline[ns.NormName(name)] = name end
+    if name then
+      local key = ns.NormName(name)
+      ns.guildChars[key] = name
+      if online then ns.guildOnline[key] = name end
+    end
   end
+  if SetGuildRosterShowOffline and not showOffline then SetGuildRosterShowOffline(false) end
   ns.Fire("GUILD")
 end
 
---- Character to invite for a player: online guild char (main first), else the main.
---- Returns name, isKnownOnline.
+--- Character to invite for a player: online guild char (main first), else the main with its
+--- guild realm when known. Returns name, isKnownOnline, source ("online" / "guild" / "sheet").
 function ns.InviteTargetFor(idx)
   local p = ns.roster[idx]
   if not p then return nil end
   for _, ch in ipairs(p.chars) do
     local full = ns.guildOnline[ns.NormName(ch)]
-    if full then return full, true end
+    if full then return full, true, "online" end
   end
-  return p.chars[1], false
+  local main = p.chars[1]
+  local guild = main and ns.guildChars[ns.NormName(main)]
+  if guild then return guild, false, "guild" end
+  return main, false, "sheet"
 end
 
 -- ---------------------------------------------------------------- invites
-local queue, ticker, waitSince, aloneSent = {}, nil, nil, 0
+local queue, ticker, waitSince, aloneSent, converting = {}, nil, nil, 0, false
 
 local function inviteUnit(name)
   if C_PartyInfo and C_PartyInfo.InviteUnit then C_PartyInfo.InviteUnit(name) else InviteUnit(name) end
@@ -266,7 +281,7 @@ end
 
 local function stopQueue(msg)
   if ticker then ticker:Cancel() end
-  ticker, waitSince, aloneSent = nil, nil, 0
+  ticker, waitSince, aloneSent, converting = nil, nil, 0, false
   wipe(queue)
   if msg then ns.Print(msg) end
   ns.Fire("INVITES")
@@ -276,19 +291,30 @@ local function tick()
   if #queue == 0 then return stopQueue("pozvánky odeslány") end
   if not canInvite() then return stopQueue("nejsi leader ani assist – nemůžu zvát") end
   if IsInRaid() then
-    inviteUnit(table.remove(queue, 1))
+    local target = table.remove(queue, 1)
+    inviteUnit(target)
+    ns.Print("pozvánka → " .. target .. (#queue > 0 and ("  (zbývá " .. #queue .. ")") or ""))
     waitSince = nil
   elseif IsInGroup() then
     -- party formed: convert to raid, invites continue next tick
-    if UnitIsGroupLeader("player") then convertToRaid() end
+    if UnitIsGroupLeader("player") then
+      if not converting then ns.Print("převádím party na raid…") end
+      converting = true
+      convertToRaid()
+    end
     waitSince = waitSince or GetTime()
     if GetTime() - waitSince > INVITE_WAIT_MAX then return stopQueue("převod na raid se nepovedl – zbytek pozvánek zrušen") end
   else
     -- alone: at most 4 pending party invites, then wait for the first accept
     if aloneSent < 4 then
-      inviteUnit(table.remove(queue, 1))
+      local target = table.remove(queue, 1)
+      inviteUnit(target)
       aloneSent = aloneSent + 1
+      ns.Print("pozvánka → " .. target)
       waitSince = waitSince or GetTime()
+      if aloneSent == 4 and #queue > 0 then
+        ns.Print(("čekám, až někdo přijme (party má max 5) – pak převedu na raid a pozvu zbývajících %d"):format(#queue))
+      end
     elseif GetTime() - (waitSince or GetTime()) > INVITE_WAIT_MAX then
       return stopQueue("nikdo nepřijal pozvánku – zbytek zrušen")
     end
@@ -299,14 +325,18 @@ end
 function ns.QueuedInvites() return #queue end
 
 function ns.InvitePlayer(idx)
-  local target = ns.InviteTargetFor(idx)
+  ns.RequestGuildRoster()
+  local target, online, source = ns.InviteTargetFor(idx)
   if not target then return end
   if not canInvite() then return ns.Print("nejsi leader ani assist – nemůžu zvát") end
   if IsInGroup() and not IsInRaid() and GetNumGroupMembers() >= 5 and UnitIsGroupLeader("player") then
     convertToRaid()
   end
   inviteUnit(target)
-  ns.Print("pozvánka: " .. target)
+  local p = ns.roster[idx]
+  ns.Print(("pozvánka %s → %s%s"):format(p and p.name or "?", target,
+    online and " (online)" or (source == "guild" and " |cffffa040(v guildě nikdo online – zkouším main)|r"
+      or " |cffff5555(není v guildě, bez realmu – funguje jen na tvém realmu)|r")))
 end
 
 --- Invite every roster player who is not in the group (online guild char preferred).
@@ -417,6 +447,30 @@ SlashCmdList.ESATTENDANCE = function(msg)
   elseif cmd == "export" then
     local rec = rest ~= "" and ESAttendanceDB.records[rest] or ns.LatestRecord()
     if rec then ns.ShowText("export", rec.export) else ns.Print("žádný záznam docházky") end
+  elseif cmd == "debug" then
+    -- what the addon knows about a player: chars, guild realm names, online state, invite target
+    ns.RequestGuildRoster(); ns.ReadGuildRoster(); ns.ScanGroup()
+    local gn = 0
+    for _ in pairs(ns.guildChars) do gn = gn + 1 end
+    local on = 0
+    for _ in pairs(ns.guildOnline) do on = on + 1 end
+    ns.Print(("guilda: %s, členů načteno %d, online %d · skupina %d (raid: %s, leader: %s, assist: %s)"):format(
+      IsInGuild() and "ano" or "NE", gn, on, GetNumGroupMembers(), tostring(IsInRaid()),
+      tostring(UnitIsGroupLeader("player")), tostring(UnitIsGroupAssistant("player"))))
+    local want = rest:lower()
+    for idx, p in ipairs(ns.roster) do
+      if want == "" or p.name:lower() == want or ns.NormName(p.chars[1] or "") == want then
+        local parts = {}
+        for _, ch in ipairs(p.chars) do
+          local key = ns.NormName(ch)
+          parts[#parts + 1] = ch .. " → " .. (ns.guildOnline[key] and ("|cff3fd68a" .. ns.guildOnline[key] .. " online|r")
+            or ns.guildChars[key] and ("|cffaaaaaa" .. ns.guildChars[key] .. " offline|r") or "|cffff5555není v guildě|r")
+        end
+        local target, online, source = ns.InviteTargetFor(idx)
+        ns.Print(("%s: %s ⇒ pozvat %s (%s)%s"):format(p.name, table.concat(parts, ", "), tostring(target), source or "?",
+          ns.present[idx] and " – je ve skupině jako " .. ns.present[idx].char or ""))
+      end
+    end
   elseif cmd == "minimap" then
     ESAttendanceDB.minimapHidden = not ESAttendanceDB.minimapHidden
     ns.UpdateMinimapButton()
