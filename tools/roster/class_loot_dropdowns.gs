@@ -2544,6 +2544,13 @@ function simApi_(e) {
     if (!sh) return simApiJson_({ ok: false, error: "List „" + SIM_SHEET_NAME + "“ neexistuje." });
     var action = String(q.action || "");
     if (action === "queue") return simApiJson_({ ok: true, rows: simApiQueue_(sh) });
+    if (action === "notify_test") {
+      // runner (task discord-test) si vyzvedne testovací zprávu pro postavu a pošle ji botem
+      var ch = String(q.character || "").trim();
+      if (!ch) return simApiJson_({ ok: false, error: "chybí character" });
+      var t = notifySimDone_(ch, "", { test: true, viaRunner: true });
+      return simApiJson_({ ok: true, note: t.note, notify: t.pending, target: discordTargetFor_(ch) });
+    }
 
     var row = Number(q.row);
     if (!(row >= 2)) return simApiJson_({ ok: false, error: "chybí row" });
@@ -3100,7 +3107,19 @@ function storeVault_(character, items) {
 var DISCORD_SHEET_NAME = "Discord";
 var DISCORD_HEADER = ["Hráč", "Kanál URL", "Webhook URL", "Discord user ID"];
 var DISCORD_BOT_TOKEN_PROP = "DISCORD_BOT_TOKEN";
-var DISCORD_DEFAULT_WEBHOOK_PROP = "DISCORD_SIM_WEBHOOK";
+var DISCORD_DEFAULT_WEBHOOK_PROP = "DISCORD_SIM_WEBHOOK";   // společný kanál: webhook URL (posílá Apps Script přímo)
+var DISCORD_DEFAULT_CHANNEL_PROP = "DISCORD_SIM_CHANNEL";   // …nebo ID kanálu (posílá bot z runneru, Google je u Discordu blokovaný)
+
+/** Společný kanál pro hráče bez místnosti: { webhook } nebo { channelId } nebo null. Snese i ID kanálu omylem uložené jako webhook. */
+function discordFallback_(props) {
+  var wh = String(props.getProperty(DISCORD_DEFAULT_WEBHOOK_PROP) || "").trim();
+  var chId = String(props.getProperty(DISCORD_DEFAULT_CHANNEL_PROP) || "").trim();
+  var m = /channels\/\d+\/(\d+)/.exec(wh) || /^(\d{15,25})$/.exec(wh);
+  if (m) { chId = chId || m[1]; wh = ""; }
+  if (/^https?:\/\/.+\/api\/webhooks\//.test(wh)) return { webhook: wh };
+  if (/^\d{15,25}$/.test(chId)) return { channelId: chId };
+  return null;
+}
 var SIM_NOTIFY = true;                                             // false = žádné Discord zprávy
 var SIM_PAGE_URL = "https://vitekpoor.github.io/RaidPlan/loot.html";
 
@@ -3137,11 +3156,20 @@ function setDiscordSecrets() {
   if (t.getSelectedButton() !== ui.Button.OK) return;
   var tok = t.getResponseText().trim();
   if (tok === "-") props.deleteProperty(DISCORD_BOT_TOKEN_PROP); else if (tok) props.setProperty(DISCORD_BOT_TOKEN_PROP, tok);
-  var w = ui.prompt("Společný webhook", "Webhook společného kanálu pro hráče bez vlastní místnosti (nepovinné).\nPrázdné = nechat stávající, \"-\" = smazat.", ui.ButtonSet.OK_CANCEL);
+  var w = ui.prompt("Společný kanál", "Kanál pro hráče bez vlastní místnosti (nepovinné): webhook URL (https://discord.com/api/webhooks/…), nebo ID / odkaz kanálu – pak posílá bot přes GitHub runner.\nPrázdné = nechat stávající, \"-\" = smazat.", ui.ButtonSet.OK_CANCEL);
   if (w.getSelectedButton() !== ui.Button.OK) return;
   var wh = w.getResponseText().trim();
-  if (wh === "-") props.deleteProperty(DISCORD_DEFAULT_WEBHOOK_PROP); else if (wh) props.setProperty(DISCORD_DEFAULT_WEBHOOK_PROP, wh);
-  ui.alert("Uloženo. Bot token: " + (props.getProperty(DISCORD_BOT_TOKEN_PROP) ? "nastaven" : "–") + ", společný webhook: " + (props.getProperty(DISCORD_DEFAULT_WEBHOOK_PROP) ? "nastaven" : "–"));
+  if (wh === "-") { props.deleteProperty(DISCORD_DEFAULT_WEBHOOK_PROP); props.deleteProperty(DISCORD_DEFAULT_CHANNEL_PROP); }
+  else if (wh) {
+    var cm = /channels\/\d+\/(\d+)/.exec(wh) || /^(\d{15,25})$/.exec(wh);
+    if (cm) { props.setProperty(DISCORD_DEFAULT_CHANNEL_PROP, cm[1]); props.deleteProperty(DISCORD_DEFAULT_WEBHOOK_PROP); }
+    else if (/^https?:\/\/.+\/api\/webhooks\//.test(wh)) { props.setProperty(DISCORD_DEFAULT_WEBHOOK_PROP, wh); props.deleteProperty(DISCORD_DEFAULT_CHANNEL_PROP); }
+    else { ui.alert("„" + wh + "“ není ani webhook URL, ani ID/odkaz kanálu – nic se neuložilo."); return; }
+  }
+  var fb = discordFallback_(props);
+  ui.alert("Uloženo. Bot token: " + (props.getProperty(DISCORD_BOT_TOKEN_PROP) ? "nastaven" : "–") +
+    ", společný kanál: " + (fb ? (fb.webhook ? "webhook" : "kanál " + fb.channelId + " (bot přes runner)") : "–") +
+    "\n\nTyhle hodnoty jsou ve Script Properties (Nastavení projektu), ne v listu Discord – ten je jen pro místnosti jednotlivých hráčů.");
 }
 
 var DISCORD_GUILD_PROP = "DISCORD_GUILD_ID";
@@ -3260,10 +3288,19 @@ function testDiscordNotify() {
   var character = r.getResponseText().trim();
   if (!character) return;
   var target = discordTargetFor_(character);
+  var head = "Postava " + character + " → hráč " + (target && target.player ? target.player : "(nenalezen v Rosteru)") +
+    "\nCíl: " + (target && target.webhook ? "webhook místnosti" : target && target.channelId ? "kanál " + target.channelId + " (bot)" : "společný webhook / nic");
+  var fbTest = discordFallback_(PropertiesService.getScriptProperties());
+  var botPath = (target && target.channelId && !target.webhook) || (!(target && (target.webhook || target.channelId)) && fbTest && fbTest.channelId);
+  if (botPath) {
+    // bot API z Google nejde (Discord blokuje) → test pošle runner v GitHub Actions
+    var g = triggerSimRunner_("discord-test:" + character, { task: "discord-test", character: character });
+    ui.alert(head + "\n\n" + (g.ok ? "Testovací zprávu pošle bot přes GitHub Actions (task discord-test) – za 1–2 minuty se objeví v místnosti. Průběh: GitHub → Actions → Sim queue."
+                                 : "GitHub Actions se nespustil: " + g.message));
+    return;
+  }
   var res = notifySimDone_(character, "", { test: true });
-  ui.alert("Postava " + character + " → hráč " + (target && target.player ? target.player : "(nenalezen v Rosteru)") +
-    "\nCíl: " + (target && target.webhook ? "webhook místnosti" : target && target.channelId ? "kanál " + target.channelId + " (bot)" : "společný webhook / nic") +
-    "\nVýsledek: " + (res || "nikam se neposlalo – chybí webhook / token / společný webhook"));
+  ui.alert(head + "\nVýsledek: " + (res.note || "nikam se neposlalo – chybí webhook místnosti / společný webhook (bot z Google nejde)"));
 }
 
 /** { nkey(hráč): { player, channelUrl, channelId, webhook, userId } } z listu Discord. */
@@ -3365,7 +3402,7 @@ function notifySimDone_(character, spec, opts) {
   try {
     var room = discordTargetFor_(character);
     var props = PropertiesService.getScriptProperties();
-    var token = props.getProperty(DISCORD_BOT_TOKEN_PROP), fallback = props.getProperty(DISCORD_DEFAULT_WEBHOOK_PROP);
+    var token = props.getProperty(DISCORD_BOT_TOKEN_PROP), fallback = discordFallback_(props);
     var text = simDoneMessage_(character, spec, room, opts);
     if (room && room.webhook) { discordPostWebhook_(room.webhook, text, room.userId); return { note: "Discord ✔ " + room.player, pending: null }; }
     if (room && room.channelId) {
@@ -3378,7 +3415,15 @@ function notifySimDone_(character, spec, opts) {
         }
       }
     }
-    if (fallback) { discordPostWebhook_(fallback, text, room && room.userId); return { note: "Discord ✔ společný kanál", pending: null }; }
+    if (fallback && fallback.webhook) { discordPostWebhook_(fallback.webhook, text, room && room.userId); return { note: "Discord ✔ společný kanál", pending: null }; }
+    if (fallback && fallback.channelId) {
+      var fbPlayer = (room && room.player) || character;
+      if (opts.viaRunner) return { note: DISCORD_PENDING_NOTE + " (společný kanál)", pending: { channelId: fallback.channelId, userId: (room && room.userId) || "", text: text, player: fbPlayer + " → společný kanál" } };
+      if (token) {
+        try { discordPostBot_(token, fallback.channelId, text, room && room.userId); return { note: "Discord ✔ společný kanál (bot)", pending: null }; }
+        catch (err) { throw new Error("Discord blokuje bot API z Google (40333) – společný kanál pošle sim_runner při dalším běhu, nebo použij webhook"); }
+      }
+    }
     return { note: "", pending: null };
   } catch (err) {
     return { note: "Discord ✖ " + String(err && err.message || err).slice(0, 160), pending: null };

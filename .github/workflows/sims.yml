@@ -31,10 +31,14 @@ on:
         type: string
         default: ""
       task:
-        description: "sims = zpracovat frontu, discord-rooms = načíst místnosti hráčů z Discordu do listu Discord"
+        description: "sims = zpracovat frontu, discord-rooms = načíst místnosti hráčů do listu Discord, discord-test = testovací zpráva do místnosti"
         type: choice
-        options: [sims, discord-rooms]
+        options: [sims, discord-rooms, discord-test]
         default: sims
+      character:
+        description: "(discord-test) postava, pro kterou poslat testovací zprávu"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -68,20 +72,27 @@ jobs:
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
         run: python tools/roster/sim_runner.py discord-rooms
 
+      - name: Discord test message
+        if: inputs.task == 'discord-test'
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_TEST_CHARACTER: ${{ inputs.character }}
+        run: python tools/roster/sim_runner.py discord-test
+
       # Levná kontrola fronty před instalací Chromia (ušetří ~1 min při prázdné frontě)
       - name: Check queue
         id: queue
-        if: inputs.task != 'discord-rooms'
+        if: inputs.task != 'discord-rooms' && inputs.task != 'discord-test'
         run: python tools/roster/sim_runner.py pending
 
       - name: Install Playwright + Chromium
-        if: inputs.task != 'discord-rooms' && steps.queue.outputs.count != '0'
+        if: inputs.task != 'discord-rooms' && inputs.task != 'discord-test' && steps.queue.outputs.count != '0'
         run: |
           pip install playwright
           python -m playwright install --with-deps chromium
 
       - name: Restore Raidbots login
-        if: inputs.task != 'discord-rooms' && steps.queue.outputs.count != '0'
+        if: inputs.task != 'discord-rooms' && inputs.task != 'discord-test' && steps.queue.outputs.count != '0'
         env:
           RAIDBOTS_STORAGE_STATE: ${{ secrets.RAIDBOTS_STORAGE_STATE }}
           RAIDBOTS_EMAIL: ${{ secrets.RAIDBOTS_EMAIL }}
@@ -99,7 +110,7 @@ jobs:
           fi
 
       - name: Run sims
-        if: inputs.task != 'discord-rooms' && steps.queue.outputs.count != '0'
+        if: inputs.task != 'discord-rooms' && inputs.task != 'discord-test' && steps.queue.outputs.count != '0'
         env:
           SIM_PARALLEL: ${{ inputs.parallel }}
           RAIDBOTS_EMAIL: ${{ secrets.RAIDBOTS_EMAIL }}
@@ -108,7 +119,7 @@ jobs:
         run: python tools/roster/sim_runner.py --headless
 
       - name: Upload debug screenshots
-        if: always() && inputs.task != 'discord-rooms' && steps.queue.outputs.count != '0'
+        if: always() && inputs.task != 'discord-rooms' && inputs.task != 'discord-test' && steps.queue.outputs.count != '0'
         uses: actions/upload-artifact@v4
         with:
           name: sim-runner-logs

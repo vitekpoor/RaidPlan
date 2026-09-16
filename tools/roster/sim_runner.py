@@ -49,6 +49,7 @@ Použití (v tools/roster/):
   python sim_runner.py login --export   # …a navíc uloží přihlášení do raidbots_state.json (secret pro GitHub Actions)
   python sim_runner.py pending      # jen vypíše, kolik řádků čeká
   python sim_runner.py discord-rooms  # bot vypíše místnosti hráčů (kategorie "Players") a pošle je do listu "Discord"
+  python sim_runner.py discord-test --character Akka   # testovací zpráva do místnosti hráče (bot)
   python sim_runner.py              # zpracuje frontu
 
 Online (bez PC): .github/workflows/sims.yml spouští tenhle skript v GitHub Actions
@@ -1101,6 +1102,21 @@ def cmd_discord_rooms(cfg):
     print(res.get("message") or res)
 
 
+def cmd_discord_test(cfg, character):
+    """Testovací Discord zpráva pro postavu: Apps Script ji připraví (notify_test), bot z runneru pošle."""
+    if not character:
+        sys.exit("chybí --character (nebo env DISCORD_TEST_CHARACTER)")
+    api = SheetApi(cfg)
+    res = api.call("notify_test", character=character)
+    n = res.get("notify")
+    tgt = res.get("target") or {}
+    log(f"{character} → hráč {tgt.get('player') or '?'}; " + (res.get("note") or ""))
+    if not n or not n.get("channelId"):
+        sys.exit("Apps Script nevrátil zprávu pro bota – hráč nemá v listu Discord Kanál URL (nebo má webhook, pak se poslalo přímo).")
+    discord_post(n["channelId"], n.get("text") or f"Test: {character}", n.get("userId") or "")
+    log(f"Testovací zpráva poslána do místnosti {n.get('player') or n['channelId']}.")
+
+
 def cmd_pending(cfg):
     """Jen spočítá frontu (GitHub Actions: přeskočí instalaci Chromia, když není co dělat)."""
     api = SheetApi(cfg)
@@ -1389,7 +1405,8 @@ def cmd_run(cfg, args):
 
 def main():
     ap = argparse.ArgumentParser(description="Raidbots Droptimizer runner pro Sim frontu")
-    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "login", "pending", "discord-rooms"])
+    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "login", "pending", "discord-rooms", "discord-test"])
+    ap.add_argument("--character", help="(discord-test) postava, pro kterou poslat testovací Discord zprávu")
     ap.add_argument("--parallel", type=int, help="kolik simů najednou, každý ve vlastním panelu (výchozí z configu, 10)")
     ap.add_argument("--storage-state", metavar="FILE", help="JSON s přihlášením Raidbots z `login --export` (jinak env SIM_STORAGE_STATE / trvalý profil)")
     ap.add_argument("--export", nargs="?", const=str(HERE / "raidbots_state.json"), metavar="FILE",
@@ -1418,6 +1435,8 @@ def main():
         cmd_pending(cfg)
     elif args.command == "discord-rooms":
         cmd_discord_rooms(cfg)
+    elif args.command == "discord-test":
+        cmd_discord_test(cfg, (args.character or os.environ.get("DISCORD_TEST_CHARACTER", "")).strip())
     else:
         cmd_run(cfg, args)
 
