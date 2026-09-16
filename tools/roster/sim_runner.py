@@ -48,6 +48,7 @@ Použití (v tools/roster/):
   python sim_runner.py login        # otevře prohlížeč, přihlas se do Raidbots, pak Enter
   python sim_runner.py login --export   # …a navíc uloží přihlášení do raidbots_state.json (secret pro GitHub Actions)
   python sim_runner.py pending      # jen vypíše, kolik řádků čeká
+  python sim_runner.py discord-rooms  # bot vypíše místnosti hráčů (kategorie "Players") a pošle je do listu "Discord"
   python sim_runner.py              # zpracuje frontu
 
 Online (bez PC): .github/workflows/sims.yml spouští tenhle skript v GitHub Actions
@@ -58,6 +59,9 @@ druhý, dungeonový Droptimizer), SIM_TOPGEAR=0 (vypne Top Gear), SIM_RAIDHC=0 (
 HC raid Droptimizer u postav s vaultem). Místo (nebo vedle)
 uložené session jde použít RAIDBOTS_EMAIL + RAIDBOTS_PASSWORD – když skript zjistí,
 že není přihlášený, přihlásí se e-mailem a heslem na https://www.raidbots.com/auth.
+Discord: DISCORD_BOT_TOKEN (+ DISCORD_GUILD_ID pro discord-rooms). Discord blokuje bot API
+z Google serverů, proto zprávy do místností hráčů posílá runner: když Apps Script u `done`
+vrátí `notify` (kanál, zmínka, text), runner ji pošle a nahlásí action=notified.
   python sim_runner.py --parallel 3 # max 3 simy najednou (výchozí 10)
   python sim_runner.py --no-mplus   # jen raidový Droptimizer (bez Mythic+ dungeonů)
   python sim_runner.py --no-topgear # bez třetího simu (Top Gear z nejlepších itemů)
@@ -434,6 +438,24 @@ class SheetApi:
 
     def error(self, row, character, note):
         return self.call("error", row=row, character=character, note=note[:500])
+
+    def notified(self, row, character, result):
+        """Výsledek Discord zprávy poslané runnerem (nahradí „⏳“ v poznámce řádku)."""
+        return self.call("notified", row=row, character=character, result=result[:160])
+
+    def post(self, action, **body):
+        """POST JSON na web app (doPost, p=simapi) – pro větší data (seznam Discord kanálů)."""
+        body.update({"p": "simapi", "token": self.token, "action": action})
+        r = requests.post(self.url, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "text/plain;charset=utf-8"},
+                          timeout=120, allow_redirects=True)
+        r.raise_for_status()
+        try:
+            data = r.json()
+        except ValueError:
+            raise RuntimeError(f"Web app nevrátil JSON (HTTP {r.status_code}): {r.text[:200]}")
+        if not data.get("ok"):
+            raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
+        return data
 
     def note(self, row, character, note):
         return self.call("note", row=row, character=character, note=note[:500])
@@ -1001,6 +1023,63 @@ def cmd_login(cfg, export=None):
         rb.close()
 
 
+# ---------- Discord (bot API – z GitHubu, Google servery Discord blokuje) ----------
+DISCORD_API = "https://discord.com/api/v10"
+
+
+def discord_headers():
+    token = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("chybí env DISCORD_BOT_TOKEN")
+    return {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
+
+
+def discord_post(channel_id, text, user_id=""):
+    payload = {"content": text, "allowed_mentions": {"users": [user_id] if user_id else []}}
+    r = requests.post(f"{DISCORD_API}/channels/{channel_id}/messages", headers=discord_headers(),
+                      data=json.dumps(payload).encode("utf-8"), timeout=60)
+    if r.status_code >= 300:
+        raise RuntimeError(f"Discord HTTP {r.status_code}: {r.text[:160]}")
+
+
+def handle_notify(api, row, res):
+    """Apps Script u `done` vrátí notify={channelId,userId,text,player}, když má zprávu poslat bot z runneru."""
+    n = res.get("notify") if isinstance(res, dict) else None
+    if not n or not n.get("channelId"):
+        return
+    character = row["character"]
+    try:
+        discord_post(n["channelId"], n.get("text") or f"Simy pro {character} jsou hotové.", n.get("userId") or "")
+        result = f"Discord ✔ {n.get('player') or ''} (bot)".strip()
+        log(f"   {character}: Discord zpráva poslána do místnosti {n.get('player') or n['channelId']}")
+    except Exception as err:  # noqa: BLE001
+        result = f"Discord ✖ {str(err)[:120]}"
+        log(f"   ⚠ {character}: Discord zpráva selhala: {err}")
+    try:
+        api.notified(row["row"], character, result)
+    except Exception as err:  # noqa: BLE001
+        log(f"   (výsledek Discord zprávy se nezapsal: {err})")
+
+
+def cmd_discord_rooms(cfg):
+    """Bot vypíše kanály serveru a pošle je Apps Scriptu, který naplní list "Discord" (místnosti hráčů)."""
+    guild = os.environ.get("DISCORD_GUILD_ID", "").strip()
+    if not guild:
+        sys.exit("chybí env DISCORD_GUILD_ID (ID Discord serveru)")
+    h = discord_headers()
+    me = requests.get(f"{DISCORD_API}/users/@me", headers=h, timeout=60)
+    me.raise_for_status()
+    ch = requests.get(f"{DISCORD_API}/guilds/{guild}/channels", headers=h, timeout=60)
+    if ch.status_code >= 300:
+        sys.exit(f"Discord HTTP {ch.status_code}: {ch.text[:200]} – je bot pozvaný na server {guild}?")
+    channels = ch.json()
+    slim = [{k: c.get(k) for k in ("id", "name", "type", "parent_id", "permission_overwrites")} for c in channels]
+    log(f"Discord: {len(slim)} kanálů na serveru {guild}, bot {me.json().get('username')}")
+    api = SheetApi(cfg)
+    res = api.post("rooms", guild=guild, me=me.json().get("id", ""), channels=slim)
+    print(res.get("message") or res)
+
+
 def cmd_pending(cfg):
     """Jen spočítá frontu (GitHub Actions: přeskočí instalaci Chromia, když není co dělat)."""
     api = SheetApi(cfg)
@@ -1099,6 +1178,7 @@ def submit_topgear(rb, api, row, reports, dry_run):
         try:
             api.note(row["row"], character, "Top Gear: žádný kandidát (nic není upgrade)")
             res = api.done(row["row"], character, "", "topgear-skip")
+            handle_notify(api, row, res)
             log(f"   {tag}: {res.get('message') or res}")
         except Exception as err:  # noqa: BLE001
             log(f"   (poznámka se nezapsala: {err})")
@@ -1141,6 +1221,7 @@ def finish_sim(rb, api, sim):
         res = api.done(row["row"], character, sim["url"], sim["kind"])
         log(f"   {tag}: {res.get('message') or res}")
         ok = bool(res.get("ok"))
+        handle_notify(api, row, res)
     except Exception as err:  # noqa: BLE001
         log(f"   ⚠ {character}: upload selhal: {err}")
         ok = False
@@ -1287,7 +1368,7 @@ def cmd_run(cfg, args):
 
 def main():
     ap = argparse.ArgumentParser(description="Raidbots Droptimizer runner pro Sim frontu")
-    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "login", "pending"])
+    ap.add_argument("command", nargs="?", default="run", choices=["run", "setup", "login", "pending", "discord-rooms"])
     ap.add_argument("--parallel", type=int, help="kolik simů najednou, každý ve vlastním panelu (výchozí z configu, 10)")
     ap.add_argument("--storage-state", metavar="FILE", help="JSON s přihlášením Raidbots z `login --export` (jinak env SIM_STORAGE_STATE / trvalý profil)")
     ap.add_argument("--export", nargs="?", const=str(HERE / "raidbots_state.json"), metavar="FILE",
@@ -1314,6 +1395,8 @@ def main():
         cmd_login(cfg, args.export)
     elif args.command == "pending":
         cmd_pending(cfg)
+    elif args.command == "discord-rooms":
+        cmd_discord_rooms(cfg)
     else:
         cmd_run(cfg, args)
 

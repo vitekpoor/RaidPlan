@@ -2154,16 +2154,18 @@ function uploadSimReport_(sh, row, reportUrl, kind, opts) {
   var ok = stored.ok || wa.ok;
   if (ok && !complete) note += " | čeká na " + missing + " sim";
   // Discord: jen když se řádek právě teď stal kompletním (ne při přepočtu hotových řádků)
+  var pendingNotify = null;
   if (ok && complete && !wasComplete && opts.notify !== false) {
-    var dn = notifySimDone_(character, spec);
-    if (dn) note += " | " + dn;
+    var dn = notifySimDone_(character, spec, { viaRunner: !!opts.viaRunner });
+    if (dn.note) note += " | " + dn.note;
+    pendingNotify = dn.pending;
   }
   setSimStatus_(sh, row, !ok ? SIM_STATUS.error : (complete ? SIM_STATUS.done : SIM_STATUS.running), note);
   var msg = ok
     ? "✅ " + character + " [" + SIM_KIND_LABEL[kind] + "]: " + (stored.ok ? stored.message + " ve výsledcích" : "výsledky se nenačetly") +
       (wa.skipped ? "" : (wa.ok ? ", wowaudit OK" : ", wowaudit odmítl")) + (complete ? "" : " – čeká se ještě na " + missing + " sim")
     : "⚠ " + character + " [" + SIM_KIND_LABEL[kind] + "]: " + stored.message + (wa.skipped ? "" : "; wowaudit: " + wa.message);
-  return { ok: ok, message: msg, complete: complete };
+  return { ok: ok, message: msg, complete: complete, notify: pendingNotify };
 }
 
 /** Které simy řádku ještě chybí ("M+", "M+ a Top Gear", …); "" = kompletní. */
@@ -2502,6 +2504,10 @@ $("send").addEventListener("click", function () {\
  *                                                        řádek je ✅, až když má raidový, M+ a Top Gear report, u vaultu i HC raid (QE = vše)
  *   ?p=simapi&token=…&action=error&row=N&character=…&note=…    → stav ⚠ + poznámka
  *   ?p=simapi&token=…&action=note&row=N&character=…&note=…     → jen poznámka (stav se nemění)
+ *   ?p=simapi&token=…&action=notified&row=N&character=…&result=… → výsledek Discord zprávy poslané runnerem (do poznámky)
+ *   POST {p:"simapi", token, action:"rooms", guild, me, channels:[…Discord API /guilds/{id}/channels…]}
+ *                                                        → naplní list "Discord" (místnosti hráčů; Discord blokuje bot API z Google)
+ * `done` vrací i `notify: {channelId, userId, text}` když má runner poslat Discord zprávu přes bota.
  * `character` slouží jako kontrola, že se řádky mezitím neposunuly.
  */
 
@@ -2561,18 +2567,26 @@ function simApi_(e) {
         sh.getRange(row, SIM_COL.reportTopgear).setValue(SIM_TOPGEAR_SKIP);
         var doneNow = simRowComplete_(sh, row);
         var skipNote = mergeSimNote_(vals[SIM_COL.note - 1], "topgear", "Top Gear přeskočen: nic není upgrade");
+        var pending2 = null;
         if (doneNow && String(vals[SIM_COL.status - 1] || "").indexOf("✅") !== 0) {
-          var dn2 = notifySimDone_(character, String(vals[SIM_COL.spec - 1] || ""));
-          if (dn2) skipNote += " | " + dn2;
+          var dn2 = notifySimDone_(character, String(vals[SIM_COL.spec - 1] || ""), { viaRunner: true });
+          if (dn2.note) skipNote += " | " + dn2.note;
+          pending2 = dn2.pending;
         }
         setSimStatus_(sh, row, doneNow ? SIM_STATUS.done : SIM_STATUS.running, skipNote);
-        return simApiJson_({ ok: true, message: "Top Gear přeskočen", complete: doneNow });
+        return simApiJson_({ ok: true, message: "Top Gear přeskočen", complete: doneNow, notify: pending2 });
       }
       if (action === "done") {
-        var r = uploadSimReport_(sh, row, String(q.url || ""), kind);
-        return simApiJson_({ ok: r.ok, message: r.message, complete: r.complete });
+        var r = uploadSimReport_(sh, row, String(q.url || ""), kind, { viaRunner: true });
+        return simApiJson_({ ok: r.ok, message: r.message, complete: r.complete, notify: r.notify || null });
       }
       if (action === "error") { setSimStatus_(sh, row, SIM_STATUS.error, String(q.note || "sim_runner: chyba")); return simApiJson_({ ok: true }); }
+      if (action === "notified") {
+        // runner poslal (nebo nedokázal poslat) Discord zprávu – nahradit "⏳" v poznámce výsledkem
+        var cur = String(sh.getRange(row, SIM_COL.note).getValue() || ""), resTxt = String(q.result || "Discord ✔ (bot)").slice(0, 160);
+        sh.getRange(row, SIM_COL.note).setValue(cur.indexOf(DISCORD_PENDING_NOTE) >= 0 ? cur.replace(DISCORD_PENDING_NOTE, resTxt) : (cur ? cur + " | " : "") + resTxt);
+        return simApiJson_({ ok: true });
+      }
       if (action === "note") { sh.getRange(row, SIM_COL.note).setValue(String(q.note || "")); return simApiJson_({ ok: true }); }
       return simApiJson_({ ok: false, error: "neznámá action " + action });
     } finally { lock.releaseLock(); }
@@ -3142,43 +3156,28 @@ function discordGet_(token, path) {
 }
 
 /**
- * Menu: bot vypíše kanály serveru, vezme textové kanály v kategorii "Players" (místnosti hráčů) a do listu
- * "Discord" doplní Kanál URL + Discord user ID hráče (z oprávnění místnosti: jediný člen s View Channel,
- * který není bot). Jméno místnosti se páruje se jménem hráče z Rosteru (bez diakritiky, "akka" ~ "Akka",
- * "mistnost-akka" ~ "Akka"). Existující ručně vyplněné hodnoty (webhook) zůstávají.
+ * Zapíše místnosti hráčů do listu "Discord": textové kanály v kategorii DISCORD_PLAYERS_CATEGORY (výchozí
+ * "Players"), jméno místnosti se páruje se jménem hráče z Rosteru (bez diakritiky, "akka" ~ "Akka",
+ * "mistnost-akka" ~ "Akka"); Discord user ID = jediný člen (type 1) s View Channel, který není bot.
+ * channels = odpověď Discord API GET /guilds/{id}/channels (z Apps Scriptu nebo od sim_runneru).
+ * Ručně vyplněné hodnoty (webhook, existující user ID) zůstávají. Vrací { category, matched, unmatched, noRoom }.
  */
-function syncDiscordRooms() {
-  var ui = SpreadsheetApp.getUi(), props = PropertiesService.getScriptProperties();
-  var token = props.getProperty(DISCORD_BOT_TOKEN_PROP);
-  if (!token) { ui.alert("Nejdřív nastav bot token (menu Simy → Nastavit Discord bot token…)."); return; }
-  var guild = props.getProperty(DISCORD_GUILD_PROP);
-  if (!guild) {
-    var g = ui.prompt("ID Discord serveru", "Discord → pravý klik na název serveru → Copy Server ID (zapnutý Developer Mode).", ui.ButtonSet.OK_CANCEL);
-    if (g.getSelectedButton() !== ui.Button.OK) return;
-    guild = g.getResponseText().replace(/\D/g, "");
-    if (!guild) return;
-    props.setProperty(DISCORD_GUILD_PROP, guild);
-  }
-  var catName = props.getProperty(DISCORD_CATEGORY_PROP) || "Players";
-  var channels;
-  try { channels = discordGet_(token, "/guilds/" + guild + "/channels"); }
-  catch (err) { ui.alert("Nepodařilo se načíst kanály: " + err.message + "\nJe bot pozvaný na server? Je správné ID serveru (Script Property " + DISCORD_GUILD_PROP + ")?"); return; }
-  var me = null;
-  try { me = discordGet_(token, "/users/@me"); } catch (err) { /* jen kvůli vyloučení bota z oprávnění */ }
-  var cats = channels.filter(function (c) { return c.type === 4 && simNameKey_(c.name) === simNameKey_(catName); });
+function applyDiscordRooms_(guild, channels, meId) {
+  var catName = PropertiesService.getScriptProperties().getProperty(DISCORD_CATEGORY_PROP) || "Players";
+  var cats = channels.filter(function (c) { return c && c.type === 4 && simNameKey_(c.name) === simNameKey_(catName); });
   if (!cats.length) {
-    ui.alert("Kategorie „" + catName + "“ na serveru není. Kategorie: " + channels.filter(function (c) { return c.type === 4; }).map(function (c) { return c.name; }).join(", ") +
-      "\n(název lze změnit ve Script Property " + DISCORD_CATEGORY_PROP + ")");
-    return;
+    throw new Error("Kategorie „" + catName + "“ na serveru není. Kategorie: " +
+      channels.filter(function (c) { return c && c.type === 4; }).map(function (c) { return c.name; }).join(", ") +
+      " (název lze změnit ve Script Property " + DISCORD_CATEGORY_PROP + ")");
   }
   var catIds = {}; cats.forEach(function (c) { catIds[c.id] = 1; });
-  var rooms = channels.filter(function (c) { return (c.type === 0 || c.type === 5) && catIds[c.parent_id]; });
+  var rooms = channels.filter(function (c) { return c && (c.type === 0 || c.type === 5) && catIds[c.parent_id]; });
   var roster = getRoster_() || [];
   var sh = discordSheet_();
   var last = sh.getLastRow();
   var rowsByPlayer = {};
   if (last >= 2) sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (v, i) { if (String(v[0]).trim()) rowsByPlayer[simNameKey_(v[0])] = i + 2; });
-  var matched = [], unmatched = [];
+  var matched = [], unmatched = [], matchedPlayers = {};
   rooms.forEach(function (ch) {
     var tokens = String(ch.name || "").toLowerCase().split(/[^a-z0-9á-žÁ-Ž]+/).filter(Boolean).map(simNameKey_);
     var chKey = simNameKey_(ch.name);
@@ -3189,22 +3188,61 @@ function syncDiscordRooms() {
       if (pk && (chKey === pk || tokens.indexOf(pk) >= 0)) player = r.player;
     });
     if (!player) { unmatched.push("#" + ch.name); return; }
-    // hráč = jediný člen (type 1) s povoleným View Channel, který není bot
     var members = (ch.permission_overwrites || []).filter(function (o) {
-      return Number(o.type) === 1 && (!me || o.id !== me.id) && (Number(o.allow) & DISCORD_VIEW_CHANNEL) !== 0;
+      return Number(o.type) === 1 && (!meId || String(o.id) !== String(meId)) && (Number(o.allow) & DISCORD_VIEW_CHANNEL) !== 0;
     });
-    var userId = members.length === 1 ? members[0].id : "";
+    var userId = members.length === 1 ? String(members[0].id) : "";
     var url = "https://discord.com/channels/" + guild + "/" + ch.id;
     var row = rowsByPlayer[simNameKey_(player)];
     if (!row) { row = sh.getLastRow() + 1; sh.getRange(row, 1).setValue(player); rowsByPlayer[simNameKey_(player)] = row; }
     sh.getRange(row, 2).setValue(url);
     if (userId && !String(sh.getRange(row, 4).getValue() || "").trim()) sh.getRange(row, 4).setValue(userId);
+    matchedPlayers[simNameKey_(player)] = 1;
     matched.push(player + " ← #" + ch.name + (userId ? "" : " (user ID nenalezeno)"));
   });
-  var noRoom = roster.filter(function (r) { return !matched.some(function (m) { return m.indexOf(r.player + " ←") === 0; }); }).map(function (r) { return r.player; });
-  ui.alert("Načteno " + matched.length + " místností z kategorie „" + catName + "“.\n\n" + matched.join("\n") +
-    (unmatched.length ? "\n\nNespárované místnosti (jméno neodpovídá hráči v Rosteru): " + unmatched.join(", ") : "") +
-    (noRoom.length ? "\n\nHráči bez místnosti: " + noRoom.join(", ") : ""));
+  var noRoom = roster.filter(function (r) { return !matchedPlayers[simNameKey_(r.player)]; }).map(function (r) { return r.player; });
+  return { category: catName, matched: matched, unmatched: unmatched, noRoom: noRoom };
+}
+
+function discordRoomsSummary_(sm) {
+  return "Načteno " + sm.matched.length + " místností z kategorie „" + sm.category + "“.\n\n" + sm.matched.join("\n") +
+    (sm.unmatched.length ? "\n\nNespárované místnosti (jméno neodpovídá hráči v Rosteru): " + sm.unmatched.join(", ") : "") +
+    (sm.noRoom.length ? "\n\nHráči bez místnosti: " + sm.noRoom.join(", ") : "");
+}
+
+/**
+ * Menu: načíst místnosti hráčů z Discordu. Bot API z Google serverů Discord blokuje (HTTP 403 code 40333),
+ * takže když přímé volání selže, spustí se GitHub Actions s task=discord-rooms – sim_runner.py tam kanály
+ * stáhne a pošle je sem (POST simapi action=rooms). Bot token pro runner = secret DISCORD_BOT_TOKEN,
+ * ID serveru = secret DISCORD_GUILD_ID (nebo Script Property DISCORD_GUILD_ID, runner si ho vezme z queue? ne – secret).
+ */
+function syncDiscordRooms() {
+  var ui = SpreadsheetApp.getUi(), props = PropertiesService.getScriptProperties();
+  var guild = props.getProperty(DISCORD_GUILD_PROP);
+  if (!guild) {
+    var g = ui.prompt("ID Discord serveru", "Discord → pravý klik na název serveru → Copy Server ID (zapnutý Developer Mode).", ui.ButtonSet.OK_CANCEL);
+    if (g.getSelectedButton() !== ui.Button.OK) return;
+    guild = g.getResponseText().replace(/\D/g, "");
+    if (!guild) return;
+    props.setProperty(DISCORD_GUILD_PROP, guild);
+  }
+  var token = props.getProperty(DISCORD_BOT_TOKEN_PROP);
+  var directErr = "";
+  if (token) {
+    try {
+      var channels = discordGet_(token, "/guilds/" + guild + "/channels");
+      var me = null;
+      try { me = discordGet_(token, "/users/@me"); } catch (err) { /* jen kvůli vyloučení bota */ }
+      ui.alert(discordRoomsSummary_(applyDiscordRooms_(guild, channels, me ? me.id : "")));
+      return;
+    } catch (err) { directErr = String(err && err.message || err); }
+  }
+  // přímé volání nejde (Google IP jsou u Discordu blokované) → přes GitHub Actions
+  var r = triggerSimRunner_("discord-rooms", { task: "discord-rooms" });
+  ui.alert((directErr ? "Přímo z Google to nejde (" + directErr.slice(0, 120) + ").\n\n" : "") +
+    (r.ok ? "Spustil jsem načtení místností přes GitHub Actions (sim_runner.py discord-rooms). Za 1–2 minuty se list „" + DISCORD_SHEET_NAME + "“ doplní – zkontroluj ho.\n" +
+            "Potřebné GitHub secrets: DISCORD_BOT_TOKEN (token bota) a DISCORD_GUILD_ID = " + guild + "."
+          : "GitHub Actions se nespustil: " + r.message));
 }
 
 /** Pošle testovací zprávu pro zadanou postavu (stejná cesta jako po dokončení simů). */
@@ -3304,23 +3342,39 @@ function discordPostBot_(token, channelId, text, userId) {
   if (code < 200 || code >= 300) throw new Error("bot HTTP " + code + " " + resp.getContentText().slice(0, 120));
 }
 
+var DISCORD_PENDING_NOTE = "Discord ⏳ bot přes runner";
+
 /**
- * Pošle zprávu o dokončených simech postavy do místnosti hráče. Vrací text do poznámky
- * ("Discord ✔ #místnost" / "Discord ✖ důvod") nebo "" když není kam posílat. Nikdy nehází.
+ * Pošle zprávu o dokončených simech postavy do místnosti hráče. Vrací { note, pending }:
+ * note = text do poznámky ("Discord ✔ hráč" / "Discord ✖ důvod" / "" když není kam posílat),
+ * pending = { channelId, userId, text, player } když má zprávu poslat sim_runner (bot API):
+ * Discord blokuje volání bot API z Google serverů (HTTP 403, code 40333 "internal network error"),
+ * webhooky fungují. S opts.viaRunner (simapi) se tedy bot zpráva jen připraví a runner ji pošle
+ * z GitHub Actions (env DISCORD_BOT_TOKEN) a nahlásí action=notified. Nikdy nehází.
  */
 function notifySimDone_(character, spec, opts) {
-  if (!SIM_NOTIFY) return "";
+  opts = opts || {};
+  if (!SIM_NOTIFY) return { note: "", pending: null };
   try {
     var room = discordTargetFor_(character);
     var props = PropertiesService.getScriptProperties();
     var token = props.getProperty(DISCORD_BOT_TOKEN_PROP), fallback = props.getProperty(DISCORD_DEFAULT_WEBHOOK_PROP);
     var text = simDoneMessage_(character, spec, room, opts);
-    if (room && room.webhook) { discordPostWebhook_(room.webhook, text, room.userId); return "Discord ✔ " + room.player; }
-    if (room && room.channelId && token) { discordPostBot_(token, room.channelId, text, room.userId); return "Discord ✔ " + room.player + " (bot)"; }
-    if (fallback) { discordPostWebhook_(fallback, text, room && room.userId); return "Discord ✔ společný kanál"; }
-    return "";
+    if (room && room.webhook) { discordPostWebhook_(room.webhook, text, room.userId); return { note: "Discord ✔ " + room.player, pending: null }; }
+    if (room && room.channelId) {
+      if (opts.viaRunner) return { note: DISCORD_PENDING_NOTE, pending: { channelId: room.channelId, userId: room.userId || "", text: text, player: room.player } };
+      if (token) {
+        try { discordPostBot_(token, room.channelId, text, room.userId); return { note: "Discord ✔ " + room.player + " (bot)", pending: null }; }
+        catch (err) {
+          if (/40333|403/.test(String(err && err.message))) throw new Error("Discord blokuje bot API z Google (40333) – doplň do listu Discord webhook místnosti, nebo nech zprávu poslat sim_runner");
+          throw err;
+        }
+      }
+    }
+    if (fallback) { discordPostWebhook_(fallback, text, room && room.userId); return { note: "Discord ✔ společný kanál", pending: null }; }
+    return { note: "", pending: null };
   } catch (err) {
-    return "Discord ✖ " + String(err && err.message || err).slice(0, 150);
+    return { note: "Discord ✖ " + String(err && err.message || err).slice(0, 160), pending: null };
   }
 }
 
@@ -3443,13 +3497,15 @@ function setSimRunPassword() {
 }
 
 /** workflow_dispatch přes GitHub API. Vrací { ok, message }. */
-function triggerSimRunner_(reason) {
+function triggerSimRunner_(reason, extraInputs) {
   var token = PropertiesService.getScriptProperties().getProperty(GITHUB_TOKEN_PROP);
   if (!token) return { ok: false, message: "chybí GitHub token (menu Simy → Nastavit GitHub token…)" };
+  var inputs = { reason: String(reason || "manual").slice(0, 80) };
+  Object.keys(extraInputs || {}).forEach(function (k) { inputs[k] = String(extraInputs[k]); });
   var resp = UrlFetchApp.fetch("https://api.github.com/repos/" + GITHUB_REPO + "/actions/workflows/" + GITHUB_WORKFLOW + "/dispatches", {
     method: "post", contentType: "application/json", muteHttpExceptions: true,
     headers: { "Authorization": "Bearer " + token, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
-    payload: JSON.stringify({ ref: GITHUB_BRANCH, inputs: { reason: String(reason || "manual").slice(0, 80) } })
+    payload: JSON.stringify({ ref: GITHUB_BRANCH, inputs: inputs })
   });
   var code = resp.getResponseCode();
   if (code === 204) return { ok: true, message: "GitHub Actions spuštěn – simy doběhnou za pár minut, výsledky se objeví na stránce Simy." };
@@ -3508,6 +3564,17 @@ function doPost(e) {
   try { body = JSON.parse((e && e.postData && e.postData.contents) || "{}"); } catch (err) { body = {}; }
   var params = (e && e.parameter) || {};
   var p = String(body.p || params.p || "");
+  if (p === "simapi") {
+    var tok = PropertiesService.getScriptProperties().getProperty(SIM_API_TOKEN_PROP);
+    if (!tok || String(body.token || "") !== tok) return simApiJson_({ ok: false, error: "bad token" });
+    if (String(body.action || "") === "rooms") {
+      try {
+        var summary = applyDiscordRooms_(String(body.guild || ""), body.channels || [], String(body.me || ""));
+        return simApiJson_({ ok: true, message: discordRoomsSummary_(summary), summary: summary });
+      } catch (err) { return simApiJson_({ ok: false, error: String(err && err.message || err) }); }
+    }
+    return simApiJson_({ ok: false, error: "neznámá action " + body.action });
+  }
   if (p !== "runsims") return simApiJson_({ ok: false, message: "neznámý požadavek" });
   var want = PropertiesService.getScriptProperties().getProperty(SIM_RUN_PASSWORD_PROP);
   var pw = String(body.pw || params.pw || "");
