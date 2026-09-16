@@ -2595,13 +2595,20 @@ function mergeSimNote_(oldNote, kind, seg) {
 var SIM_RESULTS_SHEET_NAME = "Sim výsledky";
 var SIM_RESULTS_HEADER = ["Postava", "Spec", "Zdroj", "Report", "Čas", "Boss ID", "Boss", "Item ID", "Item",
                           "Slot", "ilvl", "Základ", "S itemem", "Rozdíl", "Rozdíl %", "Původ", "Katalyzátor ID", "Katalyzátor z",
-                          "ilvl postavy"];   // 19: průměrný ilvl nasazeného gearu z reportu (stránka Simy: „Akka (321)“)
+                          "ilvl postavy",    // 19: průměrný ilvl nasazeného gearu z reportu (stránka Simy: „Akka (321)“)
+                          "Stav"];           // 20: "nasazeno" = item, který Raidbots nesimoval, protože ho hráč už má (nebo lepší);
+                                             //     jen u HC raid reportu – bonus roll ho může dát (zisk 0), stránka s ním počítá
 var SIM_RESULTS_ORIGIN_COL = 16;
 // Katalyzátor: Raidbots simuluje i set kusy vyrobené katalyzátorem z ne-setového itemu jiného bosse
 // (profileset "…/legs////268225" – poslední pole = ID zdrojového itemu). Takový kus má ID set itemu,
 // ale sekundární staty zdrojového itemu → je to jiný item než set kus, který padá ze set bosse.
 // Sloupce 17/18 = ID a název zdrojového (padajícího) itemu; prázdné = normální drop.
 var SIM_RESULTS_CATALYST_COL = 17;
+var SIM_RESULTS_WORN = "nasazeno";   // sloupec 20 "Stav" u itemů, které hráč už má (Raidbots je nesimuje)
+// Raidbots inventoryType → slot v SimC řeči (pro nesimované itemy, které nemají profileset)
+var RAIDBOTS_INV_SLOT = { 1: "head", 2: "neck", 3: "shoulder", 5: "chest", 20: "chest", 6: "waist", 7: "legs", 8: "feet", 9: "wrist",
+                          10: "hands", 11: "finger", 12: "trinket", 13: "one_hand", 14: "off_hand", 15: "back", 16: "back", 17: "two_hand",
+                          21: "main_hand", 22: "off_hand", 23: "off_hand", 26: "ranged" };
 
 function simResultsSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2701,8 +2708,9 @@ function buildSimResultsSheet() {
 function storeSimResults_(character, spec, link, kinds) {
   try {
     kinds = kinds && kinds.length ? kinds : ["raid"];
+    // HC raid: i itemy, které Raidbots nesimoval, protože je hráč už má (bonus roll je může dát → zisk 0)
     var rows = (kinds.indexOf("topgear") >= 0 ? simResultsFromTopgear_(link.id, character)
-                : link.kind === "qe" ? simResultsFromQe_(link.id) : simResultsFromRaidbots_(link.id));
+                : link.kind === "qe" ? simResultsFromQe_(link.id) : simResultsFromRaidbots_(link.id, kinds.indexOf("raidhc") >= 0));
     // HC raid report je stejný raidový Droptimizer (jen obtížnost "Heroic Vault"), parser ho vrátí jako "raid"
     if (kinds.indexOf("raidhc") >= 0) rows.forEach(function (r) { if (r.kind === "raid") r.kind = "raidhc"; });
     rows = rows.filter(function (r) { return kinds.indexOf(r.kind) >= 0; });
@@ -2710,10 +2718,10 @@ function storeSimResults_(character, spec, link, kinds) {
     var now = new Date();
     var counts = {};
     var out = rows.map(function (r) {
-      counts[r.kind] = (counts[r.kind] || 0) + 1;
+      if (!r.worn) counts[r.kind] = (counts[r.kind] || 0) + 1;
       return [character, spec, link.kind === "qe" ? "QE Live" : "Raidbots", link.url, now,
               r.bossId, r.boss, r.itemId, r.item, r.slot, r.ilvl, r.base, r.value, r.diff, r.pct, SIM_KIND_ORIGIN[r.kind],
-              r.catalystId || "", r.catalystFrom || "", r.charIlvl || ""];
+              r.catalystId || "", r.catalystFrom || "", r.charIlvl || "", r.worn ? SIM_RESULTS_WORN : ""];
     });
     // smazat staré řádky postavy téhož původu (odspodu, aby se neposouvaly indexy)
     var last = sh.getLastRow();
@@ -2741,7 +2749,14 @@ function storeSimResults_(character, spec, link, kinds) {
   }
 }
 
-function simResultsFromRaidbots_(reportId) {
+/**
+ * includeWorn: přidá i itemy z simbot.meta.encounterItems (loot bossů pro classu/spec hráče), které
+ * nemají žádný profileset – Raidbots je nesimuje s hláškou "You are already wearing this item or a
+ * better version". Bonus roll je ale dát může (zisk 0), tak s nimi stránka počítá v očekávaném zisku.
+ * Set kusy jsou v encounterItems pod encounterId -100 (set jako celek) → Boss ID prázdné, bossy doplní
+ * stránka z loot_items.json.
+ */
+function simResultsFromRaidbots_(reportId, includeWorn) {
   var resp = UrlFetchApp.fetch("https://www.raidbots.com/reports/" + reportId + "/data.json", { muteHttpExceptions: true });
   if (resp.getResponseCode() !== 200) throw new Error("Raidbots data.json HTTP " + resp.getResponseCode());
   var d = JSON.parse(resp.getContentText());
@@ -2805,8 +2820,34 @@ function simResultsFromRaidbots_(reportId) {
     };
   });
   var charIlvl = equippedIlvl_(d);
-  return Object.keys(best).map(function (k) { best[k].charIlvl = charIlvl; return best[k]; })
+  var out = Object.keys(best).map(function (k) { best[k].charIlvl = charIlvl; return best[k]; })
     .sort(function (a, b) { return b.pct - a.pct; });
+  if (includeWorn) {
+    var simmed = {}, maxIlvl = 0;
+    (((sim.profilesets || {}).results) || []).forEach(function (r) {
+      var p = String(r.name || "").split("/");
+      if (p.length < 7) return;
+      simmed[p[3] + "/" + p[1]] = true;
+      // set kus (encounterItems ho vede pod -100): za nasimovaný platí jen přímý drop (token/curio),
+      // katalyzátorové varianty (poslední pole = zdrojový item) jsou jiné itemy z jiných bossů
+      if (!(p.length > 10 && /^\d+$/.test(p[10]))) simmed[p[3] + "/-100"] = true;
+      maxIlvl = Math.max(maxIlvl, Number(p[4]) || 0);
+    });
+    (((d.simbot || {}).meta || {}).encounterItems || []).forEach(function (it) {
+      if (!it || it.id == null) return;
+      (it.sources || []).forEach(function (src) {
+        var encId = Number(src.encounterId);
+        if (simmed[String(it.id) + "/" + encId]) return;
+        out.push({
+          kind: "raid", bossId: encId > 0 ? encId : "", boss: encId > 0 ? (bosses[String(encId)] || "") : "",
+          itemId: Number(it.id), item: it.name || "", slot: RAIDBOTS_INV_SLOT[Number(it.inventoryType)] || "",
+          ilvl: maxIlvl || "", base: Math.round(base), value: Math.round(base), diff: 0, pct: 0,
+          catalystId: "", catalystFrom: "", charIlvl: charIlvl, worn: true
+        });
+      });
+    });
+  }
+  return out;
 }
 
 /**
