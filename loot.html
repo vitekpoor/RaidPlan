@@ -289,7 +289,9 @@ a.best:hover .open { color: var(--ink-strong); }
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
   var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear", raidhc: "Raid HC" };
   var STALE_MS = 6 * 86400000;             // sim starší než 6 dní se v dlaždici hráče ukáže červeně
-  var NO_BONUS_ROLL = { 2895: 1 };   // na posledního bosse (Ula'tek) bonus roll použít nejde – v přehledu je jen pro info
+  var NO_BONUS_ROLL = {};            // bossové, na které bonus roll použít nejde (encounter id → 1); zatím žádný, Ula'tek jde
+  var CURIO_BOSS = 2895;             // Ula'tek: set kusy z něj jsou přes Slumbering Coil Curio (vyměnitelný za tier kus) – Curio z bonus rollu NEPADÁ,
+                                     // takže do jeho bonus roll tabulky přímé tier kusy nepatří (katalyzátor z jeho normálního itemu ano – padá zdrojový item)
   var LIST_KINDS = { raid: 1, mplus: 1 };   // do tabulek jdou jen raid a M+; Top Gear = souhrnný řádek v kartě hráče, Raid HC = jen verdikt vaultu
   var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
                   legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
@@ -308,6 +310,7 @@ a.best:hover .open { color: var(--ink-strong); }
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
   try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
   if (!LIST_KINDS[state.kind]) state.kind = "all";
+  window.lootState = state;   // jen pro ladění / testy (scratchpad pagetest.py)
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function num(s) { if (s == null || s === "") return null; var v = parseFloat(String(s).replace(/\s/g, "").replace(",", ".")); return isNaN(v) ? null : v; }
@@ -590,8 +593,9 @@ a.best:hover .open { color: var(--ink-strong); }
    * Bonus roll dá NÁHODNÝ item z lootu bosse pro tvou classu/spec – ne ten nejlepší. Proto se boss hodnotí
    * očekávaným ziskem: průměr přes všechny itemy bosse (řádky HC raid reportu včetně "nasazeno" = item, který
    * už máš, zisk 0; zhoršení se počítá jako 0, protože si ho nenasadíš). Předpoklad: každý item stejně
-   * pravděpodobný a roll item vždy dá. Trash se nedá bonus rollovat; poslední boss (NO_BONUS_ROLL) taky ne –
-   * ten je v přehledu jen pro info (noRoll) a doporučit se nedá. Vrací bossy seřazené podle zisku, noRoll nakonec.
+   * pravděpodobný a roll item vždy dá. Trash se nedá bonus rollovat; bossové v NO_BONUS_ROLL jsou v přehledu jen pro
+   * info (noRoll) a doporučit se nedají. Tier kusy z Ula'teka (CURIO_BOSS) jdou přes Curio, které z bonus rollu nepadá →
+   * přímé tier řádky se u něj vynechají. Vrací bossy seřazené podle zisku, noRoll nakonec.
    */
   function rollBosses(rollRows) {
     var byBoss = {};
@@ -601,6 +605,9 @@ a.best:hover .open { color: var(--ink-strong); }
         if (bid != null && Number(bid) <= 0) return;                       // -97 Trash, -100 set jako celek
         var lib = bid != null ? state.bossById[String(bid)] : null;
         if (lib && lib.kind === "mplus") return;
+        var itemLib = state.items[String(r.itemId)] || {};
+        if (itemLib.slot === "token") return;                                // samotný token/Curio z bonus rollu nepadá
+        if (bid != null && Number(bid) === CURIO_BOSS && itemLib.tier && !r.catalystId) return;   // tier kus přes Curio
         var name = (lib && lib.name) || r.boss || "";
         if (!name || /trash/i.test(name)) return;
         var key = bid != null ? String(bid) : nkey(name);
