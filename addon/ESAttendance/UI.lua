@@ -390,7 +390,7 @@ end
 -- ---------------------------------------------------------------- minimap button
 -- Round "ES" icon (same picture as the web favicon: icon.tga) on the minimap edge.
 -- Left click = window, right click = write attendance, drag = move around the rim.
-local MINIMAP_GAP = 12    -- px between the minimap rim and the button centre (outside the map)
+local MINIMAP_GAP = 7    -- px between the minimap rim and the button centre (outside the map)
 local minimapBtn
 
 local function minimapAngle() return (ESAttendanceDB.minimapAngle or 225) end
@@ -421,9 +421,11 @@ local function createMinimapButton()
   minimapBtn:RegisterForDrag("LeftButton")
   minimapBtn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
+  -- the ring in MiniMap-TrackingBorder is off-centre inside its 53x53 image; these offsets
+  -- (same as LibDBIcon uses) put the icon exactly inside the ring
   local icon = minimapBtn:CreateTexture(nil, "BACKGROUND")
-  icon:SetSize(20, 20)
-  icon:SetPoint("CENTER", -1, 1)
+  icon:SetSize(18, 18)
+  icon:SetPoint("TOPLEFT", 6.5, -5.5)
   icon:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\icon.tga")
   minimapBtn.icon = icon
 
