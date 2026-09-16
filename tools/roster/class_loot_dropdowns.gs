@@ -3674,6 +3674,8 @@ var ATT_YES = "ano";
 var ATT_NO = "ne";
 var ATT_YES_BG = "#D9EAD3";
 var ATT_NO_BG = "#F4CCCC";
+var ATT_EXCUSED = "omluvenka";      // chybí, ale v „Absence přehled“ má na ten den X
+var ATT_EXCUSED_BG = "#FFE599";
 var ATT_HEADER_RE = /^\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/;   // "16.9.2026 (20:05)"
 var ATT_RECORD_HEADER = "ESA1";
 
@@ -3793,20 +3795,51 @@ function recordAttendance_(text) {
   }
   var col = findAttendanceDateCol_(sh, rec.date, rec.time, tz);
   var present = 0;
+  var absence = absenceMarksForDate_(rec.date, tz);   // hráč (lowercase) -> "X" / "pozdě"
+  var excused = 0;
   rec.players.forEach(function (p) {
     var row = findAbsencePlayerRow_(sh, p.name, roster);
     var cell = sh.getRange(row, col);
-    cell.setValue(p.present ? ATT_YES : ATT_NO).setBackground(p.present ? ATT_YES_BG : ATT_NO_BG)
-      .setHorizontalAlignment("center").setFontColor("#000000");
-    if (p.char) cell.setNote(p.char); else cell.clearNote();
-    if (p.present) present++;
+    var mark = absence[p.name.toLowerCase()];
+    var value = ATT_NO, bg = ATT_NO_BG, note = "";
+    if (p.present) { value = ATT_YES; bg = ATT_YES_BG; note = p.char || ""; present++; }
+    else if (mark === ABSENCE_MARK["Nepřijdu"][0]) { value = ATT_EXCUSED; bg = ATT_EXCUSED_BG; note = "hlášená absence"; excused++; }
+    else if (mark) { note = "hlásil: přijdu pozdě"; }
+    cell.setValue(value).setBackground(bg).setHorizontalAlignment("center").setFontColor("#000000");
+    if (note) cell.setNote(note); else cell.clearNote();
   });
   var head = sh.getRange(1, col);
   if (rec.unknown.length) head.setNote("V raidu mimo Roster: " + rec.unknown.join(", ")); else head.clearNote();
   var label = Utilities.formatDate(rec.date, tz, "d.M.yyyy") + " (" + rec.time + ")";
   return { ok: true,
            message: "✔ Docházka " + label + ": " + present + "/" + rec.players.length + " hráčů v raidu" +
+                    (excused ? ", " + excused + " omluvenka" : "") +
                     (rec.unknown.length ? " · mimo roster: " + rec.unknown.join(", ") : "") };
+}
+
+/**
+ * Značky z „Absence přehled“ pro daný den: { hráč_lowercase: "X" | "pozdě" }.
+ * Bez listu / bez sloupce pro ten den vrací {} (nic nevkládá).
+ */
+function absenceMarksForDate_(date, tz) {
+  var out = {};
+  var ov = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABSENCE_LOG_SHEET_NAME);
+  if (!ov || ov.getLastRow() < 2 || ov.getLastColumn() < 2) return out;
+  var key = Utilities.formatDate(date, tz, "yyyy-MM-dd");
+  var heads = ov.getRange(1, 2, 1, ov.getLastColumn() - 1).getValues()[0];
+  var col = 0;
+  for (var i = 0; i < heads.length; i++) {
+    var d = heads[i] instanceof Date ? heads[i] : attHeaderDate_(heads[i]);
+    if (d && Utilities.formatDate(d, tz, "yyyy-MM-dd") === key) { col = i + 2; break; }
+  }
+  if (!col) return out;
+  var vals = ov.getRange(2, 1, ov.getLastRow() - 1, col).getValues();
+  vals.forEach(function (v) {
+    var name = String(v[0] || "").trim().toLowerCase();
+    var mark = String(v[col - 1] || "").trim();
+    if (name && mark) out[name] = mark;
+  });
+  return out;
 }
 
 /** Text rosteru pro import v addonu (/esa import): ESROSTER;verze + Hráč;postava;classa;role;alt;classa;role */

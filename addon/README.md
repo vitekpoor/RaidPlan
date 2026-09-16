@@ -94,6 +94,8 @@ Getting it into the sheet, two ways:
    the tab too). The tab is protected; only the script writes it.
 
 Tab layout: column A = player names (class colored, roster order, new players appended),
-one column per record with header `16.9.2026 (20:05)`, cells `ano` (green) / `ne` (red) with the
-character name as a cell note, unknown group members as a note on the header cell. Columns stay
-sorted by date; a record for an existing date replaces that column.
+one column per record with header `16.9.2026 (20:05)`, cells `ano` (green, character name as a
+cell note), `omluvenka` (yellow: missing, but the player has an `X` for that day in the
+"Absence přehled" tab) or `ne` (red; a "přijdu pozdě" report for that day is kept as a cell
+note), unknown group members as a note on the header cell. Columns stay sorted by date; a record
+for an existing date replaces that column.
