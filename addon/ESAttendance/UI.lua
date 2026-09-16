@@ -387,6 +387,84 @@ function ns.ShowText(mode, text)
   end
 end
 
+-- ---------------------------------------------------------------- minimap button
+-- Round "ES" icon (same picture as the web favicon: icon.tga) on the minimap edge.
+-- Left click = window, right click = write attendance, drag = move around the rim.
+local MINIMAP_RADIUS = 80
+local minimapBtn
+
+local function minimapAngle() return (ESAttendanceDB.minimapAngle or 225) end
+
+local function placeMinimapButton()
+  local a = math.rad(minimapAngle())
+  minimapBtn:ClearAllPoints()
+  minimapBtn:SetPoint("CENTER", Minimap, "CENTER", math.cos(a) * MINIMAP_RADIUS, math.sin(a) * MINIMAP_RADIUS)
+end
+
+local function createMinimapButton()
+  minimapBtn = CreateFrame("Button", "ESAttendanceMinimapButton", Minimap)
+  minimapBtn:SetSize(31, 31)
+  minimapBtn:SetFrameStrata("MEDIUM")
+  minimapBtn:SetFrameLevel(8)
+  minimapBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  minimapBtn:RegisterForDrag("LeftButton")
+  minimapBtn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+  local icon = minimapBtn:CreateTexture(nil, "BACKGROUND")
+  icon:SetSize(20, 20)
+  icon:SetPoint("CENTER", -1, 1)
+  icon:SetTexture("Interface\\AddOns\\" .. ADDON .. "\\icon.tga")
+  minimapBtn.icon = icon
+
+  local border = minimapBtn:CreateTexture(nil, "OVERLAY")
+  border:SetSize(53, 53)
+  border:SetPoint("TOPLEFT")
+  border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+
+  minimapBtn:SetScript("OnClick", function(_, button)
+    if button == "RightButton" then
+      local rec, info = ns.WriteAttendance()
+      ns.Print(info)
+      if rec then ns.ShowText("export", rec.export) end
+    else
+      ns.Toggle()
+    end
+  end)
+  minimapBtn:SetScript("OnDragStart", function(self)
+    self:SetScript("OnUpdate", function()
+      local mx, my = Minimap:GetCenter()
+      local cx, cy = GetCursorPosition()
+      local s = Minimap:GetEffectiveScale()
+      ESAttendanceDB.minimapAngle = math.deg(math.atan2(cy / s - my, cx / s - mx))
+      placeMinimapButton()
+    end)
+  end)
+  minimapBtn:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+  minimapBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("|cff3fd68aES|r Attendance")
+    local n, total = ns.CountPresent()
+    GameTooltip:AddLine(("V raidu %d / %d"):format(n, total), 1, 1, 1)
+    GameTooltip:AddLine("Levý klik: okno", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("Pravý klik: zapsat docházku", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("Tažením posuneš po okraji", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+  end)
+  minimapBtn:SetScript("OnLeave", GameTooltip_Hide)
+  placeMinimapButton()
+end
+
+--- Shows/hides the button according to ESAttendanceDB.minimapHidden (creates it on first use).
+function ns.UpdateMinimapButton()
+  if not Minimap then return end
+  if not minimapBtn then createMinimapButton() end
+  minimapBtn:SetShown(not ESAttendanceDB.minimapHidden)
+end
+
+ns.callbacks[#ns.callbacks + 1] = function(event)
+  if event == "LOADED" then ns.UpdateMinimapButton() end
+end
+
 ns.callbacks[#ns.callbacks + 1] = function(event)
   if event == "GROUP" or event == "GUILD" or event == "ROSTER" or event == "INVITES" or event == "RECORD" then refreshList() end
 end

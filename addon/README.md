@@ -48,7 +48,9 @@ WoW addons have no network, file or process access, so a copy step is unavoidabl
 
 ## In game
 
-`/esa` opens the window (also `/esattendance`). Every roster player is a row:
+`/esa` opens the window (also `/esattendance`), as does the round green **ES** button on the
+minimap rim (the site favicon, `icon.tga`): left click = window, right click = write attendance,
+drag = move it along the rim, `/esa minimap` hides/shows it. Every roster player is a row:
 
 - ✔ green – a character of the player is in the group (which one, alt/main, offline flag)
 - ⏳ orange – missing, but one of their characters is online in the guild (that one gets invited)

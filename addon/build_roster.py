@@ -133,7 +133,7 @@ def install(target_root):
     os.makedirs(dest, exist_ok=True)
     copied = []
     for fn in os.listdir(ADDON_DIR):
-        if fn.endswith((".lua", ".toc", ".xml")):
+        if fn.endswith((".lua", ".toc", ".xml", ".tga", ".blp", ".png")):
             shutil.copy2(os.path.join(ADDON_DIR, fn), os.path.join(dest, fn))
             copied.append(fn)
     return dest, copied

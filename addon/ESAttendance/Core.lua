@@ -389,6 +389,7 @@ f:SetScript("OnEvent", function(_, event, arg1)
     ESAttendanceDB = ESAttendanceDB or {}
     ESAttendanceDB.records = ESAttendanceDB.records or {}
     ns.LoadRoster()
+    ns.Fire("LOADED")   -- UI: minimap button
   elseif event == "PLAYER_ENTERING_WORLD" then
     ns.ScanGroup()
     ns.RequestGuildRoster()
@@ -415,6 +416,10 @@ SlashCmdList.ESATTENDANCE = function(msg)
   elseif cmd == "export" then
     local rec = rest ~= "" and ESAttendanceDB.records[rest] or ns.LatestRecord()
     if rec then ns.ShowText("export", rec.export) else ns.Print("žádný záznam docházky") end
+  elseif cmd == "minimap" then
+    ESAttendanceDB.minimapHidden = not ESAttendanceDB.minimapHidden
+    ns.UpdateMinimapButton()
+    ns.Print(ESAttendanceDB.minimapHidden and "ikona u minimapy skryta (/esa minimap ji vrátí)" or "ikona u minimapy zapnuta")
   elseif cmd == "url" then
     if rest:match("^https://") then
       ESAttendanceDB.webappUrl = rest:gsub("%?.*$", "")
@@ -436,6 +441,6 @@ SlashCmdList.ESATTENDANCE = function(msg)
       ns.Print(("%s %s – %d přítomných"):format(d, r.time, n))
     end
   else
-    ns.Print("/esa – okno | /esa write – zapsat docházku | /esa invite [online] – pozvat chybějící | /esa cancel | /esa import – vložit roster | /esa export [datum] | /esa list | /esa roster [reset]")
+    ns.Print("/esa – okno | /esa write – zapsat docházku | /esa invite [online] – pozvat chybějící | /esa cancel | /esa import – vložit roster | /esa export [datum] | /esa list | /esa roster [reset] | /esa minimap – ikona u minimapy | /esa url")
   end
 end
