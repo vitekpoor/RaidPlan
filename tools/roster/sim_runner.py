@@ -410,15 +410,40 @@ class SheetApi:
         self.url = cfg["webapp_url"]
         self.token = cfg["token"]
 
+    RETRY_STATUS = (404, 429, 500, 502, 503, 504)   # Google občas vrátí 404 z googleusercontent echo nebo 5xx – zkusit znovu
+
+    def _request(self, action, method="get", params=None, body=None, timeout=90, tries=4):
+        """GET/POST na web app s opakováním: Apps Script odpovídá přes 302 na script.googleusercontent.com,
+        které občas vrátí 404 / 5xx / HTML stránku Googlu místo výstupu skriptu. Vrací parsovaný JSON
+        (i s ok:false – to řeší volající)."""
+        last = ""
+        for attempt in range(tries):
+            if method == "post":
+                r = requests.post(self.url, data=body, headers={"Content-Type": "text/plain;charset=utf-8"}, timeout=timeout, allow_redirects=True)
+            else:
+                r = requests.get(self.url, params=params, timeout=timeout, allow_redirects=True)
+            text = r.text
+            if r.status_code < 400 and not text.lstrip().startswith("<"):
+                try:
+                    return r.json()
+                except ValueError:
+                    last = f"HTTP {r.status_code}, ne JSON: {text[:160]}"
+            elif r.status_code in self.RETRY_STATUS or text.lstrip().startswith("<"):
+                plain = re.sub(r"<script.*?</script>|<style.*?</style>", " ", text, flags=re.S)
+                plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", plain)).strip()
+                last = f"HTTP {r.status_code} {plain[:160]}"
+            else:
+                r.raise_for_status()
+            if attempt < tries - 1:
+                wait = 3 * (attempt + 1)
+                log(f"   web app ({action}): {last[:90]} – pokus {attempt + 1}/{tries}, čekám {wait} s")
+                time.sleep(wait)
+        raise RuntimeError(f"Web app neodpověděl správně ani po {tries} pokusech ({action}): {last}")
+
     def call(self, action, **params):
         q = {"p": "simapi", "token": self.token, "action": action}
         q.update({k: v for k, v in params.items() if v is not None})
-        r = requests.get(self.url, params=q, timeout=90, allow_redirects=True)
-        r.raise_for_status()
-        try:
-            data = r.json()
-        except ValueError:
-            raise RuntimeError(f"Web app nevrátil JSON (HTTP {r.status_code}): {r.text[:200]}")
+        data = self._request(action, "get", params=q)
         if not data.get("ok"):
             raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
         return data
@@ -431,11 +456,8 @@ class SheetApi:
 
     def done(self, row, character, url, kind="raid"):
         """kind: raid | mplus | raidhc | topgear (Raidbots) | qe (QE Live – raid i dungeony v jednom reportu)."""
-        r = requests.get(self.url, params={"p": "simapi", "token": self.token, "action": "done",
-                                           "row": row, "character": character, "url": url, "kind": kind},
-                         timeout=120, allow_redirects=True)
-        r.raise_for_status()
-        return r.json()
+        return self._request("done", "get", params={"p": "simapi", "token": self.token, "action": "done",
+                                                    "row": row, "character": character, "url": url, "kind": kind}, timeout=120)
 
     def error(self, row, character, note):
         return self.call("error", row=row, character=character, note=note[:500])
@@ -445,32 +467,12 @@ class SheetApi:
         return self.call("notified", row=row, character=character, result=result[:160])
 
     def post(self, action, **body):
-        """POST JSON na web app (doPost, p=simapi) – pro větší data (seznam Discord kanálů).
-        Apps Script odpovídá přes 302 na googleusercontent; občas místo výstupu skriptu přijde
-        HTML stránka Googlu (přihlášení / výchozí doGet) – pak to zkusíme znovu."""
+        """POST JSON na web app (doPost, p=simapi) – pro větší data (seznam Discord kanálů)."""
         body.update({"p": "simapi", "token": self.token, "action": action})
-        payload = json.dumps(body).encode("utf-8")
-        last = ""
-        for attempt in range(4):
-            r = requests.post(self.url, data=payload, headers={"Content-Type": "text/plain;charset=utf-8"},
-                              timeout=120, allow_redirects=True)
-            r.raise_for_status()
-            text = r.text
-            if not text.lstrip().startswith("<"):
-                try:
-                    data = r.json()
-                except ValueError:
-                    data = None
-                if data is not None:
-                    if not data.get("ok"):
-                        raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
-                    return data
-            plain = re.sub(r"<script.*?</script>|<style.*?</style>", " ", text, flags=re.S)
-            plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", plain)).strip()
-            last = plain[:200] or text[:200]
-            log(f"   web app vrátil místo JSON HTML ({last[:80]}…) – pokus {attempt + 1}/4, čekám {3 * (attempt + 1)} s")
-            time.sleep(3 * (attempt + 1))
-        raise RuntimeError(f"Web app nevrátil JSON ani po 4 pokusech: {last}")
+        data = self._request(action, "post", body=json.dumps(body).encode("utf-8"), timeout=120)
+        if not data.get("ok"):
+            raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
+        return data
 
     def note(self, row, character, note):
         return self.call("note", row=row, character=character, note=note[:500])
