@@ -444,18 +444,32 @@ class SheetApi:
         return self.call("notified", row=row, character=character, result=result[:160])
 
     def post(self, action, **body):
-        """POST JSON na web app (doPost, p=simapi) – pro větší data (seznam Discord kanálů)."""
+        """POST JSON na web app (doPost, p=simapi) – pro větší data (seznam Discord kanálů).
+        Apps Script odpovídá přes 302 na googleusercontent; občas místo výstupu skriptu přijde
+        HTML stránka Googlu (přihlášení / výchozí doGet) – pak to zkusíme znovu."""
         body.update({"p": "simapi", "token": self.token, "action": action})
-        r = requests.post(self.url, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "text/plain;charset=utf-8"},
-                          timeout=120, allow_redirects=True)
-        r.raise_for_status()
-        try:
-            data = r.json()
-        except ValueError:
-            raise RuntimeError(f"Web app nevrátil JSON (HTTP {r.status_code}): {r.text[:200]}")
-        if not data.get("ok"):
-            raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
-        return data
+        payload = json.dumps(body).encode("utf-8")
+        last = ""
+        for attempt in range(4):
+            r = requests.post(self.url, data=payload, headers={"Content-Type": "text/plain;charset=utf-8"},
+                              timeout=120, allow_redirects=True)
+            r.raise_for_status()
+            text = r.text
+            if not text.lstrip().startswith("<"):
+                try:
+                    data = r.json()
+                except ValueError:
+                    data = None
+                if data is not None:
+                    if not data.get("ok"):
+                        raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
+                    return data
+            plain = re.sub(r"<script.*?</script>|<style.*?</style>", " ", text, flags=re.S)
+            plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", plain)).strip()
+            last = plain[:200] or text[:200]
+            log(f"   web app vrátil místo JSON HTML ({last[:80]}…) – pokus {attempt + 1}/4, čekám {3 * (attempt + 1)} s")
+            time.sleep(3 * (attempt + 1))
+        raise RuntimeError(f"Web app nevrátil JSON ani po 4 pokusech: {last}")
 
     def note(self, row, character, note):
         return self.call("note", row=row, character=character, note=note[:500])
@@ -1073,7 +1087,14 @@ def cmd_discord_rooms(cfg):
     if ch.status_code >= 300:
         sys.exit(f"Discord HTTP {ch.status_code}: {ch.text[:200]} – je bot pozvaný na server {guild}?")
     channels = ch.json()
-    slim = [{k: c.get(k) for k in ("id", "name", "type", "parent_id", "permission_overwrites")} for c in channels]
+    # jen co Apps Script potřebuje: kategorie + textové kanály, z oprávnění jen členové (type 1) s allow
+    slim = []
+    for c in channels:
+        if c.get("type") not in (0, 4, 5):
+            continue
+        slim.append({"id": c.get("id"), "name": c.get("name"), "type": c.get("type"), "parent_id": c.get("parent_id"),
+                     "permission_overwrites": [{"id": o.get("id"), "type": o.get("type"), "allow": o.get("allow")}
+                                               for o in (c.get("permission_overwrites") or []) if int(o.get("type", 0)) == 1]})
     log(f"Discord: {len(slim)} kanálů na serveru {guild}, bot {me.json().get('username')}")
     api = SheetApi(cfg)
     res = api.post("rooms", guild=guild, me=me.json().get("id", ""), channels=slim)
