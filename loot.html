@@ -194,6 +194,9 @@ a.best:hover .open { color: var(--ink-strong); }
 .rolls summary .ev { font-family: var(--mono, monospace); font-weight: 700; }
 .rolls summary .odds { color: var(--muted); }
 .rolls summary .rec { color: var(--dps); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.rolls details.noroll summary { color: var(--muted); } .rolls details.noroll summary b { color: var(--muted); font-weight: 500; }
+.rolls details.noroll summary .ev { color: var(--muted); }
+.rolls summary .noroll-tag { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; border: 1px dashed var(--line); border-radius: 4px; padding: 0 6px; }
 .rolls table { width: auto; min-width: 60%; margin: 0 0 8px 14px; }
 .rolls td, .rolls th { padding: 3px 10px; }
 .rolls tr.worn td { color: var(--muted); }
@@ -286,6 +289,7 @@ a.best:hover .open { color: var(--ink-strong); }
   var HEALER_SPECS = { holy: 1, discipline: 1, restoration: 1, mistweaver: 1, preservation: 1 };
   var KIND_LABEL = { raid: "Raid", mplus: "M+", topgear: "Top Gear", raidhc: "Raid HC" };
   var STALE_MS = 6 * 86400000;             // sim starší než 6 dní se v dlaždici hráče ukáže červeně
+  var NO_BONUS_ROLL = { 2895: 1 };   // na posledního bosse (Ula'tek) bonus roll použít nejde – v přehledu je jen pro info
   var LIST_KINDS = { raid: 1, mplus: 1 };   // do tabulek jdou jen raid a M+; Top Gear = souhrnný řádek v kartě hráče, Raid HC = jen verdikt vaultu
   var SLOT_CZ = { head: "hlava", neck: "krk", shoulder: "ramena", back: "plášť", chest: "hruď", wrist: "zápěstí", hands: "ruce", waist: "pas",
                   legs: "nohy", feet: "boty", finger: "prsten", trinket: "trinket", main_hand: "main hand", off_hand: "off hand",
@@ -586,7 +590,8 @@ a.best:hover .open { color: var(--ink-strong); }
    * Bonus roll dá NÁHODNÝ item z lootu bosse pro tvou classu/spec – ne ten nejlepší. Proto se boss hodnotí
    * očekávaným ziskem: průměr přes všechny itemy bosse (řádky HC raid reportu včetně "nasazeno" = item, který
    * už máš, zisk 0; zhoršení se počítá jako 0, protože si ho nenasadíš). Předpoklad: každý item stejně
-   * pravděpodobný a roll item vždy dá. Trash se nedá bonus rollovat. Vrací bossy seřazené podle zisku.
+   * pravděpodobný a roll item vždy dá. Trash se nedá bonus rollovat; poslední boss (NO_BONUS_ROLL) taky ne –
+   * ten je v přehledu jen pro info (noRoll) a doporučit se nedá. Vrací bossy seřazené podle zisku, noRoll nakonec.
    */
   function rollBosses(rollRows) {
     var byBoss = {};
@@ -613,18 +618,20 @@ a.best:hover .open { color: var(--ink-strong); }
       b.ev = b.n ? gains.reduce(function (a, c) { return a + c; }, 0) / b.n : 0;
       b.evPct = b.n ? b.list.reduce(function (a, r) { return a + Math.max(0, r.pct || 0); }, 0) / b.n : 0;
       b.best = b.list[0] && (metric(b.list[0]) || 0) > 0 ? b.list[0] : null;
+      b.noRoll = b.id != null && !!NO_BONUS_ROLL[String(b.id)];
       return b;
-    }).filter(function (b) { return b.n; }).sort(function (a, b) { return b.ev - a.ev || b.up - a.up; });
+    }).filter(function (b) { return b.n; }).sort(function (a, b) { return (a.noRoll - b.noRoll) || (b.ev - a.ev) || (b.up - a.up); });
   }
   function rollsHtml(bosses, recBoss, mood) {
     if (!bosses.length) return "";
     var html = '<div class="rolls ' + mood + '"><div class="rhead">Bonus roll – co může padnout (náhodný item z lootu bosse pro tvůj spec)</div>';
     bosses.forEach(function (b) {
       var rec = recBoss && b === recBoss;
-      html += "<details" + (rec ? " open" : "") + "><summary><b>" + esc(b.name) + "</b>" +
+      html += "<details" + (rec ? " open" : "") + (b.noRoll ? ' class="noroll"' : "") + "><summary><b>" + esc(b.name) + "</b>" +
         '<span class="ev ' + clsPct(b.evPct) + '" title="Očekávaný zisk: průměr přes všechny itemy bosse (zhoršení a itemy, které už máš, = 0)">Ø ' + fmtNum(b.ev) + "</span>" +
         '<span class="odds">' + b.up + " z " + b.n + " itemů upgrade" + (b.best ? ", nejlepší " + esc(itemLabel(b.best)) + " " + fmtVal(b.best) : "") + "</span>" +
-        (rec ? '<span class="rec">doporučeno</span>' : "") + "</summary>";
+        (rec ? '<span class="rec">doporučeno</span>' : "") +
+        (b.noRoll ? '<span class="noroll-tag" title="Na posledního bosse se bonus roll použít nedá – jen pro srovnání">bonus roll nejde</span>' : "") + "</summary>";
       html += '<div class="tablewrap"><table><tbody>';
       b.list.forEach(function (r) {
         var v = metric(r) || 0;
@@ -657,7 +664,8 @@ a.best:hover .open { color: var(--ink-strong); }
     found.sort(function (a, b) { return byMetricDesc(a.r, b.r); });
     // bonus roll = náhodný item z bosse → boss se hodnotí očekávaným ziskem, ne nejlepším itemem
     var bosses = rollBosses(raidRows);
-    var bestBoss = bosses[0] && bosses[0].ev > 0 ? bosses[0] : null;
+    var rollable = bosses.filter(function (b) { return !b.noRoll; });
+    var bestBoss = rollable[0] && rollable[0].ev > 0 ? rollable[0] : null;
     var isQe = playerRows.some(function (r) { return /QE/i.test(r.src || ""); });
     var basis = useHc ? '<span class="basis" title="Raidový Droptimizer s obtížností Heroic Vault (Myth 1/6) a upgradem na Myth 6/6 – všechno max 334, jako bonus roll na HC nebo na mythic bossech, které zabíjíme.">srovnání: HC raid, max 334</span>'
       : isQe ? '<span class="basis" title="QE Live počítá raidové itemy na 334 (Myth 6/6) – stejný základ jako bonus roll na HC.">srovnání: raid na 334</span>'
