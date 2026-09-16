@@ -8,7 +8,7 @@ local ICON_MISSING = "Interface\\RaidFrame\\ReadyCheck-NotReady"
 local ICON_ONLINE = "Interface\\RaidFrame\\ReadyCheck-Waiting"
 
 -- WoW's default UI font (FRIZQT) has no č/ř/ě/ž glyphs; ARIALN.TTF (the chat font) does.
-local FONT = "Fonts\ARIALN.TTF"
+local FONT = "Fonts/ARIALN.TTF"   -- forward slash on purpose: no backslash escaping to get wrong
 local function makeFont(name, base, size, flags)
   local f = CreateFont(name)
   f:CopyFontObject(base)
