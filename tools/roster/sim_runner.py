@@ -97,6 +97,8 @@ TOPGEAR_URL = "https://www.raidbots.com/simbot/topgear"
 AUTH_URL = "https://www.raidbots.com/auth"
 REPORT_RE = re.compile(r"raidbots\.com/simbot/report/([A-Za-z0-9]{10,40})")
 GOLD = "rgb(255, 187, 51)"  # barva rámečku vybraného zdroje / obtížnosti
+RED = "rgb(255, 80, 80)"     # Top Gear: zaškrtnutá karta, které chybí protějšek (off hand bez main handu)
+INCLUDED = (GOLD, RED)
 
 HEALER_SPECS = {"holy", "discipline", "restoration", "mistweaver", "preservation"}
 
@@ -124,6 +126,7 @@ DEFAULTS = {
     "topgear_max_combos": 20000,   # když Raidbots hlásí víc kombinací, uber nejslabší kandidáty
     "topgear_weapon_min_gain": -6, # zbraně (main hand / off hand) jdou do Top Gearu skoro vždy – Droptimizer simuje
                                    # 1H bez správného off-handu, takže pár 1H + OH ukáže až kombinace
+    "topgear_min_items": 4,        # při ubírání kandidátů kvůli limitu kombinací nejít pod tolik itemů
     "topgear_replace_gap": 10,     # nasazený kus o >= tolik ilvl horší než kandidát ve slotu se v Top Gearu odškrtne
                                    # (méně kombinací, víc místa pro další itemy); zbraně se neodškrtávají
     "parallel": 10,          # kolik simů posílat najednou (každý ve vlastním panelu)
@@ -203,6 +206,13 @@ SLOT_GROUP = {"finger": "rings", "trinket": "trinkets"}   # skupiny karet v Top 
 def slot_group(slot):
     base = re.sub(r"[12]$", "", str(slot))
     return SLOT_GROUP.get(base, base)
+
+
+def slot_group_of_card(card_group):
+    """Skupina karty z DOM id Top Gearu ("mainHand", "offHand", "rings", "trinkets", "head"…) → skupina
+    kandidáta (slot_group). camelCase → snake_case, "rings"/"trinkets" zůstávají."""
+    snake = re.sub(r"([A-Z])", lambda m: "_" + m.group(1).lower(), str(card_group or ""))
+    return slot_group(snake)
 
 
 def droptimizer_best_per_slot(data, kind, min_gain, weapon_min_gain=None):
@@ -781,8 +791,10 @@ class Raidbots:
         return (int(m.group(1).replace(",", "")) if m else None), None, None
 
     def topgear_boxes(self, page, item_id):
-        """Karty itemu (div.item) s daným ID – nasazený kus, kopie z bagu, kandidát z Droptimizeru…"""
-        return page.locator(f'div.item:has(a[href*="item={item_id}?"]), div.item:has(a[href*="item={item_id}&"])')
+        """Karty itemu (div.item) s daným ID – nasazený kus, kopie z bagu, kandidát z Droptimizeru…
+        Wowhead odkaz karty je "item=ID?bonus=…", ale u zbraní bez bonusů jen "item=ID" (nic za ID)."""
+        return page.locator(", ".join(f'div.item:has(a[href{op}"item={item_id}{tail}"])'
+                                      for op, tail in (("*=", "?"), ("*=", "&"), ("*=", "#"), ("*=", "/"), ("$=", ""))))
 
     def topgear_include(self, page, cand):
         """Zaškrtne v Top Gearu náš kandidát: mezi kartami s jeho ID vezme ŠEDOU (nezahrnutou)
@@ -795,9 +807,9 @@ class Raidbots:
             return False
         info = [(i, boxes.nth(i).evaluate("el => getComputedStyle(el).borderTopColor"),
                  boxes.nth(i).locator("a[href*='wowhead.com/item=']").first.get_attribute("href") or "") for i in range(n)]
-        gray = [x for x in info if x[1] != GOLD]
+        gray = [x for x in info if x[1] not in INCLUDED]
         if not gray:
-            return True   # už zahrnutý (např. nasazený stejný kus)
+            return True   # už zahrnutý (např. nasazený stejný kus, nebo červený off hand čekající na main hand)
         def bonus_ok(href):
             m = re.search(r"bonus=([\d:]+)", href)
             have = set(m.group(1).split(":")) if m else set()
@@ -805,12 +817,21 @@ class Raidbots:
         pick = next((x for x in gray if bonus_ok(x[2])), gray[0])
         box = boxes.nth(pick[0])
         box.scroll_into_view_if_needed()
+        # klik do levého horního rohu karty – uprostřed bývá odkaz na Wowhead (u zbraní přes celou šířku),
+        # ten by jen otevřel nový panel a kartu nepřepnul
         try:
-            box.click(timeout=5000)
+            box.click(timeout=5000, position={"x": 6, "y": 6})
         except Exception:
             box.evaluate("el => el.click()")
         page.wait_for_timeout(400)
-        return box.evaluate("el => getComputedStyle(el).borderTopColor") == GOLD
+        if box.evaluate("el => getComputedStyle(el).borderTopColor") in INCLUDED:
+            return True
+        box.evaluate("el => el.click()")   # záloha: syntetický klik přímo na kartu
+        page.wait_for_timeout(500)
+        ok = box.evaluate("el => getComputedStyle(el).borderTopColor") in INCLUDED
+        if not ok:
+            log(f"   Top Gear: karta {cand['name']} ({cand['id']}) se nedá zaškrtnout (rámeček {box.evaluate('el => getComputedStyle(el).borderTopColor')})")
+        return ok
 
     def topgear_exclude(self, page, cand):
         """Odškrtne zlatou kartu kandidáta (ne nasazený kus – ten má jiné bonus_id)."""
@@ -880,11 +901,19 @@ class Raidbots:
         limit kombinací/iterací. Vrací (zahrnutí kandidáti, počet kombinací)."""
         self.load_simc(page, topgear_input(simc, cands), url=TOPGEAR_URL, ready="div.item")
         included = []
-        for c in cands:
+        # off hand (doplněk k 1H zbrani) zaškrtnout PŘED main handem: s nasazenou 2H zbraní Raidbots 1H kartu
+        # nepustí, dokud není vybraný off hand (ten je do té doby červený = čeká na protějšek)
+        order = sorted(cands, key=lambda c: 0 if c["group"] == "off_hand" else 1)
+        for c in order:
             if self.topgear_include(page, c):
                 included.append(c)
             else:
-                log(f"   Top Gear: item {c['name']} ({c['id']}) na stránce není, vynechávám")
+                log(f"   Top Gear: item {c['name']} ({c['id']}) se nepodařilo zahrnout (karta chybí nebo nejde zaškrtnout), vynechávám")
+                if c["group"] in WEAPON_SLOTS or c.get("protected"):
+                    # diagnostika: jaké karty zbraní Raidbots v Top Gearu vůbec ukazuje
+                    cards = page.evaluate("""() => Array.from(document.querySelectorAll('div.item')).filter(e => /hand|weapon|ranged/i.test(e.id))
+                        .map(e => { const a = e.querySelector('a[href*="wowhead.com/item="]'); return e.id + ':' + (a ? a.getAttribute('href').split('wowhead.com/')[1] : '?'); })""")
+                    log(f"   Top Gear: karty zbraní na stránce: {', '.join(cards) if cards else 'žádné'}")
         page.wait_for_timeout(1200)
         self.topgear_drop_equipped(page, included, equipped)
         combos, iters, cap = self.topgear_combos(page)
@@ -894,13 +923,27 @@ class Raidbots:
             page.wait_for_timeout(500)
             combos, iters, cap = self.topgear_combos(page)
         limit = int(self.cfg.get("topgear_max_combos", 20000))
+        min_items = int(self.cfg.get("topgear_min_items", 4))
+        unable = "unable to generate valid combinations"
         # moc kombinací / iterací nad limit účtu → ubírej nejslabší kandidáty (zbraně až nakonec);
-        # bez počítadla (Raidbots ho při obřím počtu kombinací neukazuje) také ubírat
+        # bez počítadla (Raidbots ho při obřím počtu kombinací neukazuje) také ubírat – ale jen dokud
+        # ve skupině zbude dost zlatých karet (prsteny/trinkety 2, jinak 1): odškrtnutý nasazený kus +
+        # poslední kandidát = prázdný slot = "unable to generate valid combinations"
         def too_many():
             return combos is None or (combos and combos > limit) or (iters and cap and iters > cap)
-        while too_many() and len(included) > 2:
-            weakest = min(included, key=lambda c: (c["protected"], c["gain"]))
-            included.remove(weakest)
+        def removable(c, gold):
+            need = 2 if c["group"] in ("rings", "trinkets") else 1
+            in_group = [g for g in gold if slot_group_of_card(g["group"]) == c["group"]]
+            return len(in_group) - 1 >= need
+        keep = set()   # kandidáti, které nejde odebrat (jediný item ve slotu)
+        none_streak = 0
+        while too_many() and len(included) > min_items:
+            gold = self.gold_cards(page)
+            pool = [c for c in included if id(c) not in keep and removable(c, gold)]
+            if not pool:
+                log(f"   Top Gear: {combos} kombinací / {iters} iterací (limit {cap}) je moc, ale žádný kandidát už nejde odebrat (každý je jediný ve svém slotu)")
+                break
+            weakest = min(pool, key=lambda c: (c["protected"], c["gain"]))
             log(f"   Top Gear: {combos} kombinací / {iters} iterací (limit {cap}) je moc, vynechávám {weakest['name']}")
             before = (combos, iters)
             self.topgear_exclude(page, weakest)
@@ -910,7 +953,25 @@ class Raidbots:
                 combos, iters, cap = self.topgear_combos(page)
                 if (combos, iters) != before and combos is not None:
                     break
-        if "unable to generate valid combinations" in self.text(page).lower():
+                if unable in self.text(page).lower():
+                    break
+            if unable in self.text(page).lower():
+                # bez toho itemu je slot prázdný → vrátit zpět a dál ho nechat být
+                log(f"   Top Gear: bez {weakest['name']} Raidbots nemá platnou kombinaci – vracím ho zpět")
+                self.topgear_include(page, weakest)
+                keep.add(id(weakest))
+                page.wait_for_timeout(700)
+                combos, iters, cap = self.topgear_combos(page)
+                continue
+            included.remove(weakest)
+            if combos is None:
+                none_streak += 1
+                if none_streak >= 3:
+                    log("   Top Gear: počítadlo kombinací se neukazuje ani po třech úbytcích – dál neubírám")
+                    break
+            else:
+                none_streak = 0
+        if unable in self.text(page).lower():
             raise RuntimeError("Top Gear: Raidbots hlásí „unable to generate valid combinations“")
         btn = page.get_by_role("button", name=re.compile(r"find top gear", re.I))
         if btn.count() and btn.first.is_disabled():

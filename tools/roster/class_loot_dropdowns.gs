@@ -3121,6 +3121,8 @@ function discordFallback_(props) {
   return null;
 }
 var SIM_NOTIFY = true;                                             // false = žádné Discord zprávy
+var DISCORD_CREATE_ROOM_CHANNEL = "1544826757956247764";           // kanál s tlačítkem "Create Room" – hráčům bez místnosti se pošle odkaz
+var DISCORD_NO_ROOM_HINT = "ℹ️ Nemáš vlastní místnost – vytvoř si ji tlačítkem v <#" + DISCORD_CREATE_ROOM_CHANNEL + ">, příště ti přijde zpráva přímo tam.";
 var SIM_PAGE_URL = "https://vitekpoor.github.io/RaidPlan/loot.html";
 
 function discordSheet_() {
@@ -3415,6 +3417,7 @@ function notifySimDone_(character, spec, opts) {
         }
       }
     }
+    if (fallback && DISCORD_CREATE_ROOM_CHANNEL) text += "\n" + DISCORD_NO_ROOM_HINT;   // do společného kanálu = hráč nemá místnost
     if (fallback && fallback.webhook) { discordPostWebhook_(fallback.webhook, text, room && room.userId); return { note: "Discord ✔ společný kanál", pending: null }; }
     if (fallback && fallback.channelId) {
       var fbPlayer = (room && room.player) || character;
