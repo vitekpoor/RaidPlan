@@ -71,7 +71,7 @@ a second write the same evening overwrites the first. The record is stored in Sa
 (`WTF\Account\<acc>\SavedVariables\ESAttendance.lua`) and shown as a selectable export string
 
 ```
-ESA1|2026-09-16|20:05|Ahaaferos=1:Ähaferös|Glasolo=0|Anál=1:Papathyr|…|?=Randomguy-TarrenMill
+ESA1;2026-09-16;20:05;Ahaaferos=1:Ähaferös;Glasolo=0;Anál=1:Papathyr;…;?=Randomguy-TarrenMill
 ```
 
 (`=1` present, `=0` missing, `:Char` which character, `?=` group member outside the roster).

@@ -7,7 +7,7 @@
 
 The addon stores each record (one per day, later writes overwrite) in
 WTF/Account/<account>/SavedVariables/ESAttendance.lua as an ``export`` string
-``ESA1|2026-09-16|20:05|Player=1:Char|Player=0|…|?=UnknownChar``. WoW writes the file on
+``ESA1;2026-09-16;20:05;Player=1:Char;Player=0;…;?=UnknownChar`` (older records used ``|``). WoW writes the file on
 logout or /reload, so run this after the raid (or /reload first). The string is POSTed to
 the Apps Script web app (doPost p=esattendance, same URL + token as sim_runner.py, taken
 from tools/roster/sim_runner.config.json or from es_attendance.config.json next to this
@@ -76,7 +76,7 @@ def read_records(path):
     records = {}
     for m in re.finditer(r'\["export"\]\s*=\s*"((?:[^"\\]|\\.)*)"', text):
         export = lua_unescape(m.group(1))
-        parts = export.split("|")
+        parts = re.split(r"[;|]", export)
         if len(parts) >= 3 and parts[0] == "ESA1":
             records[parts[1]] = export
     return records
@@ -146,9 +146,10 @@ def main():
         if not args.all and state.get(date) == digest:
             skipped += 1
             continue
-        present = sum(1 for p in export.split("|")[3:] if "=1" in p and not p.startswith("?="))
+        fields = re.split(r"[;|]", export)
+        present = sum(1 for p in fields[3:] if "=1" in p and not p.startswith("?="))
         if args.dry_run:
-            print("%s %s – %d present: %s" % (date, export.split("|")[2], present, export[:120] + ("…" if len(export) > 120 else "")))
+            print("%s %s – %d present: %s" % (date, fields[2], present, export[:120] + ("…" if len(export) > 120 else "")))
             continue
         res = post(cfg, export)
         if res.get("ok"):

@@ -9,6 +9,9 @@ local ROSTER_HEADER = "ESROSTER"
 local WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec"
 local ROSTER_MAX_AGE_DAYS = 7   -- older roster -> orange hint in the window
 local RECORD_HEADER = "ESA1"
+-- ";" and not "|": a WoW EditBox eats "|r" / "|n" (colour reset / newline escapes), so a "|"-separated
+-- string copied from the export box would lose every player whose name starts with R or N.
+local RECORD_SEP = ";"
 local INVITE_INTERVAL = 0.6    -- s between invites
 local INVITE_WAIT_MAX = 90     -- s to wait for the first accept / raid conversion
 local GUILD_REFRESH_MIN = 10   -- s between C_GuildInfo.GuildRoster() requests
@@ -331,7 +334,7 @@ end
 function ns.CancelInvites() stopQueue("pozvánky zrušeny") end
 
 -- ---------------------------------------------------------------- attendance
---- Export string: ESA1|yyyy-mm-dd|HH:MM|Player=1:Char|Player=0|…|?=UnknownChar
+--- Export string: ESA1;yyyy-mm-dd;HH:MM;Player=1:Char;Player=0;…;?=UnknownChar
 local function buildExport(rec)
   local parts = { RECORD_HEADER, rec.date, rec.time }
   for _, p in ipairs(ns.roster) do
@@ -339,7 +342,7 @@ local function buildExport(rec)
     parts[#parts + 1] = p.name .. "=" .. (rec.present[p.name] and "1" or "0") .. (ch and (":" .. ch) or "")
   end
   for _, name in ipairs(rec.unknown or {}) do parts[#parts + 1] = "?=" .. name end
-  return table.concat(parts, "|")
+  return table.concat(parts, RECORD_SEP)
 end
 
 --- Records who is in the group right now. One record per day – a second write overwrites it.

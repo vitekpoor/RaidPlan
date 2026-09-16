@@ -3662,7 +3662,8 @@ function doPost(e) {
 // ================== DOCHÁZKA (addon ES Attendance) ==================
 // Herní addon addon/ESAttendance (repo RaidPlan) porovná Roster se skupinou v raidu
 // a tlačítkem „Zapsat docházku“ vytvoří řetězec
-//   ESA1|2026-09-16|20:05|Hráč=1:Postava|Hráč=0|…|?=NeznámáPostava
+//   ESA1;2026-09-16;20:05;Hráč=1:Postava;Hráč=0;…;?=NeznámáPostava
+// (oddělovač „;“ – „|“ herní EditBox polyká jako escape |r/|n; starší záznamy s „|“ se berou taky)
 // Ten sem doputuje buď přes formulář …/exec?p=attendance (Ctrl+C ze hry, Ctrl+V do
 // formuláře) nebo přes addon/sync_attendance.py (POST p=esattendance s tokenem
 // sim_runner.py). Zápis = sloupec v listu „Docházka“ s hlavičkou „16.9.2026 (20:05)“,
@@ -3714,9 +3715,9 @@ function buildAttendanceSheet() {
  * unknown: [postavy v raidu mimo roster] } nebo vyhodí Error.
  */
 function parseAttendanceRecord_(text) {
-  var parts = String(text || "").trim().split("|");
+  var parts = String(text || "").trim().split(/[;|]/);
   if (parts.length < 4 || parts[0].trim() !== ATT_RECORD_HEADER)
-    throw new Error("Neplatný řetězec – čekám „" + ATT_RECORD_HEADER + "|datum|čas|Hráč=1|…“ z addonu (/esa → Zapsat docházku).");
+    throw new Error("Neplatný řetězec – čekám „" + ATT_RECORD_HEADER + ";datum;čas;Hráč=1;…“ z addonu (/esa → Zapsat docházku).");
   var date = parseIsoDate_(parts[1]);
   if (!date) throw new Error("Neplatné datum „" + parts[1] + "“.");
   var time = String(parts[2] || "").trim();
@@ -3917,7 +3918,7 @@ var ATTENDANCE_FORM_HTML_ = '<!DOCTYPE html>\
 </style></head><body><div class="card">\
 <h1>📋 Docházka z raidu</h1>\
 <label for="record">Řetězec z addonu</label>\
-<textarea id="record" placeholder="ESA1|2026-09-16|20:05|Hráč=1:Postava|Hráč=0|…" spellcheck="false"></textarea>\
+<textarea id="record" placeholder="ESA1;2026-09-16;20:05;Hráč=1:Postava;Hráč=0;…" spellcheck="false"></textarea>\
 <div id="preview"></div>\
 <div id="pwbox" style="display:none"><label for="pw">Heslo</label><input type="password" id="pw" autocomplete="current-password"></div>\
 <button id="send">Zapsat do listu Docházka</button>\
@@ -3930,7 +3931,7 @@ var $ = function (id) { return document.getElementById(id); };\
 if (NEEDPW) $("pwbox").style.display = "";\
 function show(ok, msg) { var s = $("status"); s.className = ok ? "ok" : "err"; s.textContent = msg; }\
 function preview() {\
-  var parts = $("record").value.trim().split("|"), p = $("preview");\
+  var parts = $("record").value.trim().split(/[;|]/), p = $("preview");\
   if (parts.length < 4 || parts[0] !== "ESA1") { p.textContent = parts.join("").length ? "⚠ nevypadá to jako řetězec z addonu" : ""; return; }\
   var yes = 0, no = 0, unk = 0;\
   parts.slice(3).forEach(function (s) { if (s.indexOf("?=") === 0) unk++; else if (/=1(:|$)/.test(s)) yes++; else if (/=0(:|$)/.test(s)) no++; });\
