@@ -1300,6 +1300,8 @@ function doGet(e) {
   var page = e && e.parameter ? String(e.parameter.p || "") : "";
   if (page === "sim") return simFormPage_();
   if (page === "simapi") return simApi_(e);
+  if (page === "attendance") return attendanceFormPage_();   // zápis docházky z addonu ES Attendance
+  if (page === "esroster") return esRosterText_();           // roster pro import v addonu (/esa import)
   var roster = getRoster_() || [];
   var names = roster.map(function (p) { return p.player; });
   var html = ABSENCE_FORM_HTML_
@@ -1855,6 +1857,9 @@ function onOpen() {
       .addItem("Spustit simy online (GitHub)", "runSimsOnline")
       .addItem("Nastavit GitHub token…", "setGithubToken")
       .addItem("Nastavit heslo pro web tlačítko…", "setSimRunPassword")
+      .addToUi();
+    SpreadsheetApp.getUi().createMenu("Docházka")
+      .addItem("Vytvořit / doplnit list Docházka (addon ES Attendance)", "buildAttendanceSheet")
       .addToUi();
   } catch (err) { /* bez UI (trigger/web) */ }
 }
@@ -3630,6 +3635,18 @@ function doPost(e) {
     }
     return simApiJson_({ ok: false, error: "neznámá action " + body.action });
   }
+  if (p === "esattendance") {
+    // addon/sync_attendance.py: záznam docházky ze SavedVariables addonu ES Attendance
+    var tok2 = PropertiesService.getScriptProperties().getProperty(SIM_API_TOKEN_PROP);
+    if (!tok2 || String(body.token || "") !== tok2) return simApiJson_({ ok: false, error: "bad token" });
+    var lock2 = LockService.getScriptLock();
+    try { lock2.waitLock(20000); } catch (err) { return simApiJson_({ ok: false, error: "lock timeout" }); }
+    try {
+      var r2 = recordAttendance_(String(body.record || ""));
+      return simApiJson_({ ok: r2.ok, message: r2.message, error: r2.ok ? undefined : r2.message });
+    } catch (err) { return simApiJson_({ ok: false, error: String(err && err.message || err) }); }
+    finally { lock2.releaseLock(); }
+  }
   if (p !== "runsims") return simApiJson_({ ok: false, message: "neznámý požadavek" });
   var want = PropertiesService.getScriptProperties().getProperty(SIM_RUN_PASSWORD_PROP);
   var pw = String(body.pw || params.pw || "");
@@ -3641,3 +3658,238 @@ function doPost(e) {
   try { return simApiJson_(runSimsOnline_("web-hub")); }
   catch (err) { return simApiJson_({ ok: false, message: String(err && err.message || err) }); }
 }
+
+// ================== DOCHÁZKA (addon ES Attendance) ==================
+// Herní addon addon/ESAttendance (repo RaidPlan) porovná Roster se skupinou v raidu
+// a tlačítkem „Zapsat docházku“ vytvoří řetězec
+//   ESA1|2026-09-16|20:05|Hráč=1:Postava|Hráč=0|…|?=NeznámáPostava
+// Ten sem doputuje buď přes formulář …/exec?p=attendance (Ctrl+C ze hry, Ctrl+V do
+// formuláře) nebo přes addon/sync_attendance.py (POST p=esattendance s tokenem
+// sim_runner.py). Zápis = sloupec v listu „Docházka“ s hlavičkou „16.9.2026 (20:05)“,
+// ano/ne pro každého hráče z Rosteru; druhý zápis ve stejný den sloupec PŘEPÍŠE.
+// Roster pro addon (import ve hře /esa import) servíruje …/exec?p=esroster.
+var ATT_SHEET_NAME = "Docházka";
+var ATT_YES = "ano";
+var ATT_NO = "ne";
+var ATT_YES_BG = "#D9EAD3";
+var ATT_NO_BG = "#F4CCCC";
+var ATT_HEADER_RE = /^\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/;   // "16.9.2026 (20:05)"
+var ATT_RECORD_HEADER = "ESA1";
+
+function attSheet_() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ATT_SHEET_NAME);
+}
+
+/** Vytvoří list Docházka (hráči z Rosteru ve sloupci A, obarvení podle classy). Idempotentní. */
+function buildAttendanceSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var roster = getRoster_() || [];
+  var sh = ss.getSheetByName(ATT_SHEET_NAME);
+  var created = false;
+  if (!sh) {
+    sh = ss.insertSheet(ATT_SHEET_NAME);
+    created = true;
+    sh.getRange(1, 1).setValue("Hráč").setFontWeight("bold").setBackground("#CCCCCC");
+    sh.setColumnWidth(1, 130);
+    sh.setFrozenRows(1);
+    sh.setFrozenColumns(1);
+    sh.protect().setDescription("Docházka – zapisuje addon ES Attendance (skript)");
+  }
+  var added = 0;
+  roster.forEach(function (p) {
+    var before = sh.getLastRow();
+    findAbsencePlayerRow_(sh, p.player, roster);
+    if (sh.getLastRow() > before) added++;
+  });
+  try {
+    SpreadsheetApp.getUi().alert("Docházka", (created ? "List vytvořen. " : "List už existoval. ") +
+      "Přidáno hráčů: " + added + ".\n\nZápis: ve hře /esa → Zapsat docházku → Ctrl+C → formulář …/exec?p=attendance " +
+      "(nebo addon\\sync_attendance.py).", SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (err) {}
+  return sh;
+}
+
+/**
+ * Rozparsuje řetězec z addonu. Vrací { date: Date, time: "20:05", players: [{ name, present, char }],
+ * unknown: [postavy v raidu mimo roster] } nebo vyhodí Error.
+ */
+function parseAttendanceRecord_(text) {
+  var parts = String(text || "").trim().split("|");
+  if (parts.length < 4 || parts[0].trim() !== ATT_RECORD_HEADER)
+    throw new Error("Neplatný řetězec – čekám „" + ATT_RECORD_HEADER + "|datum|čas|Hráč=1|…“ z addonu (/esa → Zapsat docházku).");
+  var date = parseIsoDate_(parts[1]);
+  if (!date) throw new Error("Neplatné datum „" + parts[1] + "“.");
+  var time = String(parts[2] || "").trim();
+  if (!/^\d{1,2}:\d{2}$/.test(time)) throw new Error("Neplatný čas „" + time + "“.");
+  var players = [], unknown = [];
+  for (var i = 3; i < parts.length; i++) {
+    var seg = parts[i].trim();
+    if (!seg) continue;
+    var m = /^(.*?)=([01])(?::(.*))?$/.exec(seg);
+    if (seg.indexOf("?=") === 0) { unknown.push(seg.slice(2)); continue; }
+    if (!m) throw new Error("Nerozumím části „" + seg + "“.");
+    players.push({ name: m[1].trim(), present: m[2] === "1", char: (m[3] || "").trim() });
+  }
+  if (!players.length) throw new Error("Řetězec neobsahuje žádného hráče.");
+  return { date: date, time: time, players: players, unknown: unknown };
+}
+
+/** Hlavička sloupce -> Date (bez času), nebo null. */
+function attHeaderDate_(v) {
+  if (v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  var m = ATT_HEADER_RE.exec(String(v || ""));
+  return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])) : null;
+}
+
+/**
+ * Sloupec pro datum: existující (stejný den → přepíše hlavičku i hodnoty) nebo nový vložený tak,
+ * aby datumy zůstaly vzestupně. Vrací číslo sloupce.
+ */
+function findAttendanceDateCol_(sh, date, time, tz) {
+  var key = Utilities.formatDate(date, tz, "yyyy-MM-dd");
+  var lastCol = sh.getLastColumn();
+  var insertAt = lastCol + 1;
+  var found = 0;
+  if (lastCol >= 2) {
+    var heads = sh.getRange(1, 2, 1, lastCol - 1).getValues()[0];
+    for (var i = 0; i < heads.length; i++) {
+      var d = attHeaderDate_(heads[i]);
+      if (!d) continue;
+      var k = Utilities.formatDate(d, tz, "yyyy-MM-dd");
+      if (k === key) { found = i + 2; break; }
+      if (k > key) { insertAt = i + 2; break; }
+    }
+  }
+  var col = found;
+  if (!found) {
+    if (insertAt <= lastCol) sh.insertColumnBefore(insertAt);
+    col = insertAt;
+    sh.setColumnWidth(col, 110);
+  } else if (sh.getLastRow() >= 2) {
+    sh.getRange(2, col, sh.getLastRow() - 1, 1).clearContent().clearNote().setBackground(null);
+  }
+  sh.getRange(1, col).setValue(Utilities.formatDate(date, tz, "d.M.yyyy") + " (" + time + ")")
+    .setNumberFormat("@").setFontWeight("bold").setBackground("#CCCCCC").setHorizontalAlignment("center");
+  return col;
+}
+
+/** Zapíše záznam z addonu do listu Docházka. Vrací { ok, message }. */
+function recordAttendance_(text) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var tz = ss.getSpreadsheetTimeZone();
+  var rec;
+  try { rec = parseAttendanceRecord_(text); }
+  catch (err) { return { ok: false, message: "⚠ " + err.message }; }
+  var roster = getRoster_() || [];
+  var sh = attSheet_();
+  if (!sh) {
+    sh = ss.insertSheet(ATT_SHEET_NAME);
+    sh.getRange(1, 1).setValue("Hráč").setFontWeight("bold").setBackground("#CCCCCC");
+    sh.setColumnWidth(1, 130);
+    sh.setFrozenRows(1);
+    sh.setFrozenColumns(1);
+    sh.protect().setDescription("Docházka – zapisuje addon ES Attendance (skript)");
+  }
+  var col = findAttendanceDateCol_(sh, rec.date, rec.time, tz);
+  var present = 0;
+  rec.players.forEach(function (p) {
+    var row = findAbsencePlayerRow_(sh, p.name, roster);
+    var cell = sh.getRange(row, col);
+    cell.setValue(p.present ? ATT_YES : ATT_NO).setBackground(p.present ? ATT_YES_BG : ATT_NO_BG)
+      .setHorizontalAlignment("center").setFontColor("#000000");
+    if (p.char) cell.setNote(p.char); else cell.clearNote();
+    if (p.present) present++;
+  });
+  var head = sh.getRange(1, col);
+  if (rec.unknown.length) head.setNote("V raidu mimo Roster: " + rec.unknown.join(", ")); else head.clearNote();
+  var label = Utilities.formatDate(rec.date, tz, "d.M.yyyy") + " (" + rec.time + ")";
+  return { ok: true,
+           message: "✔ Docházka " + label + ": " + present + "/" + rec.players.length + " hráčů v raidu" +
+                    (rec.unknown.length ? " · mimo roster: " + rec.unknown.join(", ") : "") };
+}
+
+/** Text rosteru pro import v addonu (/esa import): ESROSTER;verze + Hráč;postava;classa;role;alt;classa;role */
+function esRosterText_() {
+  var roster = getRoster_() || [];
+  var lines = ["ESROSTER;" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm")];
+  roster.forEach(function (p) {
+    var parts = [p.player, p.main, p.mainClass, p.mainRole];
+    if (p.alt) parts.push(p.alt, p.altClass, p.altRole);
+    lines.push(parts.join(";"));
+  });
+  return ContentService.createTextOutput(lines.join("\n")).setMimeType(ContentService.MimeType.TEXT);
+}
+
+/** Formulář pro vložení řetězce ze hry. Heslo = stejné jako web tlačítko simů (SIM_RUN_PASSWORD), pokud je nastavené. */
+function attendanceFormPage_() {
+  var needPw = !!PropertiesService.getScriptProperties().getProperty(SIM_RUN_PASSWORD_PROP);
+  var html = ATTENDANCE_FORM_HTML_.replace("__NEEDPW__", needPw ? "true" : "false");
+  return HtmlService.createHtmlOutput(html)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .setTitle("Docházka – zápis z addonu")
+    .addMetaTag("viewport", "width=device-width, initial-scale=1");
+}
+
+/** Odeslání z formuláře: data = { record, pw }. */
+function submitAttendanceWeb(data) {
+  data = data || {};
+  var want = PropertiesService.getScriptProperties().getProperty(SIM_RUN_PASSWORD_PROP);
+  if (want && String(data.pw || "") !== want) { Utilities.sleep(800); return { ok: false, message: "⚠ Špatné heslo." }; }
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (err) { return { ok: false, message: "⚠ Zkus to za chvíli znovu (souběžný zápis)." }; }
+  try { return recordAttendance_(data.record); }
+  catch (err) { return { ok: false, message: "⚠ Chyba: " + err.message }; }
+  finally { lock.releaseLock(); }
+}
+
+var ATTENDANCE_FORM_HTML_ = '<!DOCTYPE html>\
+<html lang="cs"><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><title>Docházka</title>\
+<style>\
+  :root { color-scheme: dark; }\
+  * { box-sizing: border-box; }\
+  body { background:#111413; color:#e4eae6; font-family:"Inter","Segoe UI",-apple-system,sans-serif; margin:0; padding:1.25rem; line-height:1.5; }\
+  .card { max-width:34rem; margin:0 auto; background:#171b19; border:1px solid #242a27; border-radius:10px; padding:1.5rem 1.5rem 1.25rem; }\
+  h1 { font-size:1.25rem; margin:0 0 1rem; color:#3fd68a; }\
+  label { display:block; font-size:.75rem; text-transform:uppercase; letter-spacing:.1em; color:#8b968f; font-weight:700; margin:0.9rem 0 .3rem; }\
+  textarea, input { width:100%; font-size:.95rem; padding:.55rem .7rem; background:#0a0c0b; color:#e4eae6; border:1px solid #242a27; border-radius:6px; font-family:ui-monospace,Consolas,monospace; }\
+  textarea { min-height:9rem; resize:vertical; }\
+  textarea:focus, input:focus { outline:2px solid #3fd68a; border-color:#3fd68a; }\
+  .hint { color:#8b968f; font-size:.78rem; margin:.25rem 0 0; }\
+  button { width:100%; margin-top:1.3rem; padding:.7rem; font-size:1.05rem; font-weight:700; background:#3fd68a; color:#07110c; border:none; border-radius:999px; cursor:pointer; }\
+  button:disabled { opacity:.5; cursor:wait; }\
+  #status { margin-top:1rem; font-weight:600; min-height:1.4em; white-space:pre-line; }\
+  #status.ok { color:#3fd68a; } #status.err { color:#f0857a; }\
+  #preview { color:#8b968f; font-size:.8rem; margin-top:.4rem; }\
+</style></head><body><div class="card">\
+<h1>📋 Docházka z raidu</h1>\
+<label for="record">Řetězec z addonu</label>\
+<textarea id="record" placeholder="ESA1|2026-09-16|20:05|Hráč=1:Postava|Hráč=0|…" spellcheck="false"></textarea>\
+<div id="preview"></div>\
+<div id="pwbox" style="display:none"><label for="pw">Heslo</label><input type="password" id="pw" autocomplete="current-password"></div>\
+<button id="send">Zapsat do listu Docházka</button>\
+<div id="status"></div>\
+<p class="hint">Ve hře: /esa → Zapsat docházku → text je označený → Ctrl+C → sem Ctrl+V. Zápis ve stejný den přepíše předchozí sloupec.</p>\
+</div>\
+<script>\
+var NEEDPW = __NEEDPW__;\
+var $ = function (id) { return document.getElementById(id); };\
+if (NEEDPW) $("pwbox").style.display = "";\
+function show(ok, msg) { var s = $("status"); s.className = ok ? "ok" : "err"; s.textContent = msg; }\
+function preview() {\
+  var parts = $("record").value.trim().split("|"), p = $("preview");\
+  if (parts.length < 4 || parts[0] !== "ESA1") { p.textContent = parts.join("").length ? "⚠ nevypadá to jako řetězec z addonu" : ""; return; }\
+  var yes = 0, no = 0, unk = 0;\
+  parts.slice(3).forEach(function (s) { if (s.indexOf("?=") === 0) unk++; else if (/=1(:|$)/.test(s)) yes++; else if (/=0(:|$)/.test(s)) no++; });\
+  p.textContent = parts[1] + " " + parts[2] + " · v raidu " + yes + ", chybí " + no + (unk ? ", mimo roster " + unk : "");\
+}\
+$("record").addEventListener("input", preview);\
+$("send").addEventListener("click", function () {\
+  if (!$("record").value.trim()) return show(false, "⚠ Vlož řetězec z addonu.");\
+  $("send").disabled = true; show(true, "⏳ Zapisuji…");\
+  google.script.run.withSuccessHandler(function (res) {\
+    $("send").disabled = false; show(res.ok, res.message);\
+  }).withFailureHandler(function (err) {\
+    $("send").disabled = false; show(false, "⚠ Chyba spojení: " + err.message);\
+  }).submitAttendanceWeb({ record: $("record").value, pw: $("pw").value });\
+});\
+</script></body></html>';

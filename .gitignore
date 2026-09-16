@@ -3,3 +3,6 @@ __pycache__/
 tools/raidplan/venomabyss_plans.txt
 # pre-save snapshots written by raidplan.py --in-place / --boss
 tools/raidplan/backup_*.json
+# ES Attendance addon: sync state + optional private config (web app token)
+addon/.synced.json
+addon/es_attendance.config.json

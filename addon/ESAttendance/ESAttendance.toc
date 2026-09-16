@@ -1,0 +1,12 @@
+## Interface: 120100, 120105, 120007
+## Title: ES Attendance
+## Notes: Eternal Shadows – roster vs. raid group, invites, attendance record
+## Author: Eternal Shadows
+## Version: 1.0.0
+## SavedVariables: ESAttendanceDB
+## IconTexture: Interface\Icons\Achievement_Guildperk_EverybodysFriend
+## X-Website: https://vitekpoor.github.io/RaidPlan/
+
+RosterData.lua
+Core.lua
+UI.lua
