@@ -9,7 +9,7 @@ if errorlevel 1 goto :end
 
 rem stage only the raid guide (this folder + the published root index.html);
 rem tools\ is managed separately and is never published by this script
-git add -A -- . ..\index.html ..\raid.html ..\loot.html ..\.gitignore
+git add -A -- . ..\index.html ..\raid.html ..\loot.html ..\venom.html ..\.gitignore
 
 rem exit if there is nothing new to commit
 git diff --cached --quiet

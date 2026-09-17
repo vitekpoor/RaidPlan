@@ -33,4 +33,10 @@ if exist loot.html (
   if errorlevel 1 (echo ERROR: failed to write ..\loot.html & exit /b 1)
 )
 
-echo Built venomous-abyss.html + ..\raid.html, ..\index.html (hub), ..\loot.html.
+rem venom.html (docasna analyza Twin Fangs - Eternal Venom) is a standalone page with embedded data
+if exist venom.html (
+  powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\venom.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0venom.html') -replace '(href|src)=\"assets/', '$1=\"web/assets/'), (New-Object System.Text.UTF8Encoding $false))"
+  if errorlevel 1 (echo ERROR: failed to write ..\venom.html & exit /b 1)
+)
+
+echo Built venomous-abyss.html + ..\raid.html, ..\index.html (hub), ..\loot.html, ..\venom.html.
