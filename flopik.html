@@ -119,6 +119,7 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
   var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(TAB);
   var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";
   var REFRESH_MS = 60000;
+  var MIN_DUR = 30;   // s – kratší pully (omyl, reset, okamžitý wipe) se nezobrazují
   var DEATH_COL = { k: "deaths", l: "Smrti", cls: "deaths", hot: [1, 2], hotAll: [3, 5], agg: "sum" };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -155,6 +156,7 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     rows.slice(1).forEach(function (r) {
       if (!r[0] || !r[9]) return;
       var d = String(r[0]).trim(), key = String(r[9]).trim(), no = Number(r[1]) || 0, code = String(r[11] || "").trim();
+      if ((Number(r[5]) || 0) < MIN_DUR) return;
       var nk = code || ("d:" + d);
       var n = nights[nk] || (nights[nk] = { key: nk, code: code, date: d, bosses: {}, last: "" });
       if (d + " " + r[4] > n.last) { n.last = d + " " + r[4]; n.date = d; }
@@ -366,7 +368,7 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
         "Sloupec <b>Smrti</b> počítá úmrtí za celý pull, i po cutoffu.</div>"
       : "<div><b>Bez death cutoffu</b> – hodnotí se celý pull od začátku do konce.</div>");
     lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu. † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +
-      ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než minutu jsou v záložkách ztlumené." +
+      ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než " + MIN_DUR + " s se nezobrazují, kratší než minutu jsou v záložkách ztlumené." +
       (o.code ? ' Zdroj: <a href="https://www.warcraftlogs.com/reports/' + esc(o.code) + '" target="_blank" rel="noopener">Warcraft Logs ' + esc(o.code) + "</a>." : "") + "</div>");
     $("legend").innerHTML = lg.join("");
     persist();

@@ -322,7 +322,7 @@ def main():
     ap.add_argument("--boss", type=int, default=0, help="only this encounter ID (default: every boss)")
     ap.add_argument("--cutoff", type=int, help="default death cutoff for bosses without their own (default 0 = whole pull)")
     ap.add_argument("--no-upload", action="store_true", help="do not send to Google Sheets")
-    ap.add_argument("--min-dur", type=int, default=15, help="pulls shorter than this (s) are printed but not uploaded (default 15)")
+    ap.add_argument("--min-dur", type=int, default=30, help="pulls shorter than this (s) are printed but not uploaded (default 30)")
     ap.add_argument("--webapp-url")
     ap.add_argument("--token")
     args = ap.parse_args()

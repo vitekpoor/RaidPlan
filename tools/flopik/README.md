@@ -25,7 +25,7 @@ Warcraft Logs (živý upload) ──► Apps Script web app (?p=flopik&action=re
 
 Pak už nic – stránka sama zavolá `refresh` pro vybraný report. Ručně jde report načíst i z menu
 **Flopik → Načíst report z Warcraft Logs…** (kód nebo URL). Jedno volání počítá max ~4 minuty
-(limit Apps Scriptu), stránka volá opakovaně, dokud `remaining > 0`. Pully kratší než 15 s se nezapisují.
+(limit Apps Scriptu), stránka volá opakovaně, dokud `remaining > 0`. Pully kratší než 30 s se nezapisují (stránka je skryje i zpětně).
 
 ## Přidání bosse / failu
 

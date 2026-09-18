@@ -4086,7 +4086,7 @@ function flopikRecordPull_(pull) {
 var WCL_CLIENT_ID_PROP = "WCL_CLIENT_ID", WCL_CLIENT_SECRET_PROP = "WCL_CLIENT_SECRET", WCL_TOKEN_PROP = "WCL_TOKEN";
 var WCL_API = "https://www.warcraftlogs.com/api/v2/client", WCL_TOKEN_URL = "https://www.warcraftlogs.com/oauth/token";
 var FLOPIK_GUILD = { id: 91339, name: "Eternal Shadows", server: "burning-blade", region: "EU" };
-var FLOPIK_MIN_DUR = 15;          // s – kratší pully (omyl, reset) se nezapisují
+var FLOPIK_MIN_DUR = 30;          // s – kratší pully (omyl, reset, okamžitý wipe) se nezapisují
 var FLOPIK_REFRESH_BUDGET_MS = 230000;   // jedno volání web appu počítá max ~4 min, zbytek při dalším volání
 
 /** Menu: uloží client ID + secret a ověří je dotazem na guildu. */
