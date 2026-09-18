@@ -1301,6 +1301,7 @@ function doGet(e) {
   if (page === "sim") return simFormPage_();
   if (page === "simapi") return simApi_(e);
   if (page === "attendance") return attendanceFormPage_();   // zápis docházky z addonu ES Attendance
+  if (page === "flopik") return flopikApiGet_(e);             // Flopik: reporty / dopočet pullů z Warcraft Logs (JSON)
   if (page === "esroster") return esRosterText_(e);          // roster pro import v addonu (/esa import); &raw=1 = holý text
   var roster = getRoster_() || [];
   var names = roster.map(function (p) { return p.player; });
@@ -1860,6 +1861,10 @@ function onOpen() {
       .addToUi();
     SpreadsheetApp.getUi().createMenu("Docházka")
       .addItem("Vytvořit / doplnit list Docházka (addon ES Attendance)", "buildAttendanceSheet")
+      .addToUi();
+    SpreadsheetApp.getUi().createMenu("Flopik")
+      .addItem("Načíst report z Warcraft Logs…", "flopikLoadReport")
+      .addItem("Nastavit Warcraft Logs API klienta…", "setWclClient")
       .addToUi();
   } catch (err) { /* bez UI (trigger/web) */ }
 }
@@ -4003,10 +4008,11 @@ $("send").addEventListener("click", function () {\
 // (token = SIM_API_TOKEN jako u sim_runner.py). Zápis do listu „Flopik“: jeden souhrnný řádek na pull
 // (Hráč prázdný, Data = definice sloupců, statistiky, legenda) + jeden řádek na hráče (Data = hodnoty metrik
 // jako JSON). Stejný pull (datum + boss + start) se přepíše, číslo pullu = pořadí v rámci dne a bosse.
-// web/flopik.html list čte přes gviz CSV a každou minutu se obnoví.
+// web/flopik.html list čte přes gviz CSV a každou minutu se obnoví. Hlavní zdroj dat je ale Warcraft Logs
+// (sekce FLOPIK – Warcraft Logs níže): stejné řádky, navíc sloupce Report (kód) a Fight (ID fightu).
 
 var FLOPIK_SHEET_NAME = "Flopik";
-var FLOPIK_HEADER = ["Datum", "Pull", "Boss", "Obtížnost", "Start", "Délka (s)", "Kill", "Hráč", "Data", "Boss klíč", "Zapsáno"];
+var FLOPIK_HEADER = ["Datum", "Pull", "Boss", "Obtížnost", "Start", "Délka (s)", "Kill", "Hráč", "Data", "Boss klíč", "Zapsáno", "Report", "Fight"];
 
 function flopikSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -4018,6 +4024,7 @@ function flopikSheet_() {
     sh.getRange("A:A").setNumberFormat("@");   // datum i start jako text, ať je gviz vrátí beze změny
     sh.getRange("E:E").setNumberFormat("@");
     sh.getRange("I:I").setNumberFormat("@");
+    sh.getRange("L:L").setNumberFormat("@");
     sh.protect().setDescription("Flopik – zapisuje tools/flopik/flopik.py (skript)").setWarningOnly(true);
   }
   return sh;
@@ -4037,11 +4044,13 @@ function flopikRecordPull_(pull) {
   var sh = flopikSheet_();
   var last = sh.getLastRow();
   var vals = last > 1 ? sh.getRange(2, 1, last - 1, FLOPIK_HEADER.length).getValues() : [];
+  var report = String(pull.report || ""), fight = pull.fight == null ? "" : String(pull.fight);
   var pullNo = 0, maxNo = 0, del = [];
   vals.forEach(function (r, i) {
     if (flopikText_(r[0], "yyyy-MM-dd") !== date || String(r[9]) !== bossKey) return;
     var no = Number(r[1]) || 0;
-    if (flopikText_(r[4], "HH:mm:ss") === start) { pullNo = pullNo || no; del.push(i + 2); }
+    var same = flopikText_(r[4], "HH:mm:ss") === start || (report && String(r[11]) === report && String(r[12]) === fight);
+    if (same) { pullNo = pullNo || no; del.push(i + 2); }
     else if (no > maxNo) maxNo = no;
   });
   if (!pullNo) pullNo = maxNo + 1;
@@ -4053,12 +4062,465 @@ function flopikRecordPull_(pull) {
     stats: pull.stats || [], legend: pull.legend || [], description: pull.description || "", summary: pull.summary || {},
     deathList: pull.deathList || []
   };
-  var rows = [base.concat(["", JSON.stringify(meta), bossKey, now])];
+  var rows = [base.concat(["", JSON.stringify(meta), bossKey, now, report, fight])];
   players.forEach(function (p) {
     var data = {};
     Object.keys(p).forEach(function (k) { if (k !== "name") data[k] = p[k]; });
-    rows.push(base.concat([String(p.name || ""), JSON.stringify(data), bossKey, now]));
+    rows.push(base.concat([String(p.name || ""), JSON.stringify(data), bossKey, now, report, fight]));
   });
   sh.getRange(sh.getLastRow() + 1, 1, rows.length, FLOPIK_HEADER.length).setValues(rows);
   return { ok: true, pull: pullNo, rows: rows.length };
 }
+
+// ================== FLOPIK – Warcraft Logs jako zdroj dat ==================
+// Guilda loguje živě do Warcraft Logs, takže pully nebereme z lokálního combat logu, ale z WCL API v2
+// (GraphQL, client credentials). Web app (doGet ?p=flopik) umí:
+//   action=reports            → seznam reportů guildy (dropdown na flopik.html)
+//   action=refresh&code=XXX   → pro report dopočítá pully (fights), které ještě nejsou v listu „Flopik“
+//                               (události fightu → flopikAnalyze z engine.js → flopikRecordPull_), časově omezeno,
+//                               stránka volá opakovaně, dokud remaining > 0
+// Přihlašovací údaje: menu Flopik → Nastavit Warcraft Logs API klienta… (https://www.warcraftlogs.com/api/clients),
+// uložené ve Script Properties (WCL_CLIENT_ID / WCL_CLIENT_SECRET), token v WCL_TOKEN.
+// Definice bossů a výpočet je v sekci FLOPIK ENGINE níže (generuje tools/flopik/build_gs.py z engine.js).
+
+var WCL_CLIENT_ID_PROP = "WCL_CLIENT_ID", WCL_CLIENT_SECRET_PROP = "WCL_CLIENT_SECRET", WCL_TOKEN_PROP = "WCL_TOKEN";
+var WCL_API = "https://www.warcraftlogs.com/api/v2/client", WCL_TOKEN_URL = "https://www.warcraftlogs.com/oauth/token";
+var FLOPIK_GUILD = { id: 91339, name: "Eternal Shadows", server: "burning-blade", region: "EU" };
+var FLOPIK_MIN_DUR = 15;          // s – kratší pully (omyl, reset) se nezapisují
+var FLOPIK_REFRESH_BUDGET_MS = 230000;   // jedno volání web appu počítá max ~4 min, zbytek při dalším volání
+
+/** Menu: uloží client ID + secret a ověří je dotazem na guildu. */
+function setWclClient() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  var id = ui.prompt("Warcraft Logs API klient", "Client ID (https://www.warcraftlogs.com/api/clients):\n" +
+    (props.getProperty(WCL_CLIENT_ID_PROP) ? "(aktuální: " + props.getProperty(WCL_CLIENT_ID_PROP) + ")" : ""), ui.ButtonSet.OK_CANCEL);
+  if (id.getSelectedButton() !== ui.Button.OK) return;
+  var secret = ui.prompt("Warcraft Logs API klient", "Client secret:", ui.ButtonSet.OK_CANCEL);
+  if (secret.getSelectedButton() !== ui.Button.OK) return;
+  if (id.getResponseText().trim()) props.setProperty(WCL_CLIENT_ID_PROP, id.getResponseText().trim());
+  if (secret.getResponseText().trim()) props.setProperty(WCL_CLIENT_SECRET_PROP, secret.getResponseText().trim());
+  props.deleteProperty(WCL_TOKEN_PROP);
+  try {
+    var g = wclGql_("query($n:String!,$s:String!,$r:String!){ guildData { guild(name:$n, serverSlug:$s, serverRegion:$r) { id name } } }",
+      { n: FLOPIK_GUILD.name, s: FLOPIK_GUILD.server, r: FLOPIK_GUILD.region }).guildData.guild;
+    CacheService.getScriptCache().remove("flopik_reports");
+    ui.alert("Warcraft Logs", "Funguje. Guilda " + g.name + " (ID " + g.id + (g.id === FLOPIK_GUILD.id ? "" : " – POZOR, v kódu je " + FLOPIK_GUILD.id) + ").", ui.ButtonSet.OK);
+  } catch (err) {
+    ui.alert("Warcraft Logs", "Ověření selhalo: " + (err && err.message || err), ui.ButtonSet.OK);
+  }
+}
+
+/** Menu: načte (dopočítá) jeden report podle kódu / URL. */
+function flopikLoadReport() {
+  var ui = SpreadsheetApp.getUi();
+  var r = ui.prompt("Flopik – načíst report", "Kód nebo URL reportu z Warcraft Logs:", ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var code = flopikReportCode_(r.getResponseText());
+  if (!code) { ui.alert("Flopik", "To nevypadá jako kód reportu.", ui.ButtonSet.OK); return; }
+  try {
+    var res = flopikRefresh_(code, FLOPIK_REFRESH_BUDGET_MS);
+    ui.alert("Flopik", res.title + ": pullů " + res.fights + ", nově dopočítáno " + res.added + ", zbývá " + res.remaining +
+      (res.remaining ? " (spusť znovu)" : "") + ".", ui.ButtonSet.OK);
+  } catch (err) { ui.alert("Flopik", "Chyba: " + (err && err.message || err), ui.ButtonSet.OK); }
+}
+
+function flopikReportCode_(s) {
+  s = String(s || "").trim();
+  var m = s.match(/reports\/([A-Za-z0-9]{12,20})/);
+  if (m) return m[1];
+  return /^[A-Za-z0-9]{12,20}$/.test(s) ? s : "";
+}
+
+function wclToken_(force) {
+  var props = PropertiesService.getScriptProperties();
+  if (!force) {
+    try {
+      var t = JSON.parse(props.getProperty(WCL_TOKEN_PROP) || "null");
+      if (t && t.access_token && t.exp > Date.now() + 60000) return t.access_token;
+    } catch (err) { /* nový token */ }
+  }
+  var id = props.getProperty(WCL_CLIENT_ID_PROP), secret = props.getProperty(WCL_CLIENT_SECRET_PROP);
+  if (!id || !secret) throw new Error("Warcraft Logs API klient není nastavený (menu Flopik → Nastavit Warcraft Logs API klienta…).");
+  var resp = UrlFetchApp.fetch(WCL_TOKEN_URL, {
+    method: "post", payload: { grant_type: "client_credentials" }, muteHttpExceptions: true,
+    headers: { Authorization: "Basic " + Utilities.base64Encode(id + ":" + secret) }
+  });
+  if (resp.getResponseCode() !== 200) throw new Error("WCL token: HTTP " + resp.getResponseCode() + " " + resp.getContentText().slice(0, 200));
+  var tok = JSON.parse(resp.getContentText());
+  props.setProperty(WCL_TOKEN_PROP, JSON.stringify({ access_token: tok.access_token, exp: Date.now() + (Number(tok.expires_in) || 3600) * 1000 }));
+  return tok.access_token;
+}
+
+/** GraphQL dotaz na WCL; vrací `data`, při chybě vyhodí Error. */
+function wclGql_(query, variables) {
+  var token = wclToken_(false);
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var resp = UrlFetchApp.fetch(WCL_API, {
+      method: "post", contentType: "application/json", muteHttpExceptions: true,
+      headers: { Authorization: "Bearer " + token }, payload: JSON.stringify({ query: query, variables: variables || {} })
+    });
+    var codeHttp = resp.getResponseCode();
+    if (codeHttp === 401 && attempt === 0) { token = wclToken_(true); continue; }
+    if (codeHttp !== 200) throw new Error("WCL API: HTTP " + codeHttp + " " + resp.getContentText().slice(0, 300));
+    var body = JSON.parse(resp.getContentText());
+    if (body.errors && body.errors.length) throw new Error("WCL API: " + body.errors.map(function (e) { return e.message; }).join("; "));
+    return body.data;
+  }
+}
+
+/** Seznam reportů guildy (cache 2 min). [{code, title, start, end, zone}] */
+function flopikReports_() {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get("flopik_reports");
+  if (hit) return JSON.parse(hit);
+  var d = wclGql_("query($id:Int!){ reportData { reports(guildID:$id, limit:40) { data { code title startTime endTime zone { name } } } } }", { id: FLOPIK_GUILD.id });
+  var list = (d.reportData.reports.data || []).map(function (r) {
+    return { code: r.code, title: r.title, start: r.startTime, end: r.endTime, zone: r.zone ? r.zone.name : "" };
+  });
+  cache.put("flopik_reports", JSON.stringify(list), 120);
+  return list;
+}
+
+/** Všechny události fightu odpovídající filtru (stránkuje po 10 000). */
+function flopikEvents_(code, fightId, filter) {
+  var events = [], start = null;
+  for (var page = 0; page < 30; page++) {
+    var d = wclGql_("query($c:String!,$f:[Int]!,$s:Float,$flt:String){ reportData { report(code:$c) { events(fightIDs:$f, startTime:$s, filterExpression:$flt, limit:10000) { data nextPageTimestamp } } } }",
+      { c: code, f: [fightId], s: start, flt: filter });
+    var e = d.reportData.report.events;
+    events = events.concat(e.data || []);
+    if (!e.nextPageTimestamp) break;
+    start = e.nextPageTimestamp;
+  }
+  return events;
+}
+
+/**
+ * Dopočítá pully reportu, které v listu Flopik ještě nejsou. Vrací
+ * { ok, code, title, fights, cached, added, remaining, busy }.
+ */
+function flopikRefresh_(code, budgetMs) {
+  var t0 = Date.now();
+  code = flopikReportCode_(code);
+  if (!code) throw new Error("chybí kód reportu");
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return { ok: true, code: code, busy: true, added: 0, remaining: 1 };
+  try {
+    var d = wclGql_("query($c:String!){ reportData { report(code:$c) { title startTime guild { id } " +
+      "fights(killType: Encounters) { id encounterID name difficulty kill startTime endTime } masterData { actors { id name type subType } } } } }", { c: code });
+    var rep = d.reportData.report;
+    if (!rep) throw new Error("report " + code + " nenalezen");
+    if (!rep.guild || rep.guild.id !== FLOPIK_GUILD.id) throw new Error("report " + code + " nepatří guildě " + FLOPIK_GUILD.name);
+    var sh = flopikSheet_();
+    var last = sh.getLastRow();
+    var have = {};
+    if (last > 1) {
+      sh.getRange(2, 12, last - 1, 2).getValues().forEach(function (r) { if (String(r[0]) === code && r[1] !== "") have[String(r[1])] = true; });
+    }
+    var fights = (rep.fights || []).filter(function (f) { return (f.endTime - f.startTime) / 1000 >= FLOPIK_MIN_DUR; })
+      .sort(function (a, b) { return a.startTime - b.startTime; });
+    var todo = fights.filter(function (f) { return !have[String(f.id)]; });
+    var tz = Session.getScriptTimeZone(), added = 0;
+    for (var i = 0; i < todo.length; i++) {
+      if (Date.now() - t0 > budgetMs) break;
+      var f = todo[i];
+      var boss = flopikBossFor(f.encounterID, f.name);
+      var events = flopikEvents_(code, f.id, flopikFilterFor(boss));
+      var res = flopikAnalyze(f, events, rep.masterData.actors, rep.startTime);
+      res.date = Utilities.formatDate(new Date(res.startMs), tz, "yyyy-MM-dd");
+      res.start = Utilities.formatDate(new Date(res.startMs), tz, "HH:mm:ss");
+      res.report = code; res.fight = f.id;
+      flopikRecordPull_(res);
+      added++;
+    }
+    return { ok: true, code: code, title: rep.title, fights: fights.length, cached: Object.keys(have).length + added, added: added,
+      remaining: todo.length - added, points: null };
+  } finally { lock.releaseLock(); }
+}
+
+/** doGet ?p=flopik&action=reports | refresh&code=… (JSON, bez tokenu – jen čtení WCL + zápis cache do listu). */
+function flopikApiGet_(e) {
+  var q = (e && e.parameter) || {};
+  var action = String(q.action || "");
+  try {
+    if (action === "reports") return simApiJson_({ ok: true, guild: FLOPIK_GUILD, reports: flopikReports_() });
+    if (action === "refresh") {
+      var code = flopikReportCode_(q.code);
+      if (!code) return simApiJson_({ ok: false, error: "chybí code" });
+      var known = flopikReports_().some(function (r) { return r.code === code; });
+      if (!known) return simApiJson_({ ok: false, error: "report " + code + " není mezi reporty guildy" });
+      return simApiJson_(flopikRefresh_(code, FLOPIK_REFRESH_BUDGET_MS));
+    }
+    return simApiJson_({ ok: false, error: "neznámá action " + action });
+  } catch (err) {
+    return simApiJson_({ ok: false, error: String(err && err.message || err) });
+  }
+}
+
+// >>> FLOPIK ENGINE (generated from tools/flopik/engine.js by build_gs.py – edit engine.js, not this)
+// Flopik engine – evaluates one Warcraft Logs fight (events from the v2 API) into the per-pull "fails" breakdown.
+// Pure JavaScript without Apps Script / browser APIs, so the same code runs in class_loot_dropdowns.gs (pasted between
+// the FLOPIK ENGINE markers by build_gs.py) and in a browser test harness. Keep it ES5-compatible (Apps Script V8 is
+// fine with more, but the harness is plain <script>).
+//
+// Input shapes (WCL GraphQL): fight {id, encounterID, name, difficulty, kill, startTime, endTime} (ms relative to the
+// report start), events [{timestamp, type, sourceID, targetID, abilityGameID, stack, ...}] filtered with
+// flopikFilterFor(boss), actors [{id, name, type, subType}] from report.masterData.
+// Output: the same object tools/flopik/flopik.py produces (date/start are filled by the caller from startMs).
+
+var FLOPIK_DIFFICULTY = { 1: "LFR", 3: "Normal", 4: "Heroic", 5: "Mythic" };
+
+/** Which bosses are tracked and which fails are counted – mirror of tools/flopik/bosses.py. */
+function flopikMetric_(kind, key, label, ids, opts) {
+  var m = { kind: kind, k: key, l: label, ids: ids.map(String), avoid: true, window: 1.5, castIds: [] };
+  Object.keys(opts || {}).forEach(function (o) { m[o] = opts[o]; });
+  m.castIds = (m.castIds || []).map(String);
+  return m;
+}
+function flopikHits_(key, label, ids, opts) { return flopikMetric_("hits", key, label, ids, opts); }
+function flopikDebuff_(key, label, ids, opts) { return flopikMetric_("debuff", key, label, ids, opts); }
+function flopikCasts_(key, label, ids, opts) { return flopikMetric_("casts", key, label, ids, opts); }
+
+var FLOPIK_BOSSES = {
+  3470: { key: "nekzali", name: "Nek'zali the Soulcoiler", metrics: [] },
+  3445: { key: "sentinels", name: "Entombed Sentinels", metrics: [] },
+  3455: { key: "vashnik", name: "Vashnik the Malignant", metrics: [] },
+  3497: { key: "explorers", name: "The Lost Explorers", metrics: [] },
+  3420: { key: "sszorak", name: "Sszorak", metrics: [
+    flopikHits_("tempest", "Tempest", [1287083], { castIds: [1287072], window: 3.0, hot: [1, 2], hotAll: [2, 4],
+      note: "zásah Tempestem (1287083) – každý cast se počítá jednou (unique hit count), ne ticky" })
+  ] },
+  3421: { key: "twinfangs", name: "The Twin Fangs", cutoff: 2, analyze: "twinfangs", metrics: [] },
+  3429: { key: "coiledaltar", name: "The Coiled Altar", metrics: [] },
+  3492: { key: "ulatek", name: "Ula'tek", metrics: [] },
+  3379: { key: "nymrissa", name: "Nymrissa Wavecaller", metrics: [] }
+};
+
+var FLOPIK_DEATH_COL = { k: "deaths", l: "Smrti", cls: "deaths", hot: [1, 2], hotAll: [3, 5], agg: "sum" };
+
+/** Boss definition for an encounter ID (unknown bosses get deaths only). */
+function flopikBossFor(encounterID, name) {
+  return FLOPIK_BOSSES[encounterID] || { key: "enc" + encounterID, name: name || ("Encounter " + encounterID), metrics: [] };
+}
+
+/** WCL events filterExpression: only what the boss's metrics need + player deaths. */
+function flopikFilterFor(boss) {
+  var ids = [];
+  (boss.metrics || []).forEach(function (m) { ids = ids.concat(m.ids, m.castIds || []); });
+  if (boss.analyze === "twinfangs") ids = ids.concat(FLOPIK_TF.ids);
+  var parts = ["(type = 'death' and target.type = 'player')"];
+  if (ids.length) parts.push("ability.id in (" + ids.join(",") + ")");
+  return parts.join(" or ");
+}
+
+function flopikClusters_(times, windowSec) {
+  var n = 0, last = null;
+  times.slice().sort(function (a, b) { return a - b; }).forEach(function (t) {
+    if (last === null || (t - last) > windowSec * 1000) n++;
+    last = t;
+  });
+  return n;
+}
+function flopikNear_(list, t, windowSec) {
+  for (var i = 0; i < list.length; i++) if (Math.abs(t - list[i]) <= windowSec * 1000) return true;
+  return false;
+}
+function flopikMmss_(sec) { sec = Math.round(sec); var m = Math.floor(sec / 60), s = sec % 60; return m + ":" + (s < 10 ? "0" : "") + s; }
+
+/**
+ * Main entry. fight/events/actors as described above. Returns the pull result object; the caller adds
+ * date/start (from result.startMs) and report/fight identifiers.
+ */
+function flopikAnalyze(fight, events, actors, reportStartMs) {
+  var boss = flopikBossFor(fight.encounterID, fight.name);
+  var actorById = {};
+  (actors || []).forEach(function (a) { actorById[a.id] = a; });
+  var players = {};   // id -> name
+  events.forEach(function (e) {
+    [e.sourceID, e.targetID].forEach(function (id) {
+      var a = actorById[id];
+      if (a && a.type === "Player") players[id] = a.name;
+    });
+  });
+  var st = fight.startTime, dur = (fight.endTime - fight.startTime) / 1000;
+  var deaths = [];   // [{t, id, n}]
+  events.forEach(function (e) {
+    if (e.type === "death" && players[e.targetID]) deaths.push({ t: e.timestamp, id: e.targetID, n: players[e.targetID] });
+  });
+  deaths.sort(function (a, b) { return a.t - b.t; });
+  var cutoffN = boss.cutoff || 0;
+  var cutT = (cutoffN && deaths.length >= cutoffN) ? deaths[cutoffN - 1].t : fight.endTime;
+  var cutoff = (cutoffN && deaths.length >= cutoffN) ? Math.round((cutT - st) / 1000) : null;
+  var evc = events.filter(function (e) { return e.timestamp <= cutT; });
+
+  var res = {
+    startMs: reportStartMs + fight.startTime, dur: Math.round(dur), boss: boss.name, bossKey: boss.key, bossId: fight.encounterID,
+    difficulty: FLOPIK_DIFFICULTY[fight.difficulty] || String(fight.difficulty || ""), kill: !!fight.kill, deaths: deaths.length, cutoff: cutoff,
+    deathList: deaths.map(function (d) { return { n: d.n, t: Math.round((d.t - st) / 1000) }; }),
+    cols: [], legend: [], description: "", stats: [], summary: {}, players: []
+  };
+  var rows = {};   // name -> row
+  Object.keys(players).forEach(function (id) { rows[players[id]] = { name: players[id], died: false }; });
+
+  if (boss.analyze === "twinfangs") {
+    var out = flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff);
+    ["cols", "legend", "description", "stats", "summary"].forEach(function (k) { res[k] = out[k]; });
+    out.players.forEach(function (r) { rows[r.name] = r; });
+  } else {
+    (boss.metrics || []).forEach(function (m) {
+      var per = {}, casts = 0;
+      evc.forEach(function (e) {
+        var ab = String(e.abilityGameID);
+        if (e.type === "cast" && m.castIds.indexOf(ab) >= 0) casts++;
+        if (m.ids.indexOf(ab) < 0) return;
+        var hitTypes = m.kind === "hits" ? ["damage", "applydebuff"] : m.kind === "debuff" ? ["applydebuff", "applydebuffstack"] : ["cast"];
+        if (hitTypes.indexOf(e.type) < 0 || e.tick) return;   // periodic ticks are not new hits
+        var who = m.kind === "casts" ? e.sourceID : e.targetID;
+        if (!players[who]) return;
+        (per[who] = per[who] || []).push(e.timestamp);
+      });
+      var total = 0;
+      Object.keys(players).forEach(function (id) {
+        var ts = per[id] || [];
+        var v = m.kind === "hits" ? flopikClusters_(ts, m.window) : ts.length;
+        rows[players[id]][m.k] = v; total += v;
+      });
+      var col = { k: m.k, l: m.l, agg: "sum" };
+      if (m.avoid) col.avoid = 1;
+      if (m.hot) col.hot = m.hot;
+      if (m.hotAll) col.hotAll = m.hotAll;
+      res.cols.push(col);
+      if (m.note) res.legend.push("<b>" + m.l + "</b> – " + m.note + ".");
+      var stat = { l: m.l, v: total, cls: total ? "bad" : "", agg: "sum" };
+      if (m.castIds.length) { res.summary[m.k + "Casts"] = casts; stat.s = total + " zásahů z " + casts + " castů"; }
+      res.stats.push(stat);
+    });
+  }
+  // deaths for every boss (whole pull) + died marker (up to the cutoff)
+  Object.keys(rows).forEach(function (n) { rows[n].deaths = 0; });
+  deaths.forEach(function (d) {
+    var row = rows[d.n] || (rows[d.n] = { name: d.n, died: false, deaths: 0 });
+    row.deaths++;
+    if (cutoff === null || d.t <= cutT) row.died = true;
+  });
+  var list = Object.keys(rows).map(function (n) { return rows[n]; });
+  if (boss.analyze === "twinfangs") list.sort(function (a, b) { return (b.orbs || 0) - (a.orbs || 0) || (a.diff || 0) - (b.diff || 0) || a.name.localeCompare(b.name); });
+  else list.sort(function (a, b) { return b.deaths - a.deaths || a.name.localeCompare(b.name); });
+  res.players = list;
+  if (!res.cols.some(function (c) { return c.k === "deaths"; })) res.cols.push(FLOPIK_DEATH_COL);
+  var first = deaths[0];
+  res.stats.unshift({ l: "Smrti", v: deaths.length, cls: deaths.length ? "bad" : "", agg: "sum",
+    s: first ? "první " + first.n + " v " + flopikMmss_((first.t - st) / 1000) : "nikdo neumřel" });
+  return res;
+}
+
+// ---------------------------------------------------------------- The Twin Fangs ----
+// Caustic Globule soaks vs. Eternal Venom stacks per player – rules verified on the 2026-09-17 log:
+//   orb soak      = cast 1289201 (Caustic Globule) on a player -> at the same moment cast 1290336 (Eternal Venom) by Vexhul
+//   add spawn     = Rouse the Brood (1308482, Ithraz) damages the whole raid -> 1 stack each; falls off by itself after ~25 s
+//   orb explosion = Caustic Globule 1290338 damage (AOE) -> 1 stack to the whole raid
+//   add frontal   = Eternal Venom cast whose source is "Spawn of Vexhul"
+//   waves         = Stir the Depths (applydebuff 1292807) on the player at the same moment
+//   dropped       = removedebuffstack / removedebuff (not on the player's death)
+//   net stacks    = gained − dropped = stacks at the cutoff (2nd player death); ideally == orbs
+var FLOPIK_TF = {
+  ids: [1289201, 1290336, 1308482, 1290338, 1292807],
+  ORB: "1289201", VENOM: "1290336", ROUSE: "1308482", EXPL: "1290338", STIR: "1292807",
+  SRC: ["orb", "wave", "explosion", "spawn", "stir", "other"],
+  cols: [
+    { k: "orbs", l: "Orby", cls: "orb", agg: "sum" },
+    { k: "net", l: "Stacky", cls: "total", agg: "sum" },
+    { k: "diff", l: "Rozdíl", cls: "diff", signed: 1, hot: [2, 4], hotAll: [12, 18], agg: "sum" },
+    { k: "total", l: "Získané", grp: 1, agg: "sum" },
+    { k: "removed", l: "Odpadlé", neg: 1, agg: "sum" },
+    { k: "orb", l: "Orb", grp: 1, agg: "sum" },
+    { k: "wave", l: "Spawn addek", agg: "sum" },
+    { k: "explosion", l: "Výbuch", agg: "sum" },
+    { k: "spawn", l: "Addka frontal", avoid: 1, hot: [2, 3], hotAll: [6, 10], agg: "sum" },
+    { k: "stir", l: "Vlny", avoid: 1, hot: [2, 3], hotAll: [6, 10], agg: "sum" },
+    { k: "other", l: "Jiné", avoid: 1, hot: [2, 3], hotAll: [6, 10], agg: "sum" },
+    { k: "max", l: "Max", grp: 1, cls: "max", high: 8, agg: "max" }
+  ],
+  legend: [
+    "<b>Orby</b> = soaknuté Caustic Globule. <b>Stacky</b> = čisté stacky Eternal Venom při cutoffu (získané − odpadlé). " +
+    "<b>Rozdíl</b> = Stacky − Orby: <b>0 je ideál</b>, plus jsou stacky navíc (frontal addky, vlny, nebo stack ze spawnu addek, " +
+    "který ještě nestihl odpadnout). <b>Získané</b> = všechny stacky, které hráč dostal, <b>Odpadlé</b> = stacky, které mu spadly " +
+    "(smrt se nepočítá), dále rozpad získaných podle zdroje. <b>Max</b> = nejvyšší dosažený počet stacků v pullu.",
+    "<b>Orb</b> – soak orbu (žádoucí, 1 stack za orb). <b>Spawn addek</b> – Rouse the Brood od Ithraze, 1 stack každému živému hráči " +
+    "zhruba každou minutu; nelze se vyhnout, stack sám odpadne po ~25 s. <b>Výbuch</b> – nesoaknutý orb explodoval, 1 stack celému raidu.",
+    "<b>Addka frontal</b> – zásah frontalem addky Spawn of Vexhul. <b>Vlny</b> – zásah vlnou (Stir the Depths). <b>Jiné</b> – zdroj se " +
+    "nepodařilo přiřadit. Tyhle tři jsou zbytečné stacky. Každý pull je uříznutý v okamžiku druhé smrti hráče (†)."
+  ],
+  description: "Každý soaknutý <b>Caustic Globule</b> dá hráči 1 stack Eternal Venom. Stacky navíc přidává spawn addek (<b>Rouse the Brood</b>), " +
+    "výbuch nesoaknutého orbu, frontal addky (<b>Spawn of Vexhul</b>) a vlny (<b>Stir the Depths</b>). " +
+    "V ideálním případě má hráč přesně tolik stacků, kolik soaknul orbů."
+};
+
+function flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff) {
+  var T = FLOPIK_TF;
+  var deathT = {};
+  deaths.forEach(function (d) { (deathT[d.id] = deathT[d.id] || []).push(d.t); });
+  var orbT = {}, rouseT = {}, explT = {}, stirT = {};
+  function push(map, id, t) { (map[id] = map[id] || []).push(t); }
+  evc.forEach(function (e) {
+    var ab = String(e.abilityGameID);
+    if (e.type === "cast" && ab === T.ORB) push(orbT, e.targetID, e.timestamp);
+    if (e.type === "damage" && ab === T.ROUSE) push(rouseT, e.targetID, e.timestamp);
+    if (e.type === "damage" && ab === T.EXPL) push(explT, e.targetID, e.timestamp);
+    if (e.type === "applydebuff" && ab === T.STIR) push(stirT, e.targetID, e.timestamp);
+  });
+  var orbs = {}, stacks = {}, maxst = {}, removed = {}, gainedA = {}, gained = {};
+  function inc(map, id, by) { map[id] = (map[id] || 0) + (by === undefined ? 1 : by); }
+  evc.forEach(function (e) {
+    var ab = String(e.abilityGameID), g = e.targetID;
+    if (e.type === "cast" && ab === T.ORB) inc(orbs, g);
+    if (e.type === "cast" && ab === T.VENOM) {
+      var srcName = actorById[e.sourceID] ? actorById[e.sourceID].name : "";
+      var src = srcName === "Spawn of Vexhul" ? "spawn"
+        : flopikNear_(orbT[g] || [], e.timestamp, 0.15) ? "orb"
+        : flopikNear_(stirT[g] || [], e.timestamp, 0.15) ? "stir"
+        : flopikNear_(rouseT[g] || [], e.timestamp, 0.6) ? "wave"
+        : flopikNear_(explT[g] || [], e.timestamp, 0.6) ? "explosion" : "other";
+      gained[g] = gained[g] || {};
+      inc(gained[g], src);
+    }
+    if (ab === T.VENOM && (e.type === "applydebuff" || e.type === "applydebuffstack" || e.type === "removedebuffstack" || e.type === "removedebuff")) {
+      if (e.type === "removedebuff" && flopikNear_(deathT[g] || [], e.timestamp, 1.5)) return;   // dropped on death – keep the stacks the player died with
+      var n = e.type === "applydebuff" ? 1 : e.type === "removedebuff" ? 0 : Number(e.stack) || 0;
+      var cur = stacks[g] || 0;
+      if (n < cur) inc(removed, g, cur - n); else inc(gainedA, g, n - cur);
+      stacks[g] = n; maxst[g] = Math.max(maxst[g] || 0, n);
+    }
+  });
+  var explSecs = {};
+  Object.keys(explT).forEach(function (id) { explT[id].forEach(function (t) { explSecs[Math.round((t - st) / 1000)] = 1; }); });
+  var explN = 0, last = null;
+  Object.keys(explSecs).map(Number).sort(function (a, b) { return a - b; }).forEach(function (x) { if (last === null || x - last > 1) explN++; last = x; });
+  var waves = 0;
+  Object.keys(gained).forEach(function (id) { waves = Math.max(waves, gained[id].wave || 0); });
+  var cutIds = {};
+  deaths.forEach(function (d) { if (cutoff === null || Math.round((d.t - st) / 1000) <= cutoff) cutIds[d.id] = 1; });
+  var rows = [];
+  Object.keys(players).forEach(function (id) {
+    var c = gained[id] || {}, net = stacks[id] || 0, o = orbs[id] || 0;
+    var r = { name: players[id], orbs: o, net: net, diff: net - o, total: gainedA[id] || 0, removed: removed[id] || 0, max: maxst[id] || 0, died: !!cutIds[id] };
+    T.SRC.forEach(function (k) { r[k] = c[k] || 0; });
+    rows.push(r);
+  });
+  var n = rows.length || 1, totalOrbs = 0, net = 0, diff = 0, avoid = 0;
+  rows.forEach(function (r) { totalOrbs += r.orbs; net += r.net; diff += r.diff; avoid += r.spawn + r.stir + r.other; });
+  var cutNames = deaths.slice(0, cutoffN).map(function (d) { return d.n; });
+  var stats = [
+    { l: "Cutoff", v: cutoff !== null ? flopikMmss_(cutoff) : "—", cls: cutoff !== null ? "bad" : "",
+      s: cutoff !== null ? cutoffN + ". smrt: " + cutNames.join(", ") : "nedosažen (" + deaths.length + " úmrtí)" },
+    { l: "Soaknuté orby", v: totalOrbs, cls: "accent", s: (totalOrbs / n).toFixed(1) + " na hráče", agg: "sum" },
+    { l: "Stacky (čisté)", v: net, cls: "venom", s: (diff >= 0 ? "+" : "") + diff + " oproti orbům", agg: "sum" },
+    { l: "Zbytečné stacky", v: avoid, cls: avoid ? "bad" : "", s: "frontal addky + vlny + jiné", agg: "sum" },
+    { l: "Spawny addek", v: waves, cls: "", s: (waves * 20) + " stacků raidu, odpadají po ~25 s", agg: "sum" },
+    { l: "Výbuchy orbů", v: explN, cls: explN ? "bad" : "", s: explN ? (explN * 20) + " stacků celému raidu" : "žádný nesoaknutý orb", agg: "sum" }
+  ];
+  return { cols: T.cols, legend: T.legend, description: T.description, stats: stats,
+    summary: { orbs: totalOrbs, expl: explN, waves: waves, cutoffDeaths: cutNames }, players: rows };
+}
+// <<< FLOPIK ENGINE

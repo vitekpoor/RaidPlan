@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<!-- ZDROJ stránky Flopik – fails po pullech z živého combat logu. build.bat ji kopíruje do kořene repa jako
-     flopik.html (s cestami web/assets/). Data čte z listu „Flopik“ guildovní tabulky (gviz CSV), který plní
-     tools/flopik/flopik.py přes Apps Script (doPost p=flopik): jeden souhrnný řádek na pull (Hráč prázdný,
-     Data = definice sloupců / statistiky / legenda) + jeden řádek na hráče (Data = hodnoty metrik jako JSON).
-     Stránka se každou minutu sama obnoví, takže během raidu ukazuje poslední pull. Vzhled: assets/css/site.css. -->
+<!-- ZDROJ stránky Flopik – fails po pullech. build.bat ji kopíruje do kořene repa jako flopik.html (s cestami
+     web/assets/). Zdroj dat je Warcraft Logs: dropdown reportů guildy bere z Apps Script web appu (?p=flopik&action=reports),
+     pro vybraný report si nechá dopočítat chybějící pully (action=refresh, Apps Script stáhne události fightu z WCL API,
+     spočítá je enginem z tools/flopik/engine.js a zapíše do listu „Flopik“) a list pak čte přes gviz CSV: jeden souhrnný
+     řádek na pull (Hráč prázdný, Data = sloupce / statistiky / legenda) + řádek na hráče (Data = hodnoty metrik).
+     Stejný list plní i lokální tools/flopik/flopik.py (řádky bez Reportu). Každou minutu se obnoví. Vzhled: site.css. -->
 <html lang="cs">
 <head>
 <meta charset="utf-8">
@@ -91,10 +92,10 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
   <span class="eyebrow" id="eyebrow">Flopik · fails po pullech</span>
   <h4 id="title">Kdo co <em>flopnul</em></h4>
 </div>
-<p class="lead" id="lead">Po každém pullu se z combat logu spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…) a zapíšou do tabulky. Stránka se během raidu sama obnovuje.</p>
+<p class="lead" id="lead">Po každém pullu se z našeho logu na Warcraft Logs spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…). Vyber log (raidový večer), bosse a pull. Během raidu se stránka sama obnovuje a ukazuje poslední pull.</p>
 
 <div class="pick" id="pick" hidden>
-  <label for="date">Raid</label><select id="date"></select>
+  <label for="date">Log</label><select id="date"></select>
   <span class="live stale" id="live"><span class="dot"></span><span id="liveTxt">načítám…</span></span>
 </div>
 <nav class="sub-nav bosses" id="bosses" aria-label="Boss"></nav>
@@ -107,7 +108,7 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: WoW combat log → <span class="chip">tools/flopik/flopik.py</span> → list „Flopik“ v guildovní tabulce. Které faily se u kterého bosse počítají, je v <span class="chip">tools/flopik/bosses.py</span>.</p>
+  <p>Data: Warcraft Logs (reporty guildy) → Apps Script → list „Flopik“ v guildovní tabulce. Které faily se u kterého bosse počítají, je v <span class="chip">tools/flopik/engine.js</span>.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
@@ -116,15 +117,16 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
 (function () {
   var SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI", TAB = "Flopik";
   var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(TAB);
+  var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";
   var REFRESH_MS = 60000;
   var DEATH_COL = { k: "deaths", l: "Smrti", cls: "deaths", hot: [1, 2], hotAll: [3, 5], agg: "sum" };
 
   var $ = function (id) { return document.getElementById(id); };
-  var state = { date: null, boss: null, view: "all", sort: null, dir: -1 };
-  try { var saved = JSON.parse(localStorage.getItem("flopik") || "null"); if (saved) state = saved; } catch (e) {}
+  var state = { night: null, boss: null, view: "all", sort: null, dir: -1 };
+  try { var saved = JSON.parse(localStorage.getItem("flopik2") || "null"); if (saved) state = saved; } catch (e) {}
   (function fromHash() {
     var h = location.hash.replace(/^#/, "").split("/");
-    if (h[0]) { state.date = h[0]; state.boss = h[1] || state.boss; state.view = h[2] || "all"; }
+    if (h[0]) { state.night = h[0]; state.boss = h[1] || state.boss; state.view = h[2] || "all"; }
   })();
 
   // --- CSV -------------------------------------------------------------
@@ -144,15 +146,18 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     return rows;
   }
 
-  // Datum | Pull | Boss | Obtížnost | Start | Délka | Kill | Hráč | Data | Boss klíč | Zapsáno
+  // Datum | Pull | Boss | Obtížnost | Start | Délka | Kill | Hráč | Data | Boss klíč | Zapsáno | Report | Fight
+  // -> nights keyed by WCL report code (or "d:YYYY-MM-DD" for pulls recorded from a local log without a report)
   function build(text) {
     var rows = parseCsv(text);
     if (!rows.length || !/datum/i.test(rows[0][0] || "")) return null;   // gviz bez listu vrací default tab
     var nights = {};
     rows.slice(1).forEach(function (r) {
       if (!r[0] || !r[9]) return;
-      var d = String(r[0]).trim(), key = String(r[9]).trim(), no = Number(r[1]) || 0;
-      var n = nights[d] || (nights[d] = { date: d, bosses: {} });
+      var d = String(r[0]).trim(), key = String(r[9]).trim(), no = Number(r[1]) || 0, code = String(r[11] || "").trim();
+      var nk = code || ("d:" + d);
+      var n = nights[nk] || (nights[nk] = { key: nk, code: code, date: d, bosses: {}, last: "" });
+      if (d + " " + r[4] > n.last) { n.last = d + " " + r[4]; n.date = d; }
       var b = n.bosses[key] || (n.bosses[key] = { key: key, name: String(r[2]), pulls: {} });
       var p = b.pulls[no] || (b.pulls[no] = { no: no, start: String(r[4]), dur: Number(r[5]) || 0, kill: String(r[6]) === "1", difficulty: String(r[3]), meta: null, players: [] });
       var data = {};
@@ -160,8 +165,8 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
       if (!String(r[7]).trim()) p.meta = data;
       else { data.name = String(r[7]).trim(); p.players.push(data); }
     });
-    var out = Object.keys(nights).sort().reverse().map(function (d) {
-      var n = nights[d];
+    Object.keys(nights).forEach(function (nk) {
+      var n = nights[nk];
       n.list = Object.keys(n.bosses).map(function (k) {
         var b = n.bosses[k];
         b.list = Object.keys(b.pulls).map(function (no) { return b.pulls[no]; }).sort(function (a, c) { return a.start < c.start ? -1 : a.start > c.start ? 1 : a.no - c.no; });
@@ -169,29 +174,46 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
         b.first = b.list[0].start;
         return b;
       }).sort(function (a, c) { return a.first < c.first ? -1 : 1; });
-      return n;
+      n.pulls = n.list.reduce(function (s, b) { return s + b.list.length; }, 0);
     });
+    return nights;
+  }
+
+  // --- options: WCL reports (from the web app) + local-log nights --------
+  var NIGHTS = null, REPORTS = [];
+  function options() {
+    var out = [], seen = {};
+    REPORTS.forEach(function (r) {
+      var n = NIGHTS && NIGHTS[r.code];
+      var d = new Date(r.start), date = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      out.push({ key: r.code, code: r.code, date: date, title: r.title, start: r.start, night: n || null });
+      seen[r.code] = true;
+    });
+    Object.keys(NIGHTS || {}).forEach(function (k) {
+      if (seen[k]) return;
+      var n = NIGHTS[k];
+      out.push({ key: k, code: n.code, date: n.date, title: n.code ? "report " + n.code : "lokální combat log", start: Date.parse(n.date + "T" + (n.last.split(" ")[1] || "00:00:00")) || 0, night: n });
+    });
+    out.sort(function (a, b) { return b.start - a.start; });
     return out;
   }
 
   // --- render ----------------------------------------------------------
-  var DATA = null;
   function fmt(s) { s = Math.round(s || 0); var m = Math.floor(s / 60), r = s % 60; return m + ":" + (r < 10 ? "0" : "") + r; }
   function czDate(d) { var p = d.split("-"); return p.length === 3 ? Number(p[2]) + ". " + Number(p[1]) + ". " + p[0] : d; }
+  function plural(n, one, few, many) { return n + " " + (n === 1 ? one : n < 5 ? few : many); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function persist() {
-    try { localStorage.setItem("flopik", JSON.stringify(state)); } catch (e) {}
-    var h = "#" + [state.date, state.boss, state.view].filter(Boolean).join("/");
+    try { localStorage.setItem("flopik2", JSON.stringify(state)); } catch (e) {}
+    var h = "#" + [state.night, state.boss, state.view].filter(Boolean).join("/");
     if (location.hash !== h) history.replaceState(null, "", h);
   }
-  function current() {
-    if (!DATA || !DATA.length) return null;
-    var n = DATA.filter(function (x) { return x.date === state.date; })[0] || DATA[0];
-    state.date = n.date;
-    var b = n.list.filter(function (x) { return x.key === state.boss; })[0] || n.list[n.list.length - 1];
-    state.boss = b.key;
-    if (state.view !== "all" && !b.pulls[state.view]) state.view = "all";
-    return { night: n, boss: b };
+  function currentOption() {
+    var opts = options();
+    if (!opts.length) return null;
+    var o = opts.filter(function (x) { return x.key === state.night; })[0] || opts[0];
+    state.night = o.key;
+    return o;
   }
   function colsFor(b) {
     var cols = (b.list[b.list.length - 1].meta.cols || []).slice();
@@ -222,27 +244,37 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     return { players: Object.keys(agg).map(function (k) { return agg[k]; }), stats: st };
   }
 
+  function renderSelect(o) {
+    var sel = $("date"), opts = options();
+    sel.innerHTML = opts.map(function (x) {
+      var label = czDate(x.date) + " · " + x.title + (x.night ? " · " + plural(x.night.pulls, "pull", "pully", "pullů") : " · zatím nenačteno");
+      return '<option value="' + esc(x.key) + '"' + (o && x.key === o.key ? " selected" : "") + ">" + esc(label) + "</option>";
+    }).join("");
+    sel.onchange = function () { state.night = sel.value; state.boss = null; state.view = "all"; state.sort = null; render(); ensureLoaded(); };
+  }
+
   function render() {
-    var cur = current();
-    $("pick").hidden = !cur;
-    if (!cur) {
+    var o = currentOption();
+    $("pick").hidden = !o;
+    var n = o && o.night;
+    if (!n) {
       $("bosses").innerHTML = $("tabs").innerHTML = $("strip").innerHTML = $("legend").innerHTML = "";
       $("wrap").hidden = true; $("empty").hidden = false;
-      $("empty").innerHTML = DATA === null
-        ? "Data z tabulky se nepodařilo načíst (list „Flopik“ zatím neexistuje nebo Sheets neodpověděly)."
-        : "Zatím žádný pull. Během raidu spusť <code>python tools\\flopik\\flopik.py</code> (sleduje combat log a po každém pullu zapíše výsledek do tabulky).";
+      if (o) renderSelect(o);
+      $("empty").innerHTML = NIGHTS === null && !REPORTS.length
+        ? "Data se nepodařilo načíst (list „Flopik“ zatím neexistuje, nebo Sheets / web app neodpověděly)."
+        : o ? (refreshing === o.code ? "Načítám pully z Warcraft Logs (" + esc(o.title) + ")… první výsledky se objeví za chvíli."
+              : "Tento report zatím nemá spočítané pully. " + (o.code ? "Načítání začne automaticky; pokud ne, zkus stránku obnovit." : ""))
+          : "Zatím žádný pull. Reporty se berou z Warcraft Logs (guilda Eternal Shadows); lokálně jde použít <code>python tools\\flopik\\flopik.py</code>.";
+      if (o && o.code) $("eyebrow").textContent = "Flopik · " + o.title + " · " + czDate(o.date);
+      persist();
       return;
     }
     $("wrap").hidden = false; $("empty").hidden = true;
-    var n = cur.night, b = cur.boss;
-
-    // date select
-    var sel = $("date");
-    sel.innerHTML = DATA.map(function (x) {
-      var pulls = x.list.reduce(function (s, bb) { return s + bb.list.length; }, 0);
-      return '<option value="' + x.date + '"' + (x.date === n.date ? " selected" : "") + ">" + czDate(x.date) + " · " + pulls + (pulls === 1 ? " pull" : pulls < 5 ? " pully" : " pullů") + "</option>";
-    }).join("");
-    sel.onchange = function () { state.date = sel.value; state.boss = null; state.view = "all"; render(); };
+    renderSelect(o);
+    var b = n.list.filter(function (x) { return x.key === state.boss; })[0] || n.list[n.list.length - 1];
+    state.boss = b.key;
+    if (state.view !== "all" && !b.pulls[state.view]) state.view = "all";
 
     // boss buttons
     var bn = $("bosses"); bn.innerHTML = "";
@@ -250,7 +282,7 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
       var btn = document.createElement("button"); btn.type = "button";
       if (bb.key === b.key) btn.className = "active";
       var kills = bb.list.filter(function (p) { return p.kill; }).length;
-      btn.innerHTML = esc(bb.name) + "<small>" + bb.list.length + (bb.list.length === 1 ? " pull" : bb.list.length < 5 ? " pully" : " pullů") + (kills ? " · kill" : "") + "</small>";
+      btn.innerHTML = esc(bb.name) + "<small>" + plural(bb.list.length, "pull", "pully", "pullů") + (kills ? " · kill" : "") + "</small>";
       btn.onclick = function () { state.boss = bb.key; state.view = "all"; state.sort = null; render(); };
       bn.appendChild(btn);
     });
@@ -273,19 +305,18 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     var view = isAll ? aggregate(b, cols) : { players: pull.players, stats: pull.meta.stats || [] };
     var lastMeta = b.list[b.list.length - 1].meta;
     var difficulty = b.list[b.list.length - 1].difficulty;
-    $("eyebrow").textContent = "Flopik · " + b.name + (difficulty ? " · " + difficulty : "") + " · " + czDate(n.date) + " · " + b.list.length + (b.list.length === 1 ? " pull" : b.list.length < 5 ? " pully" : " pullů") + (lastMeta.cutoff !== undefined && b.list.some(function (p) { return p.meta.cutoff != null; }) ? " · death cutoff" : "");
+    $("eyebrow").textContent = "Flopik · " + b.name + (difficulty ? " · " + difficulty : "") + " · " + czDate(n.date) + (o.code ? " · " + o.title : "") + " · " +
+      plural(b.list.length, "pull", "pully", "pullů") + (b.list.some(function (p) { return p.meta.cutoff != null; }) ? " · death cutoff" : "");
     $("title").innerHTML = isAll ? "Kdo co <em>flopnul</em> – všechny pully" : "Pull " + pull.no + (pull.kill ? " – <em>kill</em>" : "") + " · " + esc(pull.start.slice(0, 5));
-    $("lead").innerHTML = lastMeta.description || ("Po každém pullu se z combat logu spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…). " +
-      (cols.length > 2 ? "" : "Pro <b>" + esc(b.name) + "</b> se zatím počítají jen smrti – další metriky se přidávají v <b>tools/flopik/bosses.py</b>."));
+    $("lead").innerHTML = lastMeta.description || ("Po každém pullu se z Warcraft Logs spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…). " +
+      (cols.length > 2 ? "" : "Pro <b>" + esc(b.name) + "</b> se zatím počítají jen smrti – další metriky se přidávají v <b>tools/flopik/engine.js</b>."));
 
-    // stats strip
     var s = "";
     view.stats.forEach(function (st) {
       s += '<div class="stat"><div class="k">' + esc(st.l) + '</div><div class="v ' + (st.cls || "") + '">' + esc(st.v) + "</div>" + (st.s ? '<div class="s">' + esc(st.s) + "</div>" : "") + "</div>";
     });
     $("strip").innerHTML = s;
 
-    // table
     if (!state.sort || !cols.some(function (c) { return c.k === state.sort; })) { state.sort = cols[1] ? cols[1].k : "name"; state.dir = state.sort === "name" ? 1 : -1; }
     var rows = view.players.slice().sort(function (a, c) {
       var x = a[state.sort], y = c[state.sort];
@@ -326,52 +357,74 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     });
     document.querySelector("#tbl tfoot").innerHTML = ft + "</tr>";
 
-    // legend
     var lg = (lastMeta.legend || []).map(function (l) { return "<div>" + l + "</div>"; });
     lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu (celý pull, i po případném cutoffu). † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +
-      ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než minutu jsou v záložkách ztlumené.</div>");
+      ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než minutu jsou v záložkách ztlumené." +
+      (o.code ? ' Zdroj: <a href="https://www.warcraftlogs.com/reports/' + esc(o.code) + '" target="_blank" rel="noopener">Warcraft Logs ' + esc(o.code) + "</a>." : "") + "</div>");
     $("legend").innerHTML = lg.join("");
     persist();
   }
 
-  // --- load + auto refresh -------------------------------------------
-  var lastText = null, timer = null;
+  // --- data loading ----------------------------------------------------
+  var lastText = null, refreshing = null, refreshTimer = null;
   function setLive(ok, msg) { $("live").className = "live" + (ok ? "" : " stale"); $("liveTxt").textContent = msg; }
-  function load(first) {
-    fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+  function stamp() { var now = new Date(); return now.getHours() + ":" + (now.getMinutes() < 10 ? "0" : "") + now.getMinutes(); }
+
+  function loadCsv() {
+    return fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); })
       .then(function (text) {
-        var now = new Date(), stamp = now.getHours() + ":" + (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
-        if (text === lastText) { setLive(true, "aktuální · " + stamp); return; }
-        var built = build(text);
-        var before = DATA;
+        if (text === lastText) return false;
+        var before = NIGHTS;
         lastText = text;
-        DATA = built || [];
+        NIGHTS = build(text) || {};
         // if the user was on the newest pull of this boss, follow the new one
-        if (before && before.length && state.view !== "all") {
-          var oldNight = before.filter(function (x) { return x.date === state.date; })[0];
-          var oldBoss = oldNight && oldNight.list.filter(function (x) { return x.key === state.boss; })[0];
-          var newNight = DATA.filter(function (x) { return x.date === state.date; })[0];
-          var newBoss = newNight && newNight.list.filter(function (x) { return x.key === state.boss; })[0];
-          if (oldBoss && newBoss && String(oldBoss.list[oldBoss.list.length - 1].no) === String(state.view) && newBoss.list.length > oldBoss.list.length) {
-            state.view = String(newBoss.list[newBoss.list.length - 1].no);
-          }
-        } else if (before && before.length && DATA.length && DATA[0].date !== before[0].date && state.view === "all") {
-          state.date = DATA[0].date; state.boss = null;   // a new raid night started – jump to it
+        if (before && state.view !== "all") {
+          var ob = before[state.night] && before[state.night].bosses[state.boss], nb = NIGHTS[state.night] && NIGHTS[state.night].bosses[state.boss];
+          if (ob && nb && String(ob.list[ob.list.length - 1].no) === String(state.view) && nb.list.length > ob.list.length) state.view = String(nb.list[nb.list.length - 1].no);
         }
-        render();
-        setLive(true, (before ? "aktualizováno " : "načteno ") + stamp);
-      })
-      .catch(function (e) {
-        if (DATA === null) { DATA = null; render(); }
-        setLive(false, "nepodařilo se načíst (" + e.message + ")");
+        return true;
       });
   }
-  load(true);
-  timer = setInterval(function () { if (!document.hidden) load(false); }, REFRESH_MS);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) load(false); });
+  function loadReports() {
+    return fetch(WEBAPP + "?p=flopik&action=reports", { redirect: "follow" }).then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.ok && j.reports) REPORTS = j.reports; return REPORTS; })
+      .catch(function () { return REPORTS; });
+  }
+  /** Ask the web app to compute pulls of the current report that are not in the sheet yet; poll until done. */
+  function ensureLoaded() {
+    var o = currentOption();
+    if (!o || !o.code || refreshing) return;
+    refreshing = o.code;
+    setLive(true, "kontroluji nové pully v Warcraft Logs…");
+    fetch(WEBAPP + "?p=flopik&action=refresh&code=" + encodeURIComponent(o.code), { redirect: "follow" }).then(function (r) { return r.json(); })
+      .then(function (j) {
+        refreshing = null;
+        if (!j || !j.ok) { setLive(false, "Warcraft Logs: " + (j && j.error || "chyba")); render(); return; }
+        var again = j.busy || j.remaining > 0;
+        var done = j.added ? loadCsv().then(function () { render(); }) : Promise.resolve();
+        done.then(function () {
+          if (again) {
+            setLive(true, "načítám z Warcraft Logs… " + (j.cached || 0) + "/" + (j.fights || "?") + " pullů");
+            clearTimeout(refreshTimer); refreshTimer = setTimeout(ensureLoaded, j.busy ? 5000 : 800);
+          } else setLive(true, "aktuální · " + stamp());
+        });
+      })
+      .catch(function (e) { refreshing = null; setLive(false, "web app neodpověděl (" + e.message + ")"); render(); });
+  }
+
+  Promise.all([loadReports(), loadCsv().catch(function (e) { setLive(false, "Sheets: " + e.message); return false; })]).then(function () {
+    render();
+    ensureLoaded();
+    if (!refreshing) setLive(true, "načteno " + stamp());
+  });
+  setInterval(function () {
+    if (document.hidden) return;
+    loadReports().then(function () { return loadCsv(); }).then(function (changed) { if (changed) render(); ensureLoaded(); }).catch(function () {});
+  }, REFRESH_MS);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) loadCsv().then(function (c) { if (c) render(); ensureLoaded(); }).catch(function () {}); });
   window.addEventListener("hashchange", function () {
     var h = location.hash.replace(/^#/, "").split("/");
-    if (h[0]) { state.date = h[0]; state.boss = h[1] || null; state.view = h[2] || "all"; render(); }
+    if (h[0]) { state.night = h[0]; state.boss = h[1] || null; state.view = h[2] || "all"; render(); ensureLoaded(); }
   });
 })();
 </script>
