@@ -305,8 +305,11 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     var view = isAll ? aggregate(b, cols) : { players: pull.players, stats: pull.meta.stats || [] };
     var lastMeta = b.list[b.list.length - 1].meta;
     var difficulty = b.list[b.list.length - 1].difficulty;
+    // death cutoff configured for this boss: the N-th player death ends the evaluated part of the pull
+    var cutoffN = 0;
+    b.list.forEach(function (p) { var sm = p.meta.summary || {}; cutoffN = Math.max(cutoffN, Number(sm.cutoffN) || (sm.cutoffDeaths || []).length); });
     $("eyebrow").textContent = "Flopik · " + b.name + (difficulty ? " · " + difficulty : "") + " · " + czDate(n.date) + (o.code ? " · " + o.title : "") + " · " +
-      plural(b.list.length, "pull", "pully", "pullů") + (b.list.some(function (p) { return p.meta.cutoff != null; }) ? " · death cutoff" : "");
+      plural(b.list.length, "pull", "pully", "pullů") + (cutoffN ? " · death cutoff " + cutoffN : " · celý pull");
     $("title").innerHTML = isAll ? "Kdo co <em>flopnul</em> – všechny pully" : "Pull " + pull.no + (pull.kill ? " – <em>kill</em>" : "") + " · " + esc(pull.start.slice(0, 5));
     $("lead").innerHTML = "Po každém pullu se z našeho logu na Warcraft Logs spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…). Vyber log (raidový večer), bosse a pull." +
       (cols.length > 2 ? "" : " Pro <b>" + esc(b.name) + "</b> se zatím počítají jen smrti – další metriky se přidávají v <b>tools/flopik/engine.js</b>.");
@@ -358,7 +361,11 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     document.querySelector("#tbl tfoot").innerHTML = ft + "</tr>";
 
     var lg = (lastMeta.legend || []).map(function (l) { return "<div>" + l + "</div>"; });
-    lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu (celý pull, i po případném cutoffu). † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +
+    lg.push(cutoffN
+      ? "<div><b>Death cutoff " + cutoffN + "</b> – každý pull se hodnotí jen do " + cutoffN + ". smrti hráče (pak už je wipe rozjetý a další stacky / zásahy nic neříkají). " +
+        "Sloupec <b>Smrti</b> počítá úmrtí za celý pull, i po cutoffu.</div>"
+      : "<div><b>Bez death cutoffu</b> – hodnotí se celý pull od začátku do konce.</div>");
+    lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu. † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +
       ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než minutu jsou v záložkách ztlumené." +
       (o.code ? ' Zdroj: <a href="https://www.warcraftlogs.com/reports/' + esc(o.code) + '" target="_blank" rel="noopener">Warcraft Logs ' + esc(o.code) + "</a>." : "") + "</div>");
     $("legend").innerHTML = lg.join("");

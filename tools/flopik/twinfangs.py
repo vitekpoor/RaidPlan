@@ -133,5 +133,5 @@ def analyze(pull, ctx):
         {"l": "Výbuchy orbů", "v": expl_n, "cls": "bad" if expl_n else "", "s": ("%d stacků celému raidu" % (expl_n * 20)) if expl_n else "žádný nesoaknutý orb", "agg": "sum"},
     ]
     return {"cols": COLS, "legend": LEGEND, "description": DESCRIPTION, "stats": stats, "cutoff": cut,
-            "summary": {"orbs": total_orbs, "expl": expl_n, "waves": waves, "cutoffDeaths": [x[2] for x in deaths[:cutoff_n]]},
+            "summary": {"orbs": total_orbs, "expl": expl_n, "waves": waves, "cutoffN": cutoff_n, "cutoffDeaths": [x[2] for x in deaths[:cutoff_n]]},
             "players": rows}

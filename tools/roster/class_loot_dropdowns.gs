@@ -4358,14 +4358,15 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
     startMs: reportStartMs + fight.startTime, dur: Math.round(dur), boss: boss.name, bossKey: boss.key, bossId: fight.encounterID,
     difficulty: FLOPIK_DIFFICULTY[fight.difficulty] || String(fight.difficulty || ""), kill: !!fight.kill, deaths: deaths.length, cutoff: cutoff,
     deathList: deaths.map(function (d) { return { n: d.n, t: Math.round((d.t - st) / 1000) }; }),
-    cols: [], legend: [], description: "", stats: [], summary: {}, players: []
+    cols: [], legend: [], description: "", stats: [], summary: { cutoffN: cutoffN }, players: []
   };
   var rows = {};   // name -> row
   Object.keys(players).forEach(function (id) { rows[players[id]] = { name: players[id], died: false }; });
 
   if (boss.analyze === "twinfangs") {
     var out = flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff);
-    ["cols", "legend", "description", "stats", "summary"].forEach(function (k) { res[k] = out[k]; });
+    ["cols", "legend", "description", "stats"].forEach(function (k) { res[k] = out[k]; });
+    Object.keys(out.summary).forEach(function (k) { res.summary[k] = out.summary[k]; });
     out.players.forEach(function (r) { rows[r.name] = r; });
   } else {
     (boss.metrics || []).forEach(function (m) {
@@ -4521,6 +4522,6 @@ function flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff) 
     { l: "Výbuchy orbů", v: explN, cls: explN ? "bad" : "", s: explN ? (explN * 20) + " stacků celému raidu" : "žádný nesoaknutý orb", agg: "sum" }
   ];
   return { cols: T.cols, legend: T.legend, description: T.description, stats: stats,
-    summary: { orbs: totalOrbs, expl: explN, waves: waves, cutoffDeaths: cutNames }, players: rows };
+    summary: { orbs: totalOrbs, expl: explN, waves: waves, cutoffN: cutoffN, cutoffDeaths: cutNames }, players: rows };
 }
 // <<< FLOPIK ENGINE

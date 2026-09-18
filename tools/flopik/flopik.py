@@ -114,7 +114,7 @@ def analyze_pull(pull, boss, default_cutoff):
             res["cutoff"] = round((cut_t - st).total_seconds())
         evc = [(t, f) for t, f in ev if t <= cut_t]
         rows = {n: {"name": n, "died": False} for n in set(names.values())}
-        cols, legend, stats, summary = [], [], [], {}
+        cols, legend, stats, summary = [], [], [], {"cutoffN": cutoff_n}
         for m in boss.get("metrics", []):
             vals, casts = eval_metric(m, evc, names)
             for g, n in names.items():
