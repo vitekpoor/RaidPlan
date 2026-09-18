@@ -120,6 +120,7 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
   var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";
   var REFRESH_MS = 60000;
   var MIN_DUR = 30;   // s – kratší pully (omyl, reset, okamžitý wipe) se nezobrazují
+  var MAX_AGE_MS = 14 * 86400000;   // v dropdownu jen logy z posledních dvou týdnů
   var DEATH_COL = { k: "deaths", l: "Smrti", cls: "deaths", hot: [1, 2], hotAll: [3, 5], agg: "sum" };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -183,9 +184,12 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
 
   // --- options: WCL reports (from the web app) + local-log nights --------
   var NIGHTS = null, REPORTS = [];
+  // Dropdown = reporty guildy z Warcraft Logs (max 14 dní staré). Report smazaný na WCL zmizí i tady, i když
+  // jeho řádky v listu zůstanou; noci z lokálního logu (bez kódu reportu) se přidají zvlášť.
   function options() {
-    var out = [], seen = {};
+    var out = [], seen = {}, since = Date.now() - MAX_AGE_MS;
     REPORTS.forEach(function (r) {
+      if ((r.end || r.start) < since) return;
       var n = NIGHTS && NIGHTS[r.code];
       var d = new Date(r.start), date = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
       out.push({ key: r.code, code: r.code, date: date, title: r.title, start: r.start, night: n || null });
@@ -194,7 +198,10 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     Object.keys(NIGHTS || {}).forEach(function (k) {
       if (seen[k]) return;
       var n = NIGHTS[k];
-      out.push({ key: k, code: n.code, date: n.date, title: n.code ? "report " + n.code : "lokální combat log", start: Date.parse(n.date + "T" + (n.last.split(" ")[1] || "00:00:00")) || 0, night: n });
+      if (n.code && REPORTS.length) return;   // report už na WCL není (smazaný / soukromý) – neukazovat
+      var start = Date.parse(n.date + "T" + (n.last.split(" ")[1] || "00:00:00")) || 0;
+      if (start < since) return;
+      out.push({ key: k, code: n.code, date: n.date, title: n.code ? "report " + n.code : "lokální combat log", start: start, night: n });
     });
     out.sort(function (a, b) { return b.start - a.start; });
     return out;
