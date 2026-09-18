@@ -3647,6 +3647,17 @@ function doPost(e) {
     } catch (err) { return simApiJson_({ ok: false, error: String(err && err.message || err) }); }
     finally { lock2.releaseLock(); }
   }
+  if (p === "flopik") {
+    // tools/flopik/flopik.py: výsledek jednoho pullu z živého combat logu → list „Flopik“
+    var tok3 = PropertiesService.getScriptProperties().getProperty(SIM_API_TOKEN_PROP);
+    if (!tok3 || String(body.token || "") !== tok3) return simApiJson_({ ok: false, error: "bad token" });
+    if (String(body.action || "") !== "pull") return simApiJson_({ ok: false, error: "neznámá action " + body.action });
+    var lock3 = LockService.getScriptLock();
+    try { lock3.waitLock(20000); } catch (err) { return simApiJson_({ ok: false, error: "lock timeout" }); }
+    try { return simApiJson_(flopikRecordPull_(body.pull)); }
+    catch (err) { return simApiJson_({ ok: false, error: String(err && err.message || err) }); }
+    finally { lock3.releaseLock(); }
+  }
   if (p !== "runsims") return simApiJson_({ ok: false, message: "neznámý požadavek" });
   var want = PropertiesService.getScriptProperties().getProperty(SIM_RUN_PASSWORD_PROP);
   var pw = String(body.pw || params.pw || "");
@@ -3984,3 +3995,70 @@ $("send").addEventListener("click", function () {\
   }).submitAttendanceWeb({ record: $("record").value, pw: $("pw").value });\
 });\
 </script></body></html>';
+
+// ================== FLOPIK (fails po pullech z combat logu) ==================
+// tools/flopik/flopik.py sleduje živý combat log a po každém ENCOUNTER_END pošle
+//   POST {p:"flopik", token, action:"pull", pull:{date, start, dur, boss, bossKey, bossId, difficulty, kill, deaths,
+//         cutoff, cols, legend, description, stats, summary, deathList, players:[{name, died, deaths, …metriky}]}}
+// (token = SIM_API_TOKEN jako u sim_runner.py). Zápis do listu „Flopik“: jeden souhrnný řádek na pull
+// (Hráč prázdný, Data = definice sloupců, statistiky, legenda) + jeden řádek na hráče (Data = hodnoty metrik
+// jako JSON). Stejný pull (datum + boss + start) se přepíše, číslo pullu = pořadí v rámci dne a bosse.
+// web/flopik.html list čte přes gviz CSV a každou minutu se obnoví.
+
+var FLOPIK_SHEET_NAME = "Flopik";
+var FLOPIK_HEADER = ["Datum", "Pull", "Boss", "Obtížnost", "Start", "Délka (s)", "Kill", "Hráč", "Data", "Boss klíč", "Zapsáno"];
+
+function flopikSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(FLOPIK_SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(FLOPIK_SHEET_NAME);
+    sh.getRange(1, 1, 1, FLOPIK_HEADER.length).setValues([FLOPIK_HEADER]).setFontWeight("bold");
+    sh.setFrozenRows(1);
+    sh.getRange("A:A").setNumberFormat("@");   // datum i start jako text, ať je gviz vrátí beze změny
+    sh.getRange("E:E").setNumberFormat("@");
+    sh.getRange("I:I").setNumberFormat("@");
+    sh.protect().setDescription("Flopik – zapisuje tools/flopik/flopik.py (skript)").setWarningOnly(true);
+  }
+  return sh;
+}
+
+function flopikText_(v, fmt) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), fmt);
+  return String(v == null ? "" : v);
+}
+
+/** Zapíše jeden pull do listu Flopik. Vrací { ok, pull, rows }. */
+function flopikRecordPull_(pull) {
+  pull = pull || {};
+  var date = String(pull.date || ""), start = String(pull.start || ""), bossKey = String(pull.bossKey || "");
+  if (!date || !start || !bossKey) throw new Error("chybí date / start / bossKey");
+  var players = pull.players || [];
+  var sh = flopikSheet_();
+  var last = sh.getLastRow();
+  var vals = last > 1 ? sh.getRange(2, 1, last - 1, FLOPIK_HEADER.length).getValues() : [];
+  var pullNo = 0, maxNo = 0, del = [];
+  vals.forEach(function (r, i) {
+    if (flopikText_(r[0], "yyyy-MM-dd") !== date || String(r[9]) !== bossKey) return;
+    var no = Number(r[1]) || 0;
+    if (flopikText_(r[4], "HH:mm:ss") === start) { pullNo = pullNo || no; del.push(i + 2); }
+    else if (no > maxNo) maxNo = no;
+  });
+  if (!pullNo) pullNo = maxNo + 1;
+  for (var d = del.length - 1; d >= 0; d--) sh.deleteRow(del[d]);   // přepis stejného pullu (replay)
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+  var base = [date, pullNo, String(pull.boss || bossKey), String(pull.difficulty || ""), start, Number(pull.dur) || 0, pull.kill ? 1 : ""];
+  var meta = {
+    bossId: pull.bossId, deaths: pull.deaths, cutoff: pull.cutoff == null ? null : pull.cutoff, cols: pull.cols || [],
+    stats: pull.stats || [], legend: pull.legend || [], description: pull.description || "", summary: pull.summary || {},
+    deathList: pull.deathList || []
+  };
+  var rows = [base.concat(["", JSON.stringify(meta), bossKey, now])];
+  players.forEach(function (p) {
+    var data = {};
+    Object.keys(p).forEach(function (k) { if (k !== "name") data[k] = p[k]; });
+    rows.push(base.concat([String(p.name || ""), JSON.stringify(data), bossKey, now]));
+  });
+  sh.getRange(sh.getLastRow() + 1, 1, rows.length, FLOPIK_HEADER.length).setValues(rows);
+  return { ok: true, pull: pullNo, rows: rows.length };
+}

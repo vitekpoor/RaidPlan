@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<!-- ZDROJ stránky Flopik – fails po pullech z živého combat logu. build.bat ji kopíruje do kořene repa jako
+     flopik.html (s cestami web/assets/). Data čte z listu „Flopik“ guildovní tabulky (gviz CSV), který plní
+     tools/flopik/flopik.py přes Apps Script (doPost p=flopik): jeden souhrnný řádek na pull (Hráč prázdný,
+     Data = definice sloupců / statistiky / legenda) + jeden řádek na hráče (Data = hodnoty metrik jako JSON).
+     Stránka se každou minutu sama obnoví, takže během raidu ukazuje poslední pull. Vzhled: assets/css/site.css. -->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flopik – Eternal Shadows</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/images/favicon-64.png">
+<link rel="shortcut icon" href="assets/images/favicon.ico">
+<link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<style>
+:root { --venom: #b08ae6; --venom-soft: rgba(176, 138, 230, .14); --warn: #e1a23a; --warn-soft: rgba(225, 162, 58, .14); --bad: var(--dps); --bad-soft: rgba(240, 133, 122, .14); }
+.lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; max-width: 78ch; }
+.lead b { color: var(--ink-strong); font-weight: 600; }
+.pick { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 14px; }
+.pick label { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pick select { padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface2); color: var(--ink-strong); font: inherit; font-size: 14px; }
+.live { margin-left: auto; font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); animation: pulse 2s infinite; }
+.live.stale .dot { background: var(--muted); animation: none; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--accent-soft); } 70% { box-shadow: 0 0 0 7px rgba(0, 0, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); } }
+.sub-nav { margin-bottom: 14px; }
+.sub-nav.bosses { margin-bottom: 8px; }
+.sub-nav button small { display: block; font-size: 11px; font-weight: 400; opacity: .75; line-height: 1.2; }
+.sub-nav button.short { opacity: .55; }
+.sub-nav button.kill small { color: var(--accent); opacity: 1; }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 16px; }
+.stat { background: var(--surface2); padding: 12px 14px; display: grid; gap: 3px; align-content: start; }
+.stat .k { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stat .v { font-size: 28px; font-weight: 700; line-height: 1; color: var(--ink-strong); font-variant-numeric: tabular-nums; }
+.stat .v.venom { color: var(--venom); } .stat .v.accent { color: var(--accent); } .stat .v.bad { color: var(--bad); }
+.stat .s { font-size: 13px; color: var(--muted); }
+table.fails { min-width: 480px; font-variant-numeric: tabular-nums; }
+table.fails th, table.fails td { text-align: right; white-space: nowrap; padding: 8px 12px; }
+table.fails th { cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--surface); }
+table.fails th:hover { color: var(--ink-strong); }
+table.fails th[aria-sort] { color: var(--accent); }
+table.fails th[aria-sort="descending"]::after { content: " ▾"; } table.fails th[aria-sort="ascending"]::after { content: " ▴"; }
+table.fails th:first-child, table.fails td:first-child { text-align: left; }
+table.fails td.name { font-weight: 600; color: var(--ink-strong); }
+table.fails td.name .dead { color: var(--muted); font-weight: 400; margin-left: 4px; }
+table.fails .grp { border-left: 1px solid var(--line); }
+table.fails td.zero { color: var(--neg); }
+table.fails td.orb { color: var(--accent); font-weight: 600; }
+table.fails td.total { color: var(--venom); font-weight: 600; }
+table.fails td.diff, table.fails td.avoid, table.fails td.deaths { font-weight: 600; }
+table.fails td.ok { color: var(--accent); }
+table.fails td.hot { background: var(--warn-soft); color: var(--warn); }
+table.fails td.hot2 { background: var(--bad-soft); color: var(--bad); }
+table.fails td.max.high { color: var(--bad); font-weight: 600; }
+table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); border-bottom: 0; background: var(--surface2); }
+.legend { margin-top: 18px; display: grid; gap: 8px; font-size: 14px; color: var(--muted); max-width: 84ch; }
+.legend b { color: var(--ink-strong); font-weight: 600; }
+.chip { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 12.5px; font-family: Consolas, "Cascadia Mono", monospace; background: var(--surface2); border: 1px solid var(--line); }
+.empty { padding: 28px 18px; border: 1px dashed var(--line); border-radius: var(--radius-sm); color: var(--muted); font-size: 14px; max-width: 70ch; }
+.empty code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; color: var(--ink-strong); }
+@media (max-width: 560px) { .stat .v { font-size: 22px; } .live { margin-left: 0; } }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+<div class="container">
+<nav class="main-nav">
+  <a href="index.html" class="logo"><span class="mark" aria-hidden="true"></span>Eternal <em>Shadows</em></a>
+  <ul class="nav">
+    <li><a href="index.html#omluvenky">Omluvenky</a></li>
+    <li><a href="index.html#simc">SimC</a></li>
+    <li><a href="loot.html">Simy</a></li>
+    <li><a href="raid.html">Raid taktiky</a></li>
+    <li><a href="flopik.html" class="active">Flopik</a></li>
+    <li class="ext"><a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Tabulka</a></li>
+    <li class="ext"><a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" target="_blank" rel="noopener">wowaudit</a></li>
+  </ul>
+</nav>
+</div>
+</header>
+
+<div class="container">
+<div class="page-content">
+<div class="heading-section">
+  <span class="eyebrow" id="eyebrow">Flopik · fails po pullech</span>
+  <h4 id="title">Kdo co <em>flopnul</em></h4>
+</div>
+<p class="lead" id="lead">Po každém pullu se z combat logu spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…) a zapíšou do tabulky. Stránka se během raidu sama obnovuje.</p>
+
+<div class="pick" id="pick" hidden>
+  <label for="date">Raid</label><select id="date"></select>
+  <span class="live stale" id="live"><span class="dot"></span><span id="liveTxt">načítám…</span></span>
+</div>
+<nav class="sub-nav bosses" id="bosses" aria-label="Boss"></nav>
+<nav class="sub-nav" id="tabs" aria-label="Pull"></nav>
+<div class="strip" id="strip"></div>
+<div class="tablewrap" id="wrap"><table class="fails" id="tbl"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+<div class="empty" id="empty" hidden></div>
+<div class="legend" id="legend"></div>
+
+</div><!-- /.page-content -->
+
+<footer>
+  <p>Data: WoW combat log → <span class="chip">tools/flopik/flopik.py</span> → list „Flopik“ v guildovní tabulce. Které faily se u kterého bosse počítají, je v <span class="chip">tools/flopik/bosses.py</span>.</p>
+  <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
+</footer>
+</div><!-- /.container -->
+
+<script>
+(function () {
+  var SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI", TAB = "Flopik";
+  var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(TAB);
+  var REFRESH_MS = 60000;
+  var DEATH_COL = { k: "deaths", l: "Smrti", cls: "deaths", hot: [1, 2], hotAll: [3, 5], agg: "sum" };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { date: null, boss: null, view: "all", sort: null, dir: -1 };
+  try { var saved = JSON.parse(localStorage.getItem("flopik") || "null"); if (saved) state = saved; } catch (e) {}
+  (function fromHash() {
+    var h = location.hash.replace(/^#/, "").split("/");
+    if (h[0]) { state.date = h[0]; state.boss = h[1] || state.boss; state.view = h[2] || "all"; }
+  })();
+
+  // --- CSV -------------------------------------------------------------
+  function parseCsv(text) {
+    var rows = [], row = [], cur = "", q = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+        else cur += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ",") { row.push(cur); cur = ""; }
+      else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cur); rows.push(row); row = []; cur = ""; }
+      else cur += ch;
+    }
+    if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  }
+
+  // Datum | Pull | Boss | Obtížnost | Start | Délka | Kill | Hráč | Data | Boss klíč | Zapsáno
+  function build(text) {
+    var rows = parseCsv(text);
+    if (!rows.length || !/datum/i.test(rows[0][0] || "")) return null;   // gviz bez listu vrací default tab
+    var nights = {};
+    rows.slice(1).forEach(function (r) {
+      if (!r[0] || !r[9]) return;
+      var d = String(r[0]).trim(), key = String(r[9]).trim(), no = Number(r[1]) || 0;
+      var n = nights[d] || (nights[d] = { date: d, bosses: {} });
+      var b = n.bosses[key] || (n.bosses[key] = { key: key, name: String(r[2]), pulls: {} });
+      var p = b.pulls[no] || (b.pulls[no] = { no: no, start: String(r[4]), dur: Number(r[5]) || 0, kill: String(r[6]) === "1", difficulty: String(r[3]), meta: null, players: [] });
+      var data = {};
+      try { data = JSON.parse(r[8] || "{}"); } catch (e) {}
+      if (!String(r[7]).trim()) p.meta = data;
+      else { data.name = String(r[7]).trim(); p.players.push(data); }
+    });
+    var out = Object.keys(nights).sort().reverse().map(function (d) {
+      var n = nights[d];
+      n.list = Object.keys(n.bosses).map(function (k) {
+        var b = n.bosses[k];
+        b.list = Object.keys(b.pulls).map(function (no) { return b.pulls[no]; }).sort(function (a, c) { return a.start < c.start ? -1 : a.start > c.start ? 1 : a.no - c.no; });
+        b.list.forEach(function (p) { if (!p.meta) p.meta = { cols: [], stats: [], legend: [], summary: {} }; });
+        b.first = b.list[0].start;
+        return b;
+      }).sort(function (a, c) { return a.first < c.first ? -1 : 1; });
+      return n;
+    });
+    return out;
+  }
+
+  // --- render ----------------------------------------------------------
+  var DATA = null;
+  function fmt(s) { s = Math.round(s || 0); var m = Math.floor(s / 60), r = s % 60; return m + ":" + (r < 10 ? "0" : "") + r; }
+  function czDate(d) { var p = d.split("-"); return p.length === 3 ? Number(p[2]) + ". " + Number(p[1]) + ". " + p[0] : d; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function persist() {
+    try { localStorage.setItem("flopik", JSON.stringify(state)); } catch (e) {}
+    var h = "#" + [state.date, state.boss, state.view].filter(Boolean).join("/");
+    if (location.hash !== h) history.replaceState(null, "", h);
+  }
+  function current() {
+    if (!DATA || !DATA.length) return null;
+    var n = DATA.filter(function (x) { return x.date === state.date; })[0] || DATA[0];
+    state.date = n.date;
+    var b = n.list.filter(function (x) { return x.key === state.boss; })[0] || n.list[n.list.length - 1];
+    state.boss = b.key;
+    if (state.view !== "all" && !b.pulls[state.view]) state.view = "all";
+    return { night: n, boss: b };
+  }
+  function colsFor(b) {
+    var cols = (b.list[b.list.length - 1].meta.cols || []).slice();
+    if (!cols.some(function (c) { return c.k === "deaths"; })) cols.push(DEATH_COL);
+    return [{ k: "name", l: "Hráč" }].concat(cols);
+  }
+  function aggregate(b, cols) {
+    var agg = {}, stats = {}, order = [];
+    b.list.forEach(function (p) {
+      p.players.forEach(function (r) {
+        var a = agg[r.name] || (agg[r.name] = { name: r.name, died: false });
+        cols.forEach(function (c) {
+          if (c.k === "name") return;
+          var v = Number(r[c.k]) || 0;
+          if (c.agg === "max") a[c.k] = Math.max(a[c.k] || 0, v); else a[c.k] = (a[c.k] || 0) + v;
+        });
+        if (r.died) a.died = true;
+      });
+      (p.meta.stats || []).forEach(function (s) {
+        if (s.agg !== "sum" || typeof s.v !== "number") return;
+        if (!stats[s.l]) { stats[s.l] = { l: s.l, v: 0, cls: "", agg: "sum" }; order.push(s.l); }
+        stats[s.l].v += s.v; if (s.cls && s.v) stats[s.l].cls = s.cls;
+      });
+    });
+    var fight = b.list.reduce(function (s, p) { return s + (p.meta.cutoff == null ? p.dur : p.meta.cutoff); }, 0);
+    var st = [{ l: "Pully", v: b.list.length, cls: "", s: (b.list.some(function (p) { return p.kill; }) ? "kill · " : "") + fmt(fight) + " boje" }]
+      .concat(order.map(function (l) { return stats[l]; }));
+    return { players: Object.keys(agg).map(function (k) { return agg[k]; }), stats: st };
+  }
+
+  function render() {
+    var cur = current();
+    $("pick").hidden = !cur;
+    if (!cur) {
+      $("bosses").innerHTML = $("tabs").innerHTML = $("strip").innerHTML = $("legend").innerHTML = "";
+      $("wrap").hidden = true; $("empty").hidden = false;
+      $("empty").innerHTML = DATA === null
+        ? "Data z tabulky se nepodařilo načíst (list „Flopik“ zatím neexistuje nebo Sheets neodpověděly)."
+        : "Zatím žádný pull. Během raidu spusť <code>python tools\\flopik\\flopik.py</code> (sleduje combat log a po každém pullu zapíše výsledek do tabulky).";
+      return;
+    }
+    $("wrap").hidden = false; $("empty").hidden = true;
+    var n = cur.night, b = cur.boss;
+
+    // date select
+    var sel = $("date");
+    sel.innerHTML = DATA.map(function (x) {
+      var pulls = x.list.reduce(function (s, bb) { return s + bb.list.length; }, 0);
+      return '<option value="' + x.date + '"' + (x.date === n.date ? " selected" : "") + ">" + czDate(x.date) + " · " + pulls + (pulls === 1 ? " pull" : pulls < 5 ? " pully" : " pullů") + "</option>";
+    }).join("");
+    sel.onchange = function () { state.date = sel.value; state.boss = null; state.view = "all"; render(); };
+
+    // boss buttons
+    var bn = $("bosses"); bn.innerHTML = "";
+    n.list.forEach(function (bb) {
+      var btn = document.createElement("button"); btn.type = "button";
+      if (bb.key === b.key) btn.className = "active";
+      var kills = bb.list.filter(function (p) { return p.kill; }).length;
+      btn.innerHTML = esc(bb.name) + "<small>" + bb.list.length + (bb.list.length === 1 ? " pull" : bb.list.length < 5 ? " pully" : " pullů") + (kills ? " · kill" : "") + "</small>";
+      btn.onclick = function () { state.boss = bb.key; state.view = "all"; state.sort = null; render(); };
+      bn.appendChild(btn);
+    });
+
+    // pull tabs
+    var tabs = $("tabs"); tabs.innerHTML = "";
+    b.list.forEach(function (p) {
+      var btn = document.createElement("button"); btn.type = "button";
+      btn.className = (String(p.no) === String(state.view) ? "active " : "") + (p.dur < 60 ? "short " : "") + (p.kill ? "kill" : "");
+      btn.innerHTML = "Pull " + p.no + "<small>" + esc(p.start.slice(0, 5)) + " · " + fmt(p.dur) + (p.kill ? " · KILL" : "") + "</small>";
+      btn.onclick = function () { state.view = String(p.no); render(); };
+      tabs.appendChild(btn);
+    });
+    var all = document.createElement("button"); all.type = "button"; all.className = state.view === "all" ? "active" : "";
+    all.innerHTML = "Všechny pully<small>součet</small>"; all.onclick = function () { state.view = "all"; render(); };
+    tabs.appendChild(all);
+
+    var cols = colsFor(b), isAll = state.view === "all";
+    var pull = isAll ? null : b.pulls[state.view];
+    var view = isAll ? aggregate(b, cols) : { players: pull.players, stats: pull.meta.stats || [] };
+    var lastMeta = b.list[b.list.length - 1].meta;
+    var difficulty = b.list[b.list.length - 1].difficulty;
+    $("eyebrow").textContent = "Flopik · " + b.name + (difficulty ? " · " + difficulty : "") + " · " + czDate(n.date) + " · " + b.list.length + (b.list.length === 1 ? " pull" : b.list.length < 5 ? " pully" : " pullů") + (lastMeta.cutoff !== undefined && b.list.some(function (p) { return p.meta.cutoff != null; }) ? " · death cutoff" : "");
+    $("title").innerHTML = isAll ? "Kdo co <em>flopnul</em> – všechny pully" : "Pull " + pull.no + (pull.kill ? " – <em>kill</em>" : "") + " · " + esc(pull.start.slice(0, 5));
+    $("lead").innerHTML = lastMeta.description || ("Po každém pullu se z combat logu spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…). " +
+      (cols.length > 2 ? "" : "Pro <b>" + esc(b.name) + "</b> se zatím počítají jen smrti – další metriky se přidávají v <b>tools/flopik/bosses.py</b>."));
+
+    // stats strip
+    var s = "";
+    view.stats.forEach(function (st) {
+      s += '<div class="stat"><div class="k">' + esc(st.l) + '</div><div class="v ' + (st.cls || "") + '">' + esc(st.v) + "</div>" + (st.s ? '<div class="s">' + esc(st.s) + "</div>" : "") + "</div>";
+    });
+    $("strip").innerHTML = s;
+
+    // table
+    if (!state.sort || !cols.some(function (c) { return c.k === state.sort; })) { state.sort = cols[1] ? cols[1].k : "name"; state.dir = state.sort === "name" ? 1 : -1; }
+    var rows = view.players.slice().sort(function (a, c) {
+      var x = a[state.sort], y = c[state.sort];
+      if (state.sort === "name") return state.dir * String(x).localeCompare(String(y), "cs");
+      x = Number(x) || 0; y = Number(y) || 0;
+      return state.dir * (x - y) || String(a.name).localeCompare(String(c.name), "cs");
+    });
+    var th = "<tr>";
+    cols.forEach(function (c) { th += "<th" + (c.grp ? ' class="grp"' : "") + ' data-k="' + c.k + '"' + (state.sort === c.k ? ' aria-sort="' + (state.dir < 0 ? "descending" : "ascending") + '"' : "") + ">" + esc(isAll && c.agg === "max" ? c.l + " (pull)" : c.l) + "</th>"; });
+    document.querySelector("#tbl thead").innerHTML = th + "</tr>";
+    Array.prototype.forEach.call(document.querySelectorAll("#tbl th"), function (h) {
+      h.onclick = function () { var k = h.getAttribute("data-k"); if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = k === "name" ? 1 : -1; } render(); };
+    });
+    var body = "";
+    rows.forEach(function (r) {
+      body += "<tr>";
+      cols.forEach(function (c) {
+        if (c.k === "name") { body += '<td class="name">' + esc(r.name) + (r.died ? '<span class="dead" title="' + (isAll ? "umřel v některém pullu" : "umřel") + '">†</span>' : "") + "</td>"; return; }
+        var val = r[c.k], cls = [];
+        if (c.grp) cls.push("grp"); if (c.cls) cls.push(c.cls); if (c.avoid) cls.push("avoid");
+        var num = Number(val) || 0;
+        if (val == null || num === 0) cls.push("zero");
+        var thr = isAll ? (c.hotAll || c.hot) : c.hot;
+        if (thr) { if (num >= thr[1]) cls.push("hot2"); else if (num >= thr[0]) cls.push("hot"); else if (c.signed && num <= 0) cls.push("ok"); }
+        if (c.high && num >= c.high) cls.push("high");
+        var txt = val == null ? "—" : c.signed ? (num > 0 ? "+" + num : String(num)) : c.neg && num ? "−" + num : String(val);
+        body += '<td class="' + cls.join(" ") + '">' + esc(txt) + "</td>";
+      });
+      body += "</tr>";
+    });
+    document.querySelector("#tbl tbody").innerHTML = body;
+    var ft = "<tr>";
+    cols.forEach(function (c) {
+      if (c.k === "name") { ft += "<td>Celkem</td>"; return; }
+      if (c.agg === "max") { ft += "<td" + (c.grp ? ' class="grp"' : "") + "></td>"; return; }
+      var sum = view.players.reduce(function (a, r) { return a + (Number(r[c.k]) || 0); }, 0);
+      ft += "<td" + (c.grp ? ' class="grp"' : "") + ">" + (c.signed && sum > 0 ? "+" + sum : c.neg && sum ? "−" + sum : sum) + "</td>";
+    });
+    document.querySelector("#tbl tfoot").innerHTML = ft + "</tr>";
+
+    // legend
+    var lg = (lastMeta.legend || []).map(function (l) { return "<div>" + l + "</div>"; });
+    lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu (celý pull, i po případném cutoffu). † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +
+      ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než minutu jsou v záložkách ztlumené.</div>");
+    $("legend").innerHTML = lg.join("");
+    persist();
+  }
+
+  // --- load + auto refresh -------------------------------------------
+  var lastText = null, timer = null;
+  function setLive(ok, msg) { $("live").className = "live" + (ok ? "" : " stale"); $("liveTxt").textContent = msg; }
+  function load(first) {
+    fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+      .then(function (text) {
+        var now = new Date(), stamp = now.getHours() + ":" + (now.getMinutes() < 10 ? "0" : "") + now.getMinutes();
+        if (text === lastText) { setLive(true, "aktuální · " + stamp); return; }
+        var built = build(text);
+        var before = DATA;
+        lastText = text;
+        DATA = built || [];
+        // if the user was on the newest pull of this boss, follow the new one
+        if (before && before.length && state.view !== "all") {
+          var oldNight = before.filter(function (x) { return x.date === state.date; })[0];
+          var oldBoss = oldNight && oldNight.list.filter(function (x) { return x.key === state.boss; })[0];
+          var newNight = DATA.filter(function (x) { return x.date === state.date; })[0];
+          var newBoss = newNight && newNight.list.filter(function (x) { return x.key === state.boss; })[0];
+          if (oldBoss && newBoss && String(oldBoss.list[oldBoss.list.length - 1].no) === String(state.view) && newBoss.list.length > oldBoss.list.length) {
+            state.view = String(newBoss.list[newBoss.list.length - 1].no);
+          }
+        } else if (before && before.length && DATA.length && DATA[0].date !== before[0].date && state.view === "all") {
+          state.date = DATA[0].date; state.boss = null;   // a new raid night started – jump to it
+        }
+        render();
+        setLive(true, (before ? "aktualizováno " : "načteno ") + stamp);
+      })
+      .catch(function (e) {
+        if (DATA === null) { DATA = null; render(); }
+        setLive(false, "nepodařilo se načíst (" + e.message + ")");
+      });
+  }
+  load(true);
+  timer = setInterval(function () { if (!document.hidden) load(false); }, REFRESH_MS);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) load(false); });
+  window.addEventListener("hashchange", function () {
+    var h = location.hash.replace(/^#/, "").split("/");
+    if (h[0]) { state.date = h[0]; state.boss = h[1] || null; state.view = h[2] || "all"; render(); }
+  });
+})();
+</script>
+</body>
+</html>

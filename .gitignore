@@ -6,3 +6,7 @@ tools/raidplan/backup_*.json
 # ES Attendance addon: sync state + optional private config (web app token)
 addon/.synced.json
 addon/es_attendance.config.json
+
+# Flopik: private config (web app token) + local per-pull log
+tools/flopik/flopik.config.json
+tools/flopik/pulls.jsonl
