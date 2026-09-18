@@ -308,8 +308,8 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
     $("eyebrow").textContent = "Flopik · " + b.name + (difficulty ? " · " + difficulty : "") + " · " + czDate(n.date) + (o.code ? " · " + o.title : "") + " · " +
       plural(b.list.length, "pull", "pully", "pullů") + (b.list.some(function (p) { return p.meta.cutoff != null; }) ? " · death cutoff" : "");
     $("title").innerHTML = isAll ? "Kdo co <em>flopnul</em> – všechny pully" : "Pull " + pull.no + (pull.kill ? " – <em>kill</em>" : "") + " · " + esc(pull.start.slice(0, 5));
-    $("lead").innerHTML = lastMeta.description || ("Po každém pullu se z Warcraft Logs spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…). " +
-      (cols.length > 2 ? "" : "Pro <b>" + esc(b.name) + "</b> se zatím počítají jen smrti – další metriky se přidávají v <b>tools/flopik/engine.js</b>."));
+    $("lead").innerHTML = "Po každém pullu se z našeho logu na Warcraft Logs spočítají předem definované faily bosse (smrti, zásahy avoidable schopnostmi, stacky…). Vyber log (raidový večer), bosse a pull." +
+      (cols.length > 2 ? "" : " Pro <b>" + esc(b.name) + "</b> se zatím počítají jen smrti – další metriky se přidávají v <b>tools/flopik/engine.js</b>.");
 
     var s = "";
     view.stats.forEach(function (st) {
@@ -366,7 +366,9 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
   }
 
   // --- data loading ----------------------------------------------------
-  var lastText = null, refreshing = null, refreshTimer = null;
+  var lastText = null, refreshing = null, refreshTimer = null, checked = {};
+  var LIVE_MS = 90 * 60000;   // report whose last fight ended less than 90 min ago may still grow
+  function isLive(o) { var r = REPORTS.filter(function (x) { return x.code === o.code; })[0]; return !!(r && Date.now() - (r.end || r.start) < LIVE_MS); }
   function setLive(ok, msg) { $("live").className = "live" + (ok ? "" : " stale"); $("liveTxt").textContent = msg; }
   function stamp() { var now = new Date(); return now.getHours() + ":" + (now.getMinutes() < 10 ? "0" : "") + now.getMinutes(); }
 
@@ -391,9 +393,12 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
       .catch(function () { return REPORTS; });
   }
   /** Ask the web app to compute pulls of the current report that are not in the sheet yet; poll until done. */
-  function ensureLoaded() {
+  function ensureLoaded(periodic) {
     var o = currentOption();
     if (!o || !o.code || refreshing) return;
+    if (periodic && !isLive(o)) return;          // finished report: nothing new can appear
+    if (!periodic && checked[o.code] && !isLive(o)) return;   // old report already checked once this visit
+    checked[o.code] = true;
     refreshing = o.code;
     setLive(true, "kontroluji nové pully v Warcraft Logs…");
     fetch(WEBAPP + "?p=flopik&action=refresh&code=" + encodeURIComponent(o.code), { redirect: "follow" }).then(function (r) { return r.json(); })
@@ -404,9 +409,10 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
         var done = j.added ? loadCsv().then(function () { render(); }) : Promise.resolve();
         done.then(function () {
           if (again) {
+            checked[o.code] = false;
             setLive(true, "načítám z Warcraft Logs… " + (j.cached || 0) + "/" + (j.fights || "?") + " pullů");
-            clearTimeout(refreshTimer); refreshTimer = setTimeout(ensureLoaded, j.busy ? 5000 : 800);
-          } else setLive(true, "aktuální · " + stamp());
+            clearTimeout(refreshTimer); refreshTimer = setTimeout(function () { refreshing = null; ensureLoaded(false); }, j.busy ? 5000 : 800);
+          } else setLive(isLive(o), (isLive(o) ? "živý log · aktuální " : "log je kompletní · ") + stamp());
         });
       })
       .catch(function (e) { refreshing = null; setLive(false, "web app neodpověděl (" + e.message + ")"); render(); });
@@ -419,9 +425,11 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
   });
   setInterval(function () {
     if (document.hidden) return;
-    loadReports().then(function () { return loadCsv(); }).then(function (changed) { if (changed) render(); ensureLoaded(); }).catch(function () {});
+    var o = currentOption();
+    if (!o || !isLive(o)) return;                 // only a running raid night polls Sheets / WCL
+    loadReports().then(function () { return loadCsv(); }).then(function (changed) { if (changed) render(); ensureLoaded(true); }).catch(function () {});
   }, REFRESH_MS);
-  document.addEventListener("visibilitychange", function () { if (!document.hidden) loadCsv().then(function (c) { if (c) render(); ensureLoaded(); }).catch(function () {}); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) loadCsv().then(function (c) { if (c) render(); ensureLoaded(true); }).catch(function () {}); });
   window.addEventListener("hashchange", function () {
     var h = location.hash.replace(/^#/, "").split("/");
     if (h[0]) { state.night = h[0]; state.boss = h[1] || null; state.view = h[2] || "all"; render(); ensureLoaded(); }
