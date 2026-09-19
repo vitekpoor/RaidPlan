@@ -158,19 +158,20 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
 // ---------------------------------------------------------------- The Twin Fangs ----
 // Caustic Globule soaks vs. Eternal Venom stacks per player – rules verified on the 2026-09-17 log:
 //   orb soak      = cast 1289201 (Caustic Globule) on a player -> at the same moment cast 1290336 (Eternal Venom) by Vexhul
-//   add spawn     = Rouse the Brood (1308482, Ithraz) damages the whole raid -> 1 stack each; falls off by itself after ~25 s
+//   add spawn     = Rouse the Brood (1308482, Ithraz) or Venomous Emergence (1308122, Vexhul – same moment as the stack) damages
+//                   the whole raid -> 1 stack each; falls off by itself after ~25 s
 //   orb explosion = Caustic Globule 1290338 damage (AOE) -> 1 stack to the whole raid
 //   add frontal   = Eternal Venom cast whose source is "Spawn of Vexhul" (right after its Corrosive Spit 1291478 cast success).
 //                   The marker debuff 1293979 applied at cast start names the targeted player. Split into: 1st cast on its
 //                   target (expected, 1 per add), anyone else in the cone (avoidable) and a 2nd+ cast of the same add (the add
 //                   should have died before it – verified 2026-09-17: 5 s cast, ~7 s between casts, target hit in 237/245 casts)
-//   waves         = Stir the Depths (applydebuff 1292807) on the player at the same moment
+//   waves         = Stir the Depths (applydebuff 1292807, or a miss/immune – Divine Shield still gets the stack) at the same moment
 //   Vile Flood    = intermission laser of Vexhul: debuff/damage 1294605 on the player at the same moment (cast itself is 1294293)
 //   dropped       = removedebuffstack / removedebuff (not on the player's death)
 //   net stacks    = gained − dropped = stacks at the cutoff (2nd player death); ideally == orbs
 var FLOPIK_TF = {
-  ids: [1289201, 1290336, 1308482, 1290338, 1292807, 1294605, 1291478, 1293979],
-  ORB: "1289201", VENOM: "1290336", ROUSE: "1308482", EXPL: "1290338", STIR: "1292807", FLOOD: "1294605", SPIT: "1291478", MARK: "1293979",
+  ids: [1289201, 1290336, 1308482, 1308122, 1290338, 1292807, 1294605, 1291478, 1293979],
+  ORB: "1289201", VENOM: "1290336", ROUSE: "1308482", EMERGE: "1308122", EXPL: "1290338", STIR: "1292807", FLOOD: "1294605", SPIT: "1291478", MARK: "1293979",
   SRC: ["orb", "wave", "explosion", "spawn", "spawnSide", "spawn2", "stir", "flood", "other"],
   cols: [
     { k: "orbs", l: "Orby", cls: "orb", agg: "sum" },
@@ -199,7 +200,7 @@ var FLOPIK_TF = {
     "<b>Addka cíl</b> – první frontal (Corrosive Spit) addky Spawn of Vexhul na hráče, kterého si addka vybrala (čekaný, 1 na addku). " +
     "<b>Addka v cestě</b> – frontal trefil i někoho jiného, kdo stál v kuželu. <b>Addka 2. cast</b> – addka se dožila dalšího frontalu a trefila " +
     "svůj cíl (měla umřít dřív). <b>Vlny</b> – zásah vlnou (Stir the Depths). <b>Vile Flood</b> – zásah " +
-    "laserem Vexhul v intermission. <b>Jiné</b> – zdroj se nepodařilo přiřadit (typicky stack v okamžiku smrti). Zbytečné stacky = v cestě + 2. cast + vlny + Vile Flood + jiné. Každý pull je uříznutý v okamžiku druhé smrti hráče (†)."
+    "laserem Vexhul v intermission. <b>Jiné</b> – zdroj se nepodařilo přiřadit (vzácné, typicky stack v okamžiku smrti). Zbytečné stacky = v cestě + 2. cast + vlny + Vile Flood + jiné. Každý pull je uříznutý v okamžiku druhé smrti hráče (†)."
   ],
   description: "Každý soaknutý <b>Caustic Globule</b> dá hráči 1 stack Eternal Venom. Stacky navíc přidává spawn addek (<b>Rouse the Brood</b>), " +
     "výbuch nesoaknutého orbu, frontal addky (<b>Spawn of Vexhul</b>), vlny (<b>Stir the Depths</b>) a laser v intermission (<b>Vile Flood</b>). " +
@@ -217,9 +218,9 @@ function flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff) 
   evc.forEach(function (e) {
     var ab = String(e.abilityGameID);
     if (e.type === "cast" && ab === T.ORB) push(orbT, e.targetID, e.timestamp);
-    if (e.type === "damage" && ab === T.ROUSE) push(rouseT, e.targetID, e.timestamp);
+    if ((e.type === "damage" || e.type === "absorbed") && (ab === T.ROUSE || ab === T.EMERGE)) push(rouseT, e.targetID, e.timestamp);
     if (e.type === "damage" && ab === T.EXPL) push(explT, e.targetID, e.timestamp);
-    if (e.type === "applydebuff" && ab === T.STIR) push(stirT, e.targetID, e.timestamp);
+    if ((e.type === "applydebuff" || e.type === "damage" || e.type === "absorbed") && ab === T.STIR) push(stirT, e.targetID, e.timestamp);
     if ((e.type === "damage" || e.type === "applydebuff" || e.type === "absorbed") && ab === T.FLOOD) push(floodT, e.targetID, e.timestamp);
     if (e.type === "cast" && ab === T.SPIT && isSpawn(e)) push(spitT, addKey(e), e.timestamp);
     if (e.type === "applydebuff" && ab === T.MARK && isSpawn(e)) push(markT, addKey(e), { t: e.timestamp, id: e.targetID });

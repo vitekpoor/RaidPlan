@@ -2,13 +2,14 @@
 
 Rules (verified on the 2026-09-17 combat log):
   orb soak      = SPELL_CAST_SUCCESS 1289201 (Caustic Globule) on a player -> immediately SPELL_CAST_SUCCESS 1290336 (Eternal Venom) by Vexhul
-  add spawn     = Rouse the Brood (1308482, Ithraz) hits the whole raid -> 1 stack each; it falls off by itself after ~25 s
+  add spawn     = Rouse the Brood (1308482, Ithraz) or Venomous Emergence (1308122, Vexhul - same moment as the stack) hits
+                  the whole raid -> 1 stack each; it falls off by itself after ~25 s
   orb explosion = Caustic Globule 1290338 (AOE) -> 1 stack to the whole raid
   add frontal   = Eternal Venom cast with source "Spawn of Vexhul" (right after its Corrosive Spit 1291478 cast success).
                   The marker debuff 1293979 applied at cast start names the targeted player. Split into: 1st cast on its
                   target (expected, 1 per add), anyone else in the cone (avoidable) and a 2nd+ cast of the same add (the add
                   should have died before it - verified 2026-09-17: 5 s cast, ~7 s between casts, target hit in 237/245 casts)
-  waves         = Stir the Depths (aura 1292807) on the player at the same moment
+  waves         = Stir the Depths (aura 1292807, or a miss/immune - Divine Shield still gets the stack) at the same moment
   Vile Flood    = intermission laser of Vexhul: debuff/damage 1294605 on the player at the same moment (cast itself is 1294293)
   dropped       = SPELL_AURA_REMOVED_DOSE / REMOVED (not on the player's death)
   net stacks    = gained - dropped = the player's stacks at the cutoff; ideally == orbs
@@ -20,9 +21,9 @@ import datetime
 from common import nm, near, DAMAGE_EVENTS
 
 SPELL_ORB, SPELL_VENOM, SPELL_ROUSE, SPELL_EXPL, SPELL_STIR, SPELL_FLOOD = "1289201", "1290336", "1308482", "1290338", "1292807", "1294605"
-SPELL_SPIT, SPELL_MARK = "1291478", "1293979"
+SPELL_SPIT, SPELL_MARK, SPELL_EMERGE = "1291478", "1293979", "1308122"
 SPAWN = '"Spawn of Vexhul"'
-KEEP = ("Caustic Globule", "Eternal Venom", "Stir the Depths", "Rouse the Brood", "Vile Flood", "Corrosive Spit")
+KEEP = ("Caustic Globule", "Eternal Venom", "Stir the Depths", "Rouse the Brood", "Venomous Emergence", "Vile Flood", "Corrosive Spit")
 SRC = ["orb", "wave", "explosion", "spawn", "spawnSide", "spawn2", "stir", "flood", "other"]
 FLOOD_EVENTS = DAMAGE_EVENTS + ("SPELL_PERIODIC_DAMAGE", "SPELL_PERIODIC_MISSED", "SPELL_AURA_APPLIED")
 
@@ -53,7 +54,7 @@ LEGEND = [
     "<b>Addka cíl</b> – první frontal (Corrosive Spit) addky Spawn of Vexhul na hráče, kterého si addka vybrala (čekaný, 1 na addku). "
     "<b>Addka v cestě</b> – frontal trefil i někoho jiného, kdo stál v kuželu. <b>Addka 2. cast</b> – addka se dožila dalšího frontalu a trefila "
     "svůj cíl (měla umřít dřív). <b>Vlny</b> – zásah vlnou (Stir the Depths). <b>Vile Flood</b> – zásah "
-    "laserem Vexhul v intermission. <b>Jiné</b> – zdroj se nepodařilo přiřadit (typicky stack v okamžiku smrti). Zbytečné stacky = v cestě + 2. cast + vlny + Vile Flood + jiné. Každý pull je uříznutý v okamžiku druhé smrti hráče (†).",
+    "laserem Vexhul v intermission. <b>Jiné</b> – zdroj se nepodařilo přiřadit (vzácné, typicky stack v okamžiku smrti). Zbytečné stacky = v cestě + 2. cast + vlny + Vile Flood + jiné. Každý pull je uříznutý v okamžiku druhé smrti hráče (†).",
 ]
 DESCRIPTION = ("Každý soaknutý <b>Caustic Globule</b> dá hráči 1 stack Eternal Venom. Stacky navíc přidává spawn addek (<b>Rouse the Brood</b>), "
                "výbuch nesoaknutého orbu, frontal addky (<b>Spawn of Vexhul</b>), vlny (<b>Stir the Depths</b>) a laser v intermission (<b>Vile Flood</b>). "
@@ -77,11 +78,11 @@ def analyze(pull, ctx):
             continue
         if f[0] == "SPELL_CAST_SUCCESS" and f[9] == SPELL_ORB:
             orb_t[f[5]].append(t)
-        if f[0] in DAMAGE_EVENTS and f[9] == SPELL_ROUSE:
+        if f[0] in DAMAGE_EVENTS and f[9] in (SPELL_ROUSE, SPELL_EMERGE):
             rouse_t[f[5]].append(t)
         if f[0] in DAMAGE_EVENTS and f[9] == SPELL_EXPL:
             expl_t[f[5]].append(t)
-        if f[0] == "SPELL_AURA_APPLIED" and f[9] == SPELL_STIR:
+        if f[0] in ("SPELL_AURA_APPLIED",) + DAMAGE_EVENTS and f[9] == SPELL_STIR:
             stir_t[f[5]].append(t)
         if f[0] in FLOOD_EVENTS and f[9] == SPELL_FLOOD:
             flood_t[f[5]].append(t)
