@@ -71,6 +71,14 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
 .legend { margin-top: 18px; display: grid; gap: 8px; font-size: 14px; color: var(--muted); max-width: 84ch; }
 .legend b { color: var(--ink-strong); font-weight: 600; }
 .chip { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 12.5px; font-family: Consolas, "Cascadia Mono", monospace; background: var(--surface2); border: 1px solid var(--line); }
+.loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; min-height: 42vh; padding: 40px 18px; text-align: center; color: var(--muted); }
+.loading[hidden] { display: none; }
+.loading .spin { width: 64px; height: 64px; border-radius: 50%; border: 5px solid var(--accent-soft); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+.loading .msg { font-size: 20px; font-weight: 600; color: var(--ink-strong); }
+.loading .sub { font-size: 14px; }
+.loading .sub::after { content: ""; display: inline-block; width: 1.5em; text-align: left; animation: dots 1.5s steps(4, end) infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 .empty { padding: 28px 18px; border: 1px dashed var(--line); border-radius: var(--radius-sm); color: var(--muted); font-size: 14px; max-width: 70ch; }
 .empty code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; color: var(--ink-strong); }
 /* damage breakdown: player row is clickable, the detail row spans the table */
@@ -151,7 +159,8 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
 <nav class="sub-nav bosses" id="bosses" aria-label="Boss"></nav>
 <nav class="sub-nav" id="tabs" aria-label="Pull"></nav>
 <div class="strip" id="strip"></div>
-<div class="tablewrap" id="wrap"><table class="fails" id="tbl"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+<div class="loading" id="loading" role="status" aria-live="polite"><div class="spin" aria-hidden="true"></div><div class="msg" id="loadingMsg">Načítám Flopik</div><div class="sub" id="loadingSub">reporty z Warcraft Logs a spočítané pully z tabulky</div></div>
+<div class="tablewrap" id="wrap" hidden><table class="fails" id="tbl"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
 <div class="empty" id="empty" hidden></div>
 <div class="legend" id="legend"></div>
 
@@ -528,8 +537,11 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     var n = o && o.night;
     if (!n) {
       $("bosses").innerHTML = $("tabs").innerHTML = $("strip").innerHTML = $("legend").innerHTML = "";
-      $("wrap").hidden = true; $("empty").hidden = false;
+      $("wrap").hidden = true;
       if (o) renderSelect(o);
+      var computing = o && refreshing === o.code;
+      $("loading").hidden = !computing; $("empty").hidden = computing;
+      if (computing) { $("loadingMsg").textContent = "Načítám pully z Warcraft Logs"; $("loadingSub").textContent = o.title + " · první výsledky se objeví za chvíli"; }
       $("empty").innerHTML = NIGHTS === null && !REPORTS.length
         ? "Data se nepodařilo načíst (list „Flopik“ zatím neexistuje, nebo Sheets / web app neodpověděly)."
         : o ? (refreshing === o.code ? "Načítám pully z Warcraft Logs (" + esc(o.title) + ")… první výsledky se objeví za chvíli."
@@ -539,7 +551,7 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
       persist();
       return;
     }
-    $("wrap").hidden = false; $("empty").hidden = true;
+    $("wrap").hidden = false; $("empty").hidden = true; $("loading").hidden = true;
     renderSelect(o);
     var b = n.list.filter(function (x) { return x.key === state.boss; })[0] || n.list[n.list.length - 1];
     state.boss = b.key;
