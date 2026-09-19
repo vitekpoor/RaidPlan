@@ -70,7 +70,7 @@ table.fails tfoot td { font-weight: 600; border-top: 2px solid var(--line); bord
 table.fails td.name { cursor: pointer; }
 table.fails td.name::before { content: "▸ "; color: var(--muted); font-size: 11px; }
 table.fails tr.open td.name::before { content: "▾ "; color: var(--accent); }
-table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom: 2px solid var(--line); white-space: normal; text-align: left; }
+table.fails tr.detail > td { padding: 0; background: var(--surface); border-bottom: 2px solid var(--line); white-space: normal; text-align: left; }   /* > : not the cells of the inner tables */
 .bd { padding: 14px 16px 16px; display: grid; gap: 14px; width: 0; min-width: 100%; box-sizing: border-box; }   /* width 0 + min-width 100%: the detail must not widen the outer table */
 .bd .cols > div { min-width: 0; overflow-x: auto; }
 .bd .head { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; font-size: 14px; color: var(--muted); }
@@ -79,14 +79,30 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
 .bd .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
 .bd h4 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
 .bd table { font-size: 13px; width: 100%; }
-.bd th, .bd td { padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.bd table th, .bd table td { padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
 .bd th { position: static; cursor: default; background: transparent; }
 .bd th:first-child, .bd td:first-child { text-align: left; white-space: normal; }
 .bd td:first-child { color: var(--ink-strong); }
 .bd td.us { color: var(--accent); } .bd td.ref { color: var(--venom); }
 .bd td.d.neg { color: var(--bad); } .bd td.d.pos { color: var(--accent); } .bd td.d.zero { color: var(--neg); }
 .bd tr.miss td:first-child { color: var(--warn); }   /* ability the top log uses and we do not */
+.bd td.num { font-variant-numeric: tabular-nums; }
+.bd td.bar { background-image: linear-gradient(90deg, var(--bar) var(--w), transparent var(--w)); background-repeat: no-repeat; }   /* longhand: the shorthand + var() is dropped by Chrome */
+.bd td.bar.us { --bar: var(--accent-soft); } .bd td.bar.ref { --bar: var(--venom-soft); }
+.bd th.us { color: var(--accent); } .bd th.ref { color: var(--venom); }
+.bd .cols > div { background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+.bd tbody tr:hover td { background-color: rgba(255, 255, 255, .03); }
+.bd .sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.bd .sum .stat .v { font-size: 22px; }
+.bd .sum .stat .s { font-size: 12.5px; }
+.bd .gaps { font-size: 13px; color: var(--muted); }
+.bd .gaps b { color: var(--ink-strong); font-weight: 600; }
 .bd .note { font-size: 12.5px; color: var(--muted); }
+/* "vs top": our DPS as % of the rank 1 log in the same time window – WCL-like colours */
+table.fails td.vstop { font-weight: 600; }
+table.fails td.vstop.p0 { color: #9d9d9d; } table.fails td.vstop.p1 { color: #1eff00; } table.fails td.vstop.p2 { color: #0070ff; }
+table.fails td.vstop.p3 { color: #a335ee; } table.fails td.vstop.p4 { color: #ff8000; } table.fails td.vstop.p5 { color: #e268a8; }
+table.fails td.vstop small { font-weight: 400; color: var(--muted); }
 .bd .note a { color: var(--accent); }
 @media (max-width: 560px) { .stat .v { font-size: 22px; } .live { margin-left: 0; } }
 </style>
@@ -254,7 +270,7 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
   function colsFor(b) {
     var cols = (b.list[b.list.length - 1].meta.cols || []).slice();
     if (!cols.some(function (c) { return c.k === "deaths"; })) cols.push(DEATH_COL);
-    return [{ k: "name", l: "Hráč" }].concat(cols);
+    return [{ k: "name", l: "Hráč" }, { k: "vstop", l: "vs top", agg: "avg" }].concat(cols);
   }
   function aggregate(b, cols) {
     var agg = {}, stats = {}, order = [];
@@ -262,7 +278,7 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
       p.players.forEach(function (r) {
         var a = agg[r.name] || (agg[r.name] = { name: r.name, died: false });
         cols.forEach(function (c) {
-          if (c.k === "name") return;
+          if (c.k === "name" || c.k === "vstop") return;
           var v = Number(r[c.k]) || 0;
           if (c.agg === "max") a[c.k] = Math.max(a[c.k] || 0, v); else a[c.k] = (a[c.k] || 0) + v;
         });
@@ -323,21 +339,43 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
   function pct(part, whole) { return whole ? (100 * part / whole).toFixed(1) + " %" : "—"; }
   function dcls(d) { return d > 0 ? "d pos" : d < 0 ? "d neg" : "d zero"; }
   function specLabel(spec) { var p = String(spec || "").split("-"); return p.length === 2 ? p[1].replace(/([a-z])([A-Z])/g, "$1 $2") + " " + p[0].replace(/([a-z])([A-Z])/g, "$1 $2") : spec; }
+  /**
+   * Reference for a player's breakdown: the rank 1 log of the same spec on this boss + difficulty. In a single-pull view
+   * the reference is cut at the same time as our window (fetched on demand, see ensureRefWin); the sum view and a window
+   * covering the whole kill use the whole-kill data from the FlopikRef tab. exact = same-time data is in use.
+   */
+  function refFor(d, isAll, bossId, difficulty) {
+    var refKey = bossId + "|" + difficulty + "|" + d.spec, ref = REFS[refKey] || null;
+    var rd = ref && ref.data && !ref.data.error ? ref.data : null;
+    var out = { ref: ref, rd: rd, winTxt: "", winNote: "", exact: !!rd && isAll };
+    var endSec = Math.round((d.dur || 0) / 1000);
+    if (rd && !isAll) {
+      if (endSec > 0 && endSec < ref.dur - 2) {
+        var rw = REFWIN[refKey + "|" + endSec];
+        if (rw && rw.ok && rw.data) { out.rd = rw.data; out.winTxt = " · do " + fmt(endSec) + " jeho killu"; out.exact = true; }
+        else if (rw && rw.ok && rw.whole) { out.winTxt = " · celý kill"; out.exact = true; }
+        else if (rw && !rw.ok) out.winNote = " (stejný čas se nepodařilo načíst: " + esc(rw.error) + ", zobrazen celý kill)";
+        else { ensureRefWin(refKey, endSec); out.winNote = " (načítám rank 1 log do " + fmt(endSec) + "…, zatím celý kill)"; }
+      } else out.exact = true;   // our window is as long as the kill
+    }
+    return out;
+  }
+  /** Our DPS/HPS as % of the rank 1 log in the same window: { pct, exact } or null. */
+  function vsTop(r, isAll, bossId, difficulty) {
+    var d = r.dmg;
+    if (!d || !d.dur || !d.spec) return null;
+    var R = refFor(d, isAll, bossId, difficulty);
+    if (!R.rd) return null;
+    var us = d.total / (d.dur / 1000), top = R.rd.total / ((R.rd.dur || R.ref.dur * 1000) / 1000 || 1);
+    return top ? { pct: 100 * us / top, exact: R.exact } : null;
+  }
+  function vsTopClass(pct) { return pct >= 100 ? "p5" : pct >= 90 ? "p4" : pct >= 80 ? "p3" : pct >= 65 ? "p2" : pct >= 50 ? "p1" : "p0"; }
+
   /** Detail row for one player: our breakdown (this pull or all pulls) next to the rank 1 log of the same spec. */
   function detailHtml(r, isAll, bossId, difficulty) {
     var d = r.dmg;
     if (!d) return '<div class="bd"><div class="note">Pro tohoto hráče není rozpad damage k dispozici (pull byl spočítaný před přidáním modulu – v Google tabulce smaž řádky pullu a stránka ho načte z Warcraft Logs znovu).</div></div>';
-    var refKey = bossId + "|" + difficulty + "|" + d.spec, ref = REFS[refKey] || null;
-    var rd = ref && ref.data && !ref.data.error ? ref.data : null;
-    // single pull: cut the rank 1 log at the same time as our window (our death / cutoff); the sum view keeps the whole kill
-    var endSec = Math.round((d.dur || 0) / 1000), winTxt = "", winNote = "";
-    if (rd && !isAll && endSec > 0 && endSec < ref.dur - 2) {
-      var rw = REFWIN[refKey + "|" + endSec];
-      if (rw && rw.ok && rw.data) { rd = rw.data; winTxt = " · do " + fmt(endSec) + " jeho killu"; }
-      else if (rw && rw.ok && rw.whole) winTxt = " · celý kill";
-      else if (rw && !rw.ok) winNote = " (stejný čas se nepodařilo načíst: " + esc(rw.error) + ", zobrazen celý kill)";
-      else { ensureRefWin(refKey, endSec); winNote = " (načítám rank 1 log do " + fmt(endSec) + "…, zatím celý kill)"; }
-    }
+    var R = refFor(d, isAll, bossId, difficulty), ref = R.ref, rd = R.rd, winTxt = R.winTxt, winNote = R.winNote;
     var min = (d.dur || 1) / 60000, rmin = rd ? (rd.dur || ref.dur * 1000 || 1) / 60000 : 0;
     var unit = d.metric === "hps" ? "HPS" : "DPS";
     var usPs = d.total / (d.dur / 1000 || 1), refPs = rd ? rd.total / ((rd.dur || ref.dur * 1000) / 1000 || 1) : 0;
@@ -355,7 +393,7 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
     h += "</div>";
 
     function table(title, cols, rows) {
-      var t = "<div><h4>" + title + '</h4><table><thead><tr>' + cols.map(function (c) { return "<th>" + c + "</th>"; }).join("") + "</tr></thead><tbody>";
+      var t = "<div><h4>" + title + '</h4><table><thead><tr>' + cols.map(function (c) { return '<th class="' + (c.cls || "") + '">' + c.l + "</th>"; }).join("") + "</tr></thead><tbody>";
       rows.forEach(function (row) { t += '<tr class="' + (row.miss ? "miss" : "") + '">' + row.cells.join("") + "</tr>"; });
       return t + "</tbody></table></div>";
     }
@@ -372,33 +410,70 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
       });
       return order.map(function (k) { return map[k]; });
     }
+    var usSec = d.dur / 1000 || 1, refSec = rd ? ((rd.dur || ref.dur * 1000) / 1000 || 1) : 1;
+    function cell(cls, txt, share, maxShare) {   // share bar relative to the biggest share in the table
+      var w = maxShare ? Math.round(100 * share / maxShare) : 0;
+      return '<td class="num ' + cls + (share != null ? " bar" : "") + '" style="--w:' + w + '%">' + txt + "</td>";
+    }
+    function diffCell(a, b, f) { var dd = a - b; return '<td class="num ' + dcls(dd) + '">' + (dd > 0 ? "+" : "") + f(dd) + "</td>"; }
+
     // abilities: share of total + per-second rate, sorted by the bigger of ours / theirs
-    var ab = join(d.abil, rd ? rd.abil : [], 0, 1).map(function (x) {
-      var a = x.us / (d.dur / 1000 || 1), b = rd ? x.ref / ((rd.dur || ref.dur * 1000) / 1000 || 1) : 0;
-      return { sort: Math.max(x.us / (d.total || 1), rd ? x.ref / (rd.total || 1) : 0), miss: !x.us && x.ref > 0, cells: [
-        "<td>" + esc(x.name) + "</td>", '<td class="us">' + pct(x.us, d.total) + "</td>", '<td class="us">' + kfmt(a) + "</td>"
-      ].concat(rd ? ['<td class="ref">' + pct(x.ref, rd.total) + "</td>", '<td class="ref">' + kfmt(b) + "</td>", '<td class="' + dcls(a - b) + '">' + (a - b > 0 ? "+" : "") + kfmt(a - b) + "</td>"] : []) };
-    }).sort(function (a, b) { return b.sort - a.sort; }).slice(0, 22);
-    var ca = join(d.casts, rd ? rd.casts : [], 0, 1).map(function (x) {
-      var a = x.us / min, b = rd ? x.ref / rmin : 0;
-      return { sort: Math.max(a, b), miss: !x.us && x.ref > 0, cells: [
-        "<td>" + esc(x.name) + "</td>", '<td class="us">' + x.us + "</td>", '<td class="us">' + a.toFixed(1) + "</td>"
-      ].concat(rd ? ['<td class="ref">' + x.ref + "</td>", '<td class="ref">' + b.toFixed(1) + "</td>", '<td class="' + dcls(a - b) + '">' + (a - b > 0 ? "+" : "") + (a - b).toFixed(1) + "</td>"] : []) };
-    }).sort(function (a, b) { return b.sort - a.sort; }).slice(0, 24);
-    var tg = join(d.tgt, rd ? rd.tgt : [], 0, 0).map(function (x) {
-      return { sort: Math.max(x.us / (d.total || 1), rd ? x.ref / (rd.total || 1) : 0), miss: false, cells: [
-        "<td>" + esc(x.name) + "</td>", '<td class="us">' + pct(x.us, d.total) + "</td>"
-      ].concat(rd ? ['<td class="ref">' + pct(x.ref, rd.total) + "</td>"] : []) };
-    }).sort(function (a, b) { return b.sort - a.sort; }).slice(0, 10);
-    var refCols = rd ? ["top %", "top " + unit, "diff"] : [];
+    var abRows = join(d.abil, rd ? rd.abil : [], 0, 1).map(function (x) {
+      return { name: x.name, us: x.us, ref: x.ref, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, usR: x.us / usSec, refR: rd ? x.ref / refSec : 0 };
+    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); }).slice(0, 45);
+    var abMax = abRows.reduce(function (m, x) { return Math.max(m, x.usS, x.refS); }, 0);
+    var ab = abRows.map(function (x) {
+      return { miss: !x.us && x.ref > 0, cells: ["<td>" + esc(x.name) + "</td>", cell("us", pct(x.us, d.total), x.usS, abMax), cell("us", kfmt(x.usR))]
+        .concat(rd ? [cell("ref", pct(x.ref, rd.total), x.refS, abMax), cell("ref", kfmt(x.refR)), diffCell(x.usR, x.refR, kfmt)] : []) };
+    });
+    var caRows = join(d.casts, rd ? rd.casts : [], 0, 1).map(function (x) {
+      return { name: x.name, us: x.us, ref: x.ref, usM: x.us / min, refM: rd ? x.ref / rmin : 0 };
+    }).sort(function (a, b) { return Math.max(b.usM, b.refM) - Math.max(a.usM, a.refM); }).slice(0, 45);
+    var caMax = caRows.reduce(function (m, x) { return Math.max(m, x.usM, x.refM); }, 0);
+    var ca = caRows.map(function (x) {
+      return { miss: !x.us && x.ref > 0, cells: ["<td>" + esc(x.name) + "</td>", cell("us", String(x.us)), cell("us", x.usM.toFixed(1), x.usM, caMax)]
+        .concat(rd ? [cell("ref", String(x.ref)), cell("ref", x.refM.toFixed(1), x.refM, caMax), diffCell(x.usM, x.refM, function (v) { return v.toFixed(1); })] : []) };
+    });
+    var tgRows = join(d.tgt, rd ? rd.tgt : [], 0, 0).map(function (x) {
+      return { name: x.name, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, us: x.us, ref: x.ref };
+    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); }).slice(0, 15);
+    var tgMax = tgRows.reduce(function (m, x) { return Math.max(m, x.usS, x.refS); }, 0);
+    var tg = tgRows.map(function (x) {
+      return { miss: false, cells: ["<td>" + esc(x.name) + "</td>", cell("us", pct(x.us, d.total), x.usS, tgMax), cell("us", kfmt(x.us / usSec))]
+        .concat(rd ? [cell("ref", pct(x.ref, rd.total), x.refS, tgMax), cell("ref", kfmt(x.ref / refSec)), diffCell(x.us / usSec, x.ref / refSec, kfmt)] : []) };
+    });
+    function H(l, cls) { return { l: l, cls: cls || "" }; }
+    var refAb = rd ? [H("top %", "ref"), H("top " + unit, "ref"), H("diff")] : [];
     h += '<div class="cols">' +
-      table("Abilities", ["Ability", "us %", "us " + unit].concat(refCols), ab) +
-      table("Casts", ["Ability", "us", "/min"].concat(rd ? ["top", "top /min", "diff"] : []), ca) +
-      table(d.metric === "hps" ? "Healing targets" : "Targets", ["Target", "us %"].concat(rd ? ["top %"] : []), tg) + "</div>";
+      table("Abilities", [H("Ability"), H("us %", "us"), H("us " + unit, "us")].concat(refAb), ab) +
+      table("Casts", [H("Ability"), H("us", "us"), H("us /min", "us")].concat(rd ? [H("top", "ref"), H("top /min", "ref"), H("diff")] : []), ca) +
+      table(d.metric === "hps" ? "Healing targets" : "Targets", [H("Target"), H("us %", "us"), H("us " + unit, "us")].concat(refAb), tg) + "</div>";
+
+    // summary of the comparison
+    if (rd) {
+      var ratio = refPs ? 100 * usPs / refPs : 0, ratioCls = vsTopClass(ratio);
+      var actUs = d.dur ? 100 * d.active / d.dur : 0, actRef = rd.dur ? 100 * rd.active / rd.dur : 0;
+      var cpmUs = d.castN / min, cpmRef = rd.castN / rmin;
+      function stat(k, v, cls, sub) { return '<div class="stat"><div class="k">' + k + '</div><div class="v ' + cls + '">' + v + '</div><div class="s">' + sub + "</div></div>"; }
+      h += '<div class="sum">' +
+        stat("vs top", '<span class="vstop ' + ratioCls + '" style="color: inherit">' + ratio.toFixed(0) + " %</span>", ratioCls === "p0" ? "bad" : ratioCls === "p1" ? "" : "accent",
+          kfmt(usPs) + " vs " + kfmt(refPs) + " " + unit + " (" + (usPs - refPs > 0 ? "+" : "−") + kfmt(Math.abs(usPs - refPs)) + ")" + (R.exact ? "" : " · zatím celý kill")) +
+        stat("Aktivní čas", actUs.toFixed(1) + " %", actUs + 3 < actRef ? "bad" : "", "top " + actRef.toFixed(1) + " % (" + (actUs - actRef > 0 ? "+" : "") + (actUs - actRef).toFixed(1) + " b.)") +
+        stat("Casty / min", cpmUs.toFixed(1), cpmUs < cpmRef * 0.9 ? "bad" : "", "top " + cpmRef.toFixed(1) + " (" + (cpmUs - cpmRef > 0 ? "+" : "") + (cpmUs - cpmRef).toFixed(1) + ")") +
+        stat("Hodnocený čas", fmt(d.dur / 1000), "", (isAll ? "součet pullů" : cutTxt) + " · top " + fmt(refSec)) + "</div>";
+      var gaps = abRows.filter(function (x) { return x.refR - x.usR > 0; }).sort(function (a, b) { return (b.refR - b.usR) - (a.refR - a.usR); }).slice(0, 4);
+      var missing = abRows.filter(function (x) { return !x.us && x.ref > 0; }).map(function (x) { return x.name; });
+      var castGaps = caRows.filter(function (x) { return x.us && x.refM - x.usM > 0.5; }).sort(function (a, b) { return (b.refM - b.usM) - (a.refM - a.usM); }).slice(0, 4);
+      var g = "";
+      if (gaps.length) g += "<div><b>Největší ztráta " + unit + ":</b> " + gaps.map(function (x) { return esc(x.name) + " −" + kfmt(x.refR - x.usR); }).join(", ") + "</div>";
+      if (castGaps.length) g += "<div><b>Méně castů za minutu:</b> " + castGaps.map(function (x) { return esc(x.name) + " " + x.usM.toFixed(1) + " vs " + x.refM.toFixed(1); }).join(", ") + "</div>";
+      if (missing.length) g += '<div><b><span style="color: var(--warn)">Top log používá, my ne:</span></b> ' + missing.map(esc).join(", ") + "</div>";
+      if (g) h += '<div class="gaps">' + g + "</div>";
+    }
     h += '<div class="note">Rozpad každého hráče je jen do jeho první smrti, nejpozději do death cutoffu pullu; rank 1 log se u jednoho pullu ' +
       'ořízne do stejného času jeho killu (v součtu pullů je celý kill). ' +
       '<span class="us">Zelená</span> = my, <span class="ref">fialová</span> = rank 1 log stejného specu na tomto bossovi a obtížnosti (' +
-      (rd ? "jiná délka boje – proto se srovnávají podíly a hodnoty za sekundu / minutu" : "zatím bez reference") +
+      (rd ? "podíly a hodnoty za sekundu / minutu, pruh = podíl na celku" : "zatím bez reference") +
       '). <span style="color: var(--warn)">Oranžové</span> schopnosti používá top log a my ne.</div></div>';
     return h;
   }
@@ -479,7 +554,7 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
     });
     $("strip").innerHTML = s;
 
-    if (!state.sort || !cols.some(function (c) { return c.k === state.sort; })) { state.sort = cols[1] ? cols[1].k : "name"; state.dir = state.sort === "name" ? 1 : -1; }
+    if (!state.sort || !cols.some(function (c) { return c.k === state.sort; })) { state.sort = cols[2] ? cols[2].k : "name"; state.dir = state.sort === "name" ? 1 : -1; }
     var rows = view.players.slice().sort(function (a, c) {
       var x = a[state.sort], y = c[state.sort];
       if (state.sort === "name") return state.dir * String(x).localeCompare(String(y), "cs");
@@ -493,11 +568,18 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
       h.onclick = function () { var k = h.getAttribute("data-k"); if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = k === "name" ? 1 : -1; } render(); };
     });
     var body = "", bossId = lastMeta.bossId;
+    // "vs top" = our DPS/HPS as % of the rank 1 log of the same spec in the same time window (see vsTop)
+    view.players.forEach(function (r) { var v = vsTop(r, isAll, bossId, difficulty); r.vstop = v ? v.pct : null; r.vstopExact = v ? v.exact : false; });
     rows.forEach(function (r) {
       var isOpen = !!open[r.name];
       body += '<tr data-p="' + esc(r.name) + '"' + (isOpen ? ' class="open"' : "") + ">";
       cols.forEach(function (c) {
         if (c.k === "name") { body += '<td class="name" title="rozpad damage a srovnání s rank 1 logem">' + esc(r.name) + (r.died ? '<span class="dead" title="' + (isAll ? "umřel v některém pullu" : "umřel") + '">†</span>' : "") + "</td>"; return; }
+        if (c.k === "vstop") {
+          body += r.vstop == null ? '<td class="vstop zero" title="bez rozpadu / referenčního logu">—</td>'
+            : '<td class="vstop ' + vsTopClass(r.vstop) + '" title="' + (r.vstopExact ? "DPS/HPS v % rank 1 logu stejného specu ve stejném čase" : "zatím proti celému killu rank 1 logu, stejný čas se načítá") + '">' + Math.round(r.vstop) + (r.vstopExact ? "" : "<small>~</small>") + "</td>";
+          return;
+        }
         var val = r[c.k], cls = [];
         if (c.grp) cls.push("grp"); if (c.cls) cls.push(c.cls); if (c.avoid) cls.push("avoid");
         var num = Number(val) || 0;
@@ -518,6 +600,12 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
     var ft = "<tr>";
     cols.forEach(function (c) {
       if (c.k === "name") { ft += "<td>Celkem</td>"; return; }
+      if (c.k === "vstop") {
+        var vals = view.players.map(function (r) { return r.vstop; }).filter(function (v) { return v != null; });
+        var avg = vals.length ? vals.reduce(function (a, v) { return a + v; }, 0) / vals.length : null;
+        ft += avg == null ? "<td></td>" : '<td class="vstop ' + vsTopClass(avg) + '" title="průměr hráčů s referencí">' + Math.round(avg) + "</td>";
+        return;
+      }
       if (c.agg === "max") { ft += "<td" + (c.grp ? ' class="grp"' : "") + "></td>"; return; }
       var sum = view.players.reduce(function (a, r) { return a + (Number(r[c.k]) || 0); }, 0);
       ft += "<td" + (c.grp ? ' class="grp"' : "") + ">" + (c.signed && sum > 0 ? "+" + sum : c.neg && sum ? "−" + sum : sum) + "</td>";
@@ -529,8 +617,11 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
       ? "<div><b>Death cutoff " + cutoffN + "</b> – každý pull se hodnotí jen do " + cutoffN + ". smrti hráče (pak už je wipe rozjetý a další stacky / zásahy nic neříkají). " +
         "Sloupec <b>Smrti</b> počítá úmrtí za celý pull, i po cutoffu.</div>"
       : "<div><b>Bez death cutoffu</b> – hodnotí se celý pull od začátku do konce.</div>");
-    lg.push("<div><b>Klik na jméno hráče</b> rozbalí rozpad damage (u healerů healu) za celý pull – schopnosti, casty za minutu a cíle – vedle " +
-      "rank 1 logu stejného specu na tomto bossovi a obtížnosti z Warcraft Logs (hledá se jednou týdně, list „FlopikRef“).</div>");
+    lg.push("<div><b>vs top</b> = DPS (u healerů HPS) hráče v procentech rank 1 logu stejného specu na tomto bossovi a obtížnosti, ve stejném čase boje " +
+      "(do první smrti hráče / death cutoffu). Barvy jako parse na Warcraft Logs: <span style=\"color:#9d9d9d\">&lt; 50</span> · <span style=\"color:#1eff00\">50</span> · " +
+      "<span style=\"color:#0070ff\">65</span> · <span style=\"color:#a335ee\">80</span> · <span style=\"color:#ff8000\">90</span> · <span style=\"color:#e268a8\">100 %</span>. " +
+      "~ = stejný čas se ještě načítá, zatím proti celému killu. <b>Klik na jméno hráče</b> rozbalí rozpad – schopnosti, casty za minutu, cíle a shrnutí – vedle rank 1 logu " +
+      "(hledá se jednou týdně, list „FlopikRef“).</div>");
     lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu. † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +
       ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než " + MIN_DUR + " s se nezobrazují, kratší než minutu jsou v záložkách ztlumené." +
       (o.code ? ' Zdroj: <a href="https://www.warcraftlogs.com/reports/' + esc(o.code) + '" target="_blank" rel="noopener">Warcraft Logs ' + esc(o.code) + "</a>." : "") + "</div>");
