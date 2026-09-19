@@ -322,7 +322,9 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
     var unit = d.metric === "hps" ? "HPS" : "DPS";
     var usPs = d.total / (d.dur / 1000 || 1), refPs = rd ? rd.total / ((rd.dur || ref.dur * 1000) / 1000 || 1) : 0;
     var h = '<div class="bd"><div class="head">';
-    h += "<span><b>" + esc(r.name) + "</b> · " + esc(specLabel(d.spec)) + (isAll ? " · součet " + plural(d.pulls || 1, "pullu", "pullů", "pullů") : "") + "</span>";
+    var cutTxt = { death: "do první smrti", cutoff: "do death cutoffu", end: "celý pull" }[d.cut] || "";
+    h += "<span><b>" + esc(r.name) + "</b> · " + esc(specLabel(d.spec)) +
+      (isAll ? " · součet " + plural(d.pulls || 1, "pullu", "pullů", "pullů") + " · hodnoceno " + fmt(d.dur / 1000) : " · hodnoceno " + fmt(d.dur / 1000) + (cutTxt ? " (" + cutTxt + ")" : "")) + "</span>";
     h += '<span class="us"><b>' + kfmt(usPs) + "</b> " + unit + " · aktivní " + pct(d.active, d.dur) + " · " + kfmt(d.total) + " celkem · " + d.castN + " castů (" + (d.castN / min).toFixed(1) + "/min)</span>";
     if (rd) {
       h += '<span class="ref">rank 1: <b>' + esc(ref.name) + "</b> (" + esc(ref.server) + (ref.guild ? ", " + esc(ref.guild) : "") + ") · <b>" + kfmt(refPs) + "</b> " + unit +
@@ -368,13 +370,14 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
         "<td>" + esc(x.name) + "</td>", '<td class="us">' + pct(x.us, d.total) + "</td>"
       ].concat(rd ? ['<td class="ref">' + pct(x.ref, rd.total) + "</td>"] : []) };
     }).sort(function (a, b) { return b.sort - a.sort; }).slice(0, 10);
-    var refCols = rd ? ["top %", "top " + unit, "rozdíl"] : [];
+    var refCols = rd ? ["top %", "top " + unit, "diff"] : [];
     h += '<div class="cols">' +
-      table("Schopnosti", ["Schopnost", "my %", "my " + unit].concat(refCols), ab) +
-      table("Casty", ["Schopnost", "my", "/min"].concat(rd ? ["top", "top /min", "rozdíl"] : []), ca) +
-      table(d.metric === "hps" ? "Cíle healu" : "Cíle", ["Cíl", "my %"].concat(rd ? ["top %"] : []), tg) + "</div>";
-    h += '<div class="note">Rozpad je za celý pull (bez death cutoffu). <span class="us">Zelená</span> = my, <span class="ref">fialová</span> = rank 1 log stejného specu na tomto bossovi a obtížnosti (' +
-      (rd ? "kill, jiná délka boje – proto se srovnávají podíly a hodnoty za sekundu / minutu" : "zatím bez reference") +
+      table("Abilities", ["Ability", "us %", "us " + unit].concat(refCols), ab) +
+      table("Casts", ["Ability", "us", "/min"].concat(rd ? ["top", "top /min", "diff"] : []), ca) +
+      table(d.metric === "hps" ? "Healing targets" : "Targets", ["Target", "us %"].concat(rd ? ["top %"] : []), tg) + "</div>";
+    h += '<div class="note">Rozpad každého hráče je jen do jeho první smrti, nejpozději do death cutoffu pullu (rank 1 log je celý kill). ' +
+      '<span class="us">Zelená</span> = my, <span class="ref">fialová</span> = rank 1 log stejného specu na tomto bossovi a obtížnosti (' +
+      (rd ? "jiná délka boje – proto se srovnávají podíly a hodnoty za sekundu / minutu" : "zatím bez reference") +
       '). <span style="color: var(--warn)">Oranžové</span> schopnosti používá top log a my ne.</div></div>';
     return h;
   }

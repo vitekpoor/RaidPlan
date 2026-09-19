@@ -4288,11 +4288,14 @@ function flopikRefSheet_() {
   return sh;
 }
 
-/** DamageDone + Casts (+ Healing) tabulky fightu; vrací { dur, dmg: {name: entry}, heal: {name: entry}, casts: {name: entry} }. */
-function flopikTables_(code, fightId, withHeal) {
-  var q = "query($c:String!,$f:[Int]!){ reportData { report(code:$c) { dmg: table(dataType: DamageDone, fightIDs:$f) casts: table(dataType: Casts, fightIDs:$f)" +
-    (withHeal ? " heal: table(dataType: Healing, fightIDs:$f)" : "") + " } } }";
-  var rep = wclGql_(q, { c: code, f: [fightId] }).reportData.report;
+/**
+ * DamageDone + Casts (+ Healing) tabulky fightu, volitelně jen do endMs (ms relativně k reportu, jako fight.startTime).
+ * Vrací { dur, dmg: {name: entry}, heal: {name: entry}, casts: {name: entry} }.
+ */
+function flopikTables_(code, fightId, withHeal, endMs) {
+  var q = "query($c:String!,$f:[Int]!,$e:Float){ reportData { report(code:$c) { dmg: table(dataType: DamageDone, fightIDs:$f, endTime:$e) casts: table(dataType: Casts, fightIDs:$f, endTime:$e)" +
+    (withHeal ? " heal: table(dataType: Healing, fightIDs:$f, endTime:$e)" : "") + " } } }";
+  var rep = wclGql_(q, { c: code, f: [fightId], e: endMs == null ? null : endMs }).reportData.report;
   function byName(t) { var m = {}; ((t && t.data && t.data.entries) || []).forEach(function (e) { m[e.name] = e; }); return m; }
   return { dur: (rep.dmg && rep.dmg.data && rep.dmg.data.totalTime) || 0, dmg: byName(rep.dmg), casts: byName(rep.casts), heal: withHeal ? byName(rep.heal) : {} };
 }
@@ -4365,23 +4368,43 @@ function flopikRefEnsure_(encId, difficulty, spec, haveTime) {
   return row[5] ? "ok" : "error";
 }
 
+var FLOPIK_DMG_MAX_WINDOWS = 6;   // nejvýš tolik zvláštních WCL dotazů na okna „do první smrti hráče“ v jednom pullu
+
 /**
- * Přidá hráčům pullu rozpad `dmg` a zajistí referenční logy pro jejich specy. Vrací true, když se na nějaký
- * referenční log nedostalo kvůli časovému budgetu (volající pak nechá stránku zavolat refresh znovu).
+ * Přidá hráčům pullu rozpad `dmg` a zajistí referenční logy pro jejich specy. Okno každého hráče končí jeho první
+ * smrtí, nejpozději death cutoffem pullu (bez cutoffu koncem pullu) – rozpad tak nezkresluje battle rez ani
+ * dohrávání wipu. Hráči se stejným koncem okna sdílejí jeden dotaz; nejvýš FLOPIK_DMG_MAX_WINDOWS nejdřívějších
+ * smrtí dostane vlastní dotaz, ostatní berou data z hlavního okna (mrtvý hráč už nic nedělá, jen délka je jeho).
+ * Vrací true, když se na nějaký referenční log nedostalo kvůli časovému budgetu (stránka zavolá refresh znovu).
  */
 function flopikDmgAttach_(code, fight, res, haveTime) {
-  var t;
-  try { t = flopikTables_(code, fight.id, true); }
-  catch (err) { res.summary.dmgError = String(err && err.message || err); return false; }
+  var st = fight.startTime, fightEnd = fight.endTime;
+  var winEnd = res.cutoff == null ? fightEnd : Math.min(fightEnd, st + res.cutoff * 1000);
+  var firstDeath = {};
+  (res.deathList || []).forEach(function (d) { if (firstDeath[d.n] == null || d.t < firstDeath[d.n]) firstDeath[d.n] = d.t; });
+  var endOf = {}, extra = {};
+  (res.players || []).forEach(function (p) {
+    var e = winEnd, fd = firstDeath[p.name];
+    if (fd != null && st + fd * 1000 < e) { e = st + fd * 1000; extra[e] = 1; }
+    endOf[p.name] = e;
+  });
+  var extraEnds = Object.keys(extra).map(Number).sort(function (a, b) { return a - b; }).slice(0, FLOPIK_DMG_MAX_WINDOWS);
+  var main, byEnd = {};
+  try {
+    main = flopikTables_(code, fight.id, true, winEnd === fightEnd ? null : winEnd);
+    extraEnds.forEach(function (e) { byEnd[e] = flopikTables_(code, fight.id, true, e); });
+  } catch (err) { res.summary.dmgError = String(err && err.message || err); return false; }
   var specs = {};
   (res.players || []).forEach(function (p) {
+    var e = endOf[p.name], t = byEnd[e] || main;
     var castsE = t.casts[p.name] || null;
     var icon = (t.dmg[p.name] && t.dmg[p.name].icon) || (t.heal[p.name] && t.heal[p.name].icon) || (castsE && castsE.icon) || "";
     var healer = !!FLOPIK_HEALER_SPECS[icon];
-    var main = healer ? (t.heal[p.name] || t.dmg[p.name] || null) : (t.dmg[p.name] || null);
-    if (!main && !castsE) return;
-    p.dmg = flopikBreakdown_(main, castsE, t.dur || (fight.endTime - fight.startTime));
+    var mainE = healer ? (t.heal[p.name] || t.dmg[p.name] || null) : (t.dmg[p.name] || null);
+    if (!mainE && !castsE) return;
+    p.dmg = flopikBreakdown_(mainE, castsE, e - st);
     p.dmg.metric = healer ? "hps" : "dps";
+    p.dmg.cut = e < winEnd ? "death" : res.cutoff == null || winEnd === fightEnd ? "end" : "cutoff";   // čím okno končí
     if (p.dmg.spec) specs[p.dmg.spec] = 1;
   });
   var skipped = false;
