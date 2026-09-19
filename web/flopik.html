@@ -35,6 +35,13 @@
 .sub-nav.bosses { margin-bottom: 8px; }
 .sub-nav button small { display: block; font-size: 11px; font-weight: 400; opacity: .75; line-height: 1.2; }
 .sub-nav button.short { opacity: .55; }
+/* pull tabs coloured by evaluated fight time (--hue 10 = red/short … 140 = green/long, --t = share of the longest pull) */
+.sub-nav button.timed { position: relative; overflow: hidden; border-color: hsl(var(--hue) 45% 35%); }
+.sub-nav button.timed small .t { color: hsl(var(--hue) 70% 62%); font-weight: 600; }
+.sub-nav button.timed::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: var(--t); background: hsl(var(--hue) 65% 50%); opacity: .85; }
+.sub-nav button.timed.active { border-color: var(--accent); }
+.sub-nav button.timed.active small .t { color: inherit; }
+.sub-nav button.timed.active::after { background: rgba(0, 0, 0, .35); }
 .sub-nav button.kill small { color: var(--accent); opacity: 1; }
 .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 16px; }
 .stat { background: var(--surface2); padding: 12px 14px; display: grid; gap: 3px; align-content: start; }
@@ -549,10 +556,18 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
 
     // pull tabs
     var tabs = $("tabs"); tabs.innerHTML = "";
+    // pull length colour: evaluated time (to the death cutoff, else the whole pull) relative to the longest pull of the boss –
+    // red = short, green = long (more relevant data); the bar under the label shows the share
+    function evalT(p) { return p.meta.cutoff == null ? p.dur : Math.min(p.dur, p.meta.cutoff); }
+    var maxT = b.list.reduce(function (m, p) { return Math.max(m, evalT(p)); }, 0) || 1;
     b.list.forEach(function (p) {
       var btn = document.createElement("button"); btn.type = "button";
-      btn.className = (String(p.no) === String(state.view) ? "active " : "") + (p.dur < 60 ? "short " : "") + (p.kill ? "kill" : "");
-      btn.innerHTML = "Pull " + p.no + "<small>" + esc(p.start.slice(0, 5)) + " · " + fmt(p.dur) + (p.kill ? " · KILL" : "") + "</small>";
+      var ratio = evalT(p) / maxT;
+      btn.className = "timed " + (String(p.no) === String(state.view) ? "active " : "") + (p.dur < 60 ? "short " : "") + (p.kill ? "kill" : "");
+      btn.style.setProperty("--t", Math.round(100 * ratio) + "%");
+      btn.style.setProperty("--hue", Math.round(10 + 130 * ratio));
+      btn.title = "hodnoceno " + fmt(evalT(p)) + (p.meta.cutoff != null && p.meta.cutoff < p.dur ? " z " + fmt(p.dur) + " (death cutoff)" : "") + " · " + Math.round(100 * ratio) + " % nejdelšího pullu";
+      btn.innerHTML = "Pull " + p.no + "<small><span class=\"t\">" + fmt(evalT(p)) + "</span> · " + esc(p.start.slice(0, 5)) + (p.kill ? " · KILL" : "") + "</small>";
       btn.onclick = function () { state.view = String(p.no); render(); };
       tabs.appendChild(btn);
     });
@@ -657,7 +672,9 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
       "~ = stejný čas se ještě načítá, zatím proti celému killu. <b>Klik na jméno hráče</b> rozbalí rozpad – schopnosti, casty za minutu, cíle a shrnutí – vedle rank 1 logu " +
       "(hledá se jednou týdně, list „FlopikRef“).</div>");
     lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu. † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +
-      ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než " + MIN_DUR + " s se nezobrazují, kratší než minutu jsou v záložkách ztlumené." +
+      ". Sloupce lze řadit kliknutím na hlavičku. Pully kratší než " + MIN_DUR + " s se nezobrazují, kratší než minutu jsou v záložkách ztlumené. " +
+      "Záložky pullů jsou obarvené podle hodnoceného času (do death cutoffu): <span style=\"color:hsl(20 70% 62%)\">červená</span> = krátký, " +
+      "<span style=\"color:hsl(140 70% 62%)\">zelená</span> = dlouhý pull s relevantnějšími daty; pruh dole = podíl na nejdelším pullu bosse." +
       (o.code ? ' Zdroj: <a href="https://www.warcraftlogs.com/reports/' + esc(o.code) + '" target="_blank" rel="noopener">Warcraft Logs ' + esc(o.code) + "</a>." : "") + "</div>");
     $("legend").innerHTML = lg.join("");
     persist();
