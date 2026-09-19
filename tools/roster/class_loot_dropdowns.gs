@@ -4421,14 +4421,18 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
 //   orb soak      = cast 1289201 (Caustic Globule) on a player -> at the same moment cast 1290336 (Eternal Venom) by Vexhul
 //   add spawn     = Rouse the Brood (1308482, Ithraz) damages the whole raid -> 1 stack each; falls off by itself after ~25 s
 //   orb explosion = Caustic Globule 1290338 damage (AOE) -> 1 stack to the whole raid
-//   add frontal   = Eternal Venom cast whose source is "Spawn of Vexhul"
+//   add frontal   = Eternal Venom cast whose source is "Spawn of Vexhul" (right after its Corrosive Spit 1291478 cast success).
+//                   The marker debuff 1293979 applied at cast start names the targeted player. Split into: 1st cast on its
+//                   target (expected, 1 per add), anyone else in the cone (avoidable) and a 2nd+ cast of the same add (the add
+//                   should have died before it – verified 2026-09-17: 5 s cast, ~7 s between casts, target hit in 237/245 casts)
 //   waves         = Stir the Depths (applydebuff 1292807) on the player at the same moment
+//   Vile Flood    = intermission laser of Vexhul: debuff/damage 1294605 on the player at the same moment (cast itself is 1294293)
 //   dropped       = removedebuffstack / removedebuff (not on the player's death)
 //   net stacks    = gained − dropped = stacks at the cutoff (2nd player death); ideally == orbs
 var FLOPIK_TF = {
-  ids: [1289201, 1290336, 1308482, 1290338, 1292807],
-  ORB: "1289201", VENOM: "1290336", ROUSE: "1308482", EXPL: "1290338", STIR: "1292807",
-  SRC: ["orb", "wave", "explosion", "spawn", "stir", "other"],
+  ids: [1289201, 1290336, 1308482, 1290338, 1292807, 1294605, 1291478, 1293979],
+  ORB: "1289201", VENOM: "1290336", ROUSE: "1308482", EXPL: "1290338", STIR: "1292807", FLOOD: "1294605", SPIT: "1291478", MARK: "1293979",
+  SRC: ["orb", "wave", "explosion", "spawn", "spawnSide", "spawn2", "stir", "flood", "other"],
   cols: [
     { k: "orbs", l: "Orby", cls: "orb", agg: "sum" },
     { k: "net", l: "Stacky", cls: "total", agg: "sum" },
@@ -4438,8 +4442,11 @@ var FLOPIK_TF = {
     { k: "orb", l: "Orb", grp: 1, agg: "sum" },
     { k: "wave", l: "Spawn addek", agg: "sum" },
     { k: "explosion", l: "Výbuch", agg: "sum" },
-    { k: "spawn", l: "Addka frontal", avoid: 1, hot: [2, 3], hotAll: [6, 10], agg: "sum" },
+    { k: "spawn", l: "Addka cíl", agg: "sum" },
+    { k: "spawnSide", l: "Addka v cestě", avoid: 1, hot: [1, 2], hotAll: [3, 6], agg: "sum" },
+    { k: "spawn2", l: "Addka 2. cast", avoid: 1, hot: [1, 2], hotAll: [2, 4], agg: "sum" },
     { k: "stir", l: "Vlny", avoid: 1, hot: [2, 3], hotAll: [6, 10], agg: "sum" },
+    { k: "flood", l: "Vile Flood", avoid: 1, hot: [2, 3], hotAll: [6, 10], agg: "sum" },
     { k: "other", l: "Jiné", avoid: 1, hot: [2, 3], hotAll: [6, 10], agg: "sum" },
     { k: "max", l: "Max", grp: 1, cls: "max", high: 8, agg: "max" }
   ],
@@ -4450,11 +4457,13 @@ var FLOPIK_TF = {
     "(smrt se nepočítá), dále rozpad získaných podle zdroje. <b>Max</b> = nejvyšší dosažený počet stacků v pullu.",
     "<b>Orb</b> – soak orbu (žádoucí, 1 stack za orb). <b>Spawn addek</b> – Rouse the Brood od Ithraze, 1 stack každému živému hráči " +
     "zhruba každou minutu; nelze se vyhnout, stack sám odpadne po ~25 s. <b>Výbuch</b> – nesoaknutý orb explodoval, 1 stack celému raidu.",
-    "<b>Addka frontal</b> – zásah frontalem addky Spawn of Vexhul. <b>Vlny</b> – zásah vlnou (Stir the Depths). <b>Jiné</b> – zdroj se " +
-    "nepodařilo přiřadit. Tyhle tři jsou zbytečné stacky. Každý pull je uříznutý v okamžiku druhé smrti hráče (†)."
+    "<b>Addka cíl</b> – první frontal (Corrosive Spit) addky Spawn of Vexhul na hráče, kterého si addka vybrala (čekaný, 1 na addku). " +
+    "<b>Addka v cestě</b> – frontal trefil i někoho jiného, kdo stál v kuželu. <b>Addka 2. cast</b> – addka se dožila dalšího frontalu a trefila " +
+    "svůj cíl (měla umřít dřív). <b>Vlny</b> – zásah vlnou (Stir the Depths). <b>Vile Flood</b> – zásah " +
+    "laserem Vexhul v intermission. <b>Jiné</b> – zdroj se nepodařilo přiřadit (typicky stack v okamžiku smrti). Zbytečné stacky = v cestě + 2. cast + vlny + Vile Flood + jiné. Každý pull je uříznutý v okamžiku druhé smrti hráče (†)."
   ],
   description: "Každý soaknutý <b>Caustic Globule</b> dá hráči 1 stack Eternal Venom. Stacky navíc přidává spawn addek (<b>Rouse the Brood</b>), " +
-    "výbuch nesoaknutého orbu, frontal addky (<b>Spawn of Vexhul</b>) a vlny (<b>Stir the Depths</b>). " +
+    "výbuch nesoaknutého orbu, frontal addky (<b>Spawn of Vexhul</b>), vlny (<b>Stir the Depths</b>) a laser v intermission (<b>Vile Flood</b>). " +
     "V ideálním případě má hráč přesně tolik stacků, kolik soaknul orbů."
 };
 
@@ -4462,7 +4471,9 @@ function flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff) 
   var T = FLOPIK_TF;
   var deathT = {};
   deaths.forEach(function (d) { (deathT[d.id] = deathT[d.id] || []).push(d.t); });
-  var orbT = {}, rouseT = {}, explT = {}, stirT = {};
+  var orbT = {}, rouseT = {}, explT = {}, stirT = {}, floodT = {}, spitT = {}, markT = {};
+  function addKey(e) { return e.sourceID + "/" + (e.sourceInstance || 0); }
+  function isSpawn(e) { return !!actorById[e.sourceID] && actorById[e.sourceID].name === "Spawn of Vexhul"; }
   function push(map, id, t) { (map[id] = map[id] || []).push(t); }
   evc.forEach(function (e) {
     var ab = String(e.abilityGameID);
@@ -4470,19 +4481,30 @@ function flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff) 
     if (e.type === "damage" && ab === T.ROUSE) push(rouseT, e.targetID, e.timestamp);
     if (e.type === "damage" && ab === T.EXPL) push(explT, e.targetID, e.timestamp);
     if (e.type === "applydebuff" && ab === T.STIR) push(stirT, e.targetID, e.timestamp);
+    if ((e.type === "damage" || e.type === "applydebuff" || e.type === "absorbed") && ab === T.FLOOD) push(floodT, e.targetID, e.timestamp);
+    if (e.type === "cast" && ab === T.SPIT && isSpawn(e)) push(spitT, addKey(e), e.timestamp);
+    if (e.type === "applydebuff" && ab === T.MARK && isSpawn(e)) push(markT, addKey(e), { t: e.timestamp, id: e.targetID });
   });
+  // Which frontal of this add is it and who was the marked target? -> "spawn" (1st cast, target) / "spawnSide" / "spawn2"
+  function spawnKind(e) {
+    var k = addKey(e), n = 0, tgt = null, i;
+    for (i = 0; i < (spitT[k] || []).length; i++) if (spitT[k][i] <= e.timestamp + 100) n++;
+    for (i = 0; i < (markT[k] || []).length; i++) if (markT[k][i].t <= e.timestamp + 100) tgt = markT[k][i].id;
+    if (tgt !== null && tgt !== e.targetID) return "spawnSide";
+    return n >= 2 ? "spawn2" : "spawn";
+  }
   var orbs = {}, stacks = {}, maxst = {}, removed = {}, gainedA = {}, gained = {};
   function inc(map, id, by) { map[id] = (map[id] || 0) + (by === undefined ? 1 : by); }
   evc.forEach(function (e) {
     var ab = String(e.abilityGameID), g = e.targetID;
     if (e.type === "cast" && ab === T.ORB) inc(orbs, g);
     if (e.type === "cast" && ab === T.VENOM) {
-      var srcName = actorById[e.sourceID] ? actorById[e.sourceID].name : "";
-      var src = srcName === "Spawn of Vexhul" ? "spawn"
+      var src = isSpawn(e) ? spawnKind(e)
         : flopikNear_(orbT[g] || [], e.timestamp, 0.15) ? "orb"
         : flopikNear_(stirT[g] || [], e.timestamp, 0.15) ? "stir"
         : flopikNear_(rouseT[g] || [], e.timestamp, 0.6) ? "wave"
-        : flopikNear_(explT[g] || [], e.timestamp, 0.6) ? "explosion" : "other";
+        : flopikNear_(explT[g] || [], e.timestamp, 0.6) ? "explosion"
+        : flopikNear_(floodT[g] || [], e.timestamp, 0.6) ? "flood" : "other";
       gained[g] = gained[g] || {};
       inc(gained[g], src);
     }
@@ -4510,14 +4532,17 @@ function flopikTwinFangs_(evc, players, actorById, deaths, st, cutoffN, cutoff) 
     rows.push(r);
   });
   var n = rows.length || 1, totalOrbs = 0, net = 0, diff = 0, avoid = 0;
-  rows.forEach(function (r) { totalOrbs += r.orbs; net += r.net; diff += r.diff; avoid += r.spawn + r.stir + r.other; });
+  rows.forEach(function (r) { totalOrbs += r.orbs; net += r.net; diff += r.diff; avoid += r.spawnSide + r.spawn2 + r.stir + r.flood + r.other; });
   var cutNames = deaths.slice(0, cutoffN).map(function (d) { return d.n; });
+  var addsN = 0, adds2 = 0;
+  Object.keys(spitT).forEach(function (k) { addsN++; if (spitT[k].length >= 2) adds2++; });
   var stats = [
     { l: "Cutoff", v: cutoff !== null ? flopikMmss_(cutoff) : "—", cls: cutoff !== null ? "bad" : "",
       s: cutoff !== null ? cutoffN + ". smrt: " + cutNames.join(", ") : "nedosažen (" + deaths.length + " úmrtí)" },
     { l: "Soaknuté orby", v: totalOrbs, cls: "accent", s: (totalOrbs / n).toFixed(1) + " na hráče", agg: "sum" },
     { l: "Stacky (čisté)", v: net, cls: "venom", s: (diff >= 0 ? "+" : "") + diff + " oproti orbům", agg: "sum" },
-    { l: "Zbytečné stacky", v: avoid, cls: avoid ? "bad" : "", s: "frontal addky + vlny + jiné", agg: "sum" },
+    { l: "Zbytečné stacky", v: avoid, cls: avoid ? "bad" : "", s: "addka v cestě + 2. cast + vlny + Vile Flood + jiné", agg: "sum" },
+    { l: "Addky s 2. frontalem", v: adds2, cls: adds2 ? "bad" : "", s: "z " + addsN + " addek, které dokončily frontal", agg: "sum" },
     { l: "Spawny addek", v: waves, cls: "", s: (waves * 20) + " stacků raidu, odpadají po ~25 s", agg: "sum" },
     { l: "Výbuchy orbů", v: explN, cls: explN ? "bad" : "", s: explN ? (explN * 20) + " stacků celému raidu" : "žádný nesoaknutý orb", agg: "sum" }
   ];
