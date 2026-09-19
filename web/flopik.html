@@ -80,11 +80,14 @@ table.fails tr.detail > td { padding: 0; background: var(--surface); border-bott
 .bd h4 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
 .bd table { font-size: 13px; width: 100%; }
 .bd table th, .bd table td { padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.bd table th { cursor: pointer; user-select: none; }
+.bd table th:hover { color: var(--ink-strong); }
+.bd table th[aria-sort="descending"]::after { content: " ▾"; } .bd table th[aria-sort="ascending"]::after { content: " ▴"; }
 .bd th { position: static; cursor: default; background: transparent; }
 .bd th:first-child, .bd td:first-child { text-align: left; white-space: normal; }
 .bd td:first-child { color: var(--ink-strong); }
 .bd td.us { color: var(--accent); } .bd td.ref { color: var(--venom); }
-.bd td.d.neg { color: var(--bad); } .bd td.d.pos { color: var(--accent); } .bd td.d.zero { color: var(--neg); }
+.bd .d.neg { color: var(--bad); } .bd .d.pos { color: var(--accent); } .bd .d.zero { color: var(--neg); }
 .bd tr.miss td:first-child { color: var(--warn); }   /* ability the top log uses and we do not */
 .bd td.num { font-variant-numeric: tabular-nums; }
 .bd td.bar { background-image: linear-gradient(90deg, var(--bar) var(--w), transparent var(--w)); background-repeat: no-repeat; }   /* longhand: the shorthand + var() is dropped by Chrome */
@@ -325,7 +328,7 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     return out;
   }
   // reference cut at the same time as our player's window: fetched on demand from the web app, kept for the session
-  var REFWIN = {}, refwinPending = {};
+  var REFWIN = {}, refwinPending = {}, bdSort = {};   // bdSort: "player|table" -> { k, dir } for the inner tables
   function ensureRefWin(key, endSec) {
     var k = key + "|" + endSec;
     if (REFWIN[k] || refwinPending[k]) return;
@@ -392,13 +395,9 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     else h += '<span class="ref">rank 1 log pro tento spec se ještě nenačetl (doplní se při dalším obnovení)</span>';
     h += "</div>";
 
-    function table(title, cols, rows) {
-      var t = "<div><h4>" + title + '</h4><table><thead><tr>' + cols.map(function (c) { return '<th class="' + (c.cls || "") + '">' + c.l + "</th>"; }).join("") + "</tr></thead><tbody>";
-      rows.forEach(function (row) { t += '<tr class="' + (row.miss ? "miss" : "") + '">' + row.cells.join("") + "</tr>"; });
-      return t + "</tbody></table></div>";
-    }
+    var usSec = d.dur / 1000 || 1, refSec = rd ? ((rd.dur || ref.dur * 1000) / 1000 || 1) : 1;
     // both sides merged by ability name: the same ability can appear under several spell ids (ranks, talents, pets)
-    function join(ours, theirs, keyIdx, nameIdx) {
+    function join(ours, theirs, nameIdx) {
       var map = {}, order = [];
       function add(list, side) {
         (list || []).forEach(function (x) {
@@ -410,44 +409,71 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
       add(ours, "us"); add(theirs, "ref");
       return order.map(function (k) { return map[k]; });
     }
-    var usSec = d.dur / 1000 || 1, refSec = rd ? ((rd.dur || ref.dur * 1000) / 1000 || 1) : 1;
-    function cell(cls, txt, share, maxShare) {   // share bar relative to the biggest share in the table
-      var w = maxShare ? Math.round(100 * share / maxShare) : 0;
-      return '<td class="num ' + cls + (share != null ? " bar" : "") + '" style="--w:' + w + '%">' + txt + "</td>";
+    function bar(share, maxShare) { return share != null && maxShare ? ' bar" style="--w:' + Math.round(100 * share / maxShare) + '%' : ""; }
+    function diffTxt(v, f) { return (v > 0 ? "+" : "") + f(v); }
+    var f1 = function (v) { return v.toFixed(1); }, fi = function (v) { return String(Math.round(v)); };
+    /**
+     * Sortable inner table. cols: [{ k, l, cls, txt(row), bar(row) -> [share, max] }]; rows carry numeric fields per k.
+     * Sort state per player + table lives in bdSort (click on a header, see render()).
+     */
+    function table(id, title, cols, rows, defKey) {
+      var sk = r.name + "|" + id, st = bdSort[sk] || { k: defKey, dir: -1 };
+      if (!cols.some(function (c) { return c.k === st.k; })) st = { k: defKey, dir: -1 };
+      var sorted = rows.slice().sort(function (a, b) {
+        if (st.k === "name") return st.dir * String(a.name).localeCompare(String(b.name));
+        return st.dir * ((Number(a[st.k]) || 0) - (Number(b[st.k]) || 0)) || String(a.name).localeCompare(String(b.name));
+      });
+      var t = "<div><h4>" + title + '</h4><table><thead><tr>' + cols.map(function (c) {
+        return '<th class="' + (c.cls || "") + '" data-bd="' + esc(sk) + '" data-sk="' + c.k + '"' + (st.k === c.k ? ' aria-sort="' + (st.dir < 0 ? "descending" : "ascending") + '"' : "") + ">" + c.l + "</th>";
+      }).join("") + "</tr></thead><tbody>";
+      sorted.forEach(function (row) {
+        t += '<tr class="' + (row.miss ? "miss" : "") + '">' + cols.map(function (c) {
+          if (c.k === "name") return "<td>" + esc(row.name) + "</td>";
+          var b = c.bar ? c.bar(row) : null;
+          return '<td class="num ' + (c.cls || "") + (b ? bar(b[0], b[1]) : "") + '">' + c.txt(row) + "</td>";
+        }).join("") + "</tr>";
+      });
+      return t + "</tbody></table></div>";
     }
-    function diffCell(a, b, f) { var dd = a - b; return '<td class="num ' + dcls(dd) + '">' + (dd > 0 ? "+" : "") + f(dd) + "</td>"; }
+    function dcell(k, f) { return { k: k, l: "diff", cls: "d", txt: function (x) { return '<span class="' + dcls(x[k]) + '">' + diffTxt(x[k], f) + "</span>"; } }; }
 
-    // abilities: share of total + per-second rate, sorted by the bigger of ours / theirs
-    var abRows = join(d.abil, rd ? rd.abil : [], 0, 1).map(function (x) {
-      return { name: x.name, us: x.us, ref: x.ref, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, usR: x.us / usSec, refR: rd ? x.ref / refSec : 0 };
-    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); });
+    // abilities: share of total + per-second rate
+    var abRows = join(d.abil, rd ? rd.abil : [], 1).map(function (x) {
+      var o = { name: x.name, us: x.us, ref: x.ref, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, usR: x.us / usSec, refR: rd ? x.ref / refSec : 0 };
+      o.dR = o.usR - o.refR; o.top = Math.max(o.usS, o.refS); o.miss = !x.us && x.ref > 0; return o;
+    });
     var abMax = abRows.reduce(function (m, x) { return Math.max(m, x.usS, x.refS); }, 0);
-    var ab = abRows.map(function (x) {
-      return { miss: !x.us && x.ref > 0, cells: ["<td>" + esc(x.name) + "</td>", cell("us", pct(x.us, d.total), x.usS, abMax), cell("us", kfmt(x.usR))]
-        .concat(rd ? [cell("ref", pct(x.ref, rd.total), x.refS, abMax), cell("ref", kfmt(x.refR)), diffCell(x.usR, x.refR, kfmt)] : []) };
+    var abCols = [{ k: "name", l: "Ability" },
+      { k: "usS", l: "%", cls: "us", txt: function (x) { return pct(x.us, d.total); }, bar: function (x) { return [x.usS, abMax]; } },
+      { k: "usR", l: unit, cls: "us", txt: function (x) { return kfmt(x.usR); } }]
+      .concat(rd ? [{ k: "refS", l: "top %", cls: "ref", txt: function (x) { return pct(x.ref, rd.total); }, bar: function (x) { return [x.refS, abMax]; } },
+        { k: "refR", l: "top " + unit, cls: "ref", txt: function (x) { return kfmt(x.refR); } }, dcell("dR", kfmt)] : []);
+    // casts: count + per minute
+    var caRows = join(d.casts, rd ? rd.casts : [], 1).map(function (x) {
+      var o = { name: x.name, us: x.us, ref: x.ref, usM: x.us / min, refM: rd ? x.ref / rmin : 0 };
+      o.dM = o.usM - o.refM; o.top = Math.max(o.usM, o.refM); o.miss = !x.us && x.ref > 0; return o;
     });
-    var caRows = join(d.casts, rd ? rd.casts : [], 0, 1).map(function (x) {
-      return { name: x.name, us: x.us, ref: x.ref, usM: x.us / min, refM: rd ? x.ref / rmin : 0 };
-    }).sort(function (a, b) { return Math.max(b.usM, b.refM) - Math.max(a.usM, a.refM); });
     var caMax = caRows.reduce(function (m, x) { return Math.max(m, x.usM, x.refM); }, 0);
-    var ca = caRows.map(function (x) {
-      return { miss: !x.us && x.ref > 0, cells: ["<td>" + esc(x.name) + "</td>", cell("us", String(x.us)), cell("us", x.usM.toFixed(1), x.usM, caMax)]
-        .concat(rd ? [cell("ref", String(x.ref)), cell("ref", x.refM.toFixed(1), x.refM, caMax), diffCell(x.usM, x.refM, function (v) { return v.toFixed(1); })] : []) };
+    var caCols = [{ k: "name", l: "Ability" },
+      { k: "us", l: "casts", cls: "us", txt: function (x) { return String(x.us); } },
+      { k: "usM", l: "/min", cls: "us", txt: function (x) { return f1(x.usM); }, bar: function (x) { return [x.usM, caMax]; } }]
+      .concat(rd ? [{ k: "ref", l: "top casts", cls: "ref", txt: function (x) { return String(x.ref); } },
+        { k: "refM", l: "top /min", cls: "ref", txt: function (x) { return f1(x.refM); }, bar: function (x) { return [x.refM, caMax]; } }, dcell("dM", f1)] : []);
+    // targets: share + per-second rate
+    var tgRows = join(d.tgt, rd ? rd.tgt : [], 0).map(function (x) {
+      var o = { name: x.name, us: x.us, ref: x.ref, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, usR: x.us / usSec, refR: rd ? x.ref / refSec : 0 };
+      o.dR = o.usR - o.refR; o.top = Math.max(o.usS, o.refS); o.miss = false; return o;
     });
-    var tgRows = join(d.tgt, rd ? rd.tgt : [], 0, 0).map(function (x) {
-      return { name: x.name, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, us: x.us, ref: x.ref };
-    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); });
     var tgMax = tgRows.reduce(function (m, x) { return Math.max(m, x.usS, x.refS); }, 0);
-    var tg = tgRows.map(function (x) {
-      return { miss: false, cells: ["<td>" + esc(x.name) + "</td>", cell("us", pct(x.us, d.total), x.usS, tgMax), cell("us", kfmt(x.us / usSec))]
-        .concat(rd ? [cell("ref", pct(x.ref, rd.total), x.refS, tgMax), cell("ref", kfmt(x.ref / refSec)), diffCell(x.us / usSec, x.ref / refSec, kfmt)] : []) };
-    });
-    function H(l, cls) { return { l: l, cls: cls || "" }; }
-    var refAb = rd ? [H("top %", "ref"), H("top " + unit, "ref"), H("diff")] : [];
+    var tgCols = [{ k: "name", l: "Target" },
+      { k: "usS", l: "%", cls: "us", txt: function (x) { return pct(x.us, d.total); }, bar: function (x) { return [x.usS, tgMax]; } },
+      { k: "usR", l: unit, cls: "us", txt: function (x) { return kfmt(x.usR); } }]
+      .concat(rd ? [{ k: "refS", l: "top %", cls: "ref", txt: function (x) { return pct(x.ref, rd.total); }, bar: function (x) { return [x.refS, tgMax]; } },
+        { k: "refR", l: "top " + unit, cls: "ref", txt: function (x) { return kfmt(x.refR); } }, dcell("dR", kfmt)] : []);
     h += '<div class="cols">' +
-      table("Abilities", [H("Ability"), H("us %", "us"), H("us " + unit, "us")].concat(refAb), ab) +
-      table("Casts", [H("Ability"), H("us", "us"), H("us /min", "us")].concat(rd ? [H("top", "ref"), H("top /min", "ref"), H("diff")] : []), ca) +
-      table(d.metric === "hps" ? "Healing targets" : "Targets", [H("Target"), H("us %", "us"), H("us " + unit, "us")].concat(refAb), tg) + "</div>";
+      table("ab", "Abilities", abCols, abRows, "top") +
+      table("ca", "Casts", caCols, caRows, "top") +
+      table("tg", d.metric === "hps" ? "Healing targets" : "Targets", tgCols, tgRows, "top") + "</div>";
 
     // summary of the comparison
     if (rd) {
@@ -596,6 +622,14 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     document.querySelector("#tbl tbody").innerHTML = body;
     Array.prototype.forEach.call(document.querySelectorAll("#tbl tbody td.name"), function (td) {
       td.onclick = function () { var p = td.parentNode.getAttribute("data-p"); if (open[p]) delete open[p]; else open[p] = true; render(); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#tbl .bd th[data-sk]"), function (th) {
+      th.onclick = function (ev) {
+        ev.stopPropagation();
+        var sk = th.getAttribute("data-bd"), k = th.getAttribute("data-sk"), cur = bdSort[sk];
+        bdSort[sk] = cur && cur.k === k ? { k: k, dir: -cur.dir } : { k: k, dir: k === "name" ? 1 : -1 };
+        render();
+      };
     });
     var ft = "<tr>";
     cols.forEach(function (c) {
