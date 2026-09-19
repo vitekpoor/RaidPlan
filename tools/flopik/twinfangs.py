@@ -9,7 +9,10 @@ Rules (verified on the 2026-09-17 combat log):
                   The marker debuff 1293979 applied at cast start names the targeted player. Split into: 1st cast on its
                   target (expected, 1 per add), anyone else in the cone (avoidable) and a 2nd+ cast of the same add (the add
                   should have died before it - verified 2026-09-17: 5 s cast, ~7 s between casts, target hit in 237/245 casts)
-  waves         = Stir the Depths (aura 1292807, or a miss/immune - Divine Shield still gets the stack) at the same moment
+  waves         = Stir the Depths (aura 1292807, or a miss/immune - Divine Shield still gets the stack) at the same moment.
+                  A Vexhul stack with no marker at all is a wave too (checked on video 2026-09-17: the wave hit was simply not
+                  logged) - counted as "stir", the number is kept in summary.unmarked for debugging.
+  markers are taken from the whole pull, the stacks only up to the cutoff (Rouse damage can be logged 0.3 s after the stack)
   Vile Flood    = intermission laser of Vexhul: debuff/damage 1294605 on the player at the same moment (cast itself is 1294293)
   dropped       = SPELL_AURA_REMOVED_DOSE / REMOVED (not on the player's death)
   net stacks    = gained - dropped = the player's stacks at the cutoff; ideally == orbs
@@ -24,7 +27,7 @@ SPELL_ORB, SPELL_VENOM, SPELL_ROUSE, SPELL_EXPL, SPELL_STIR, SPELL_FLOOD = "1289
 SPELL_SPIT, SPELL_MARK, SPELL_EMERGE = "1291478", "1293979", "1308122"
 SPAWN = '"Spawn of Vexhul"'
 KEEP = ("Caustic Globule", "Eternal Venom", "Stir the Depths", "Rouse the Brood", "Venomous Emergence", "Vile Flood", "Corrosive Spit")
-SRC = ["orb", "wave", "explosion", "spawn", "spawnSide", "spawn2", "stir", "flood", "other"]
+SRC = ["orb", "wave", "explosion", "spawn", "spawnSide", "spawn2", "stir", "flood"]
 FLOOD_EVENTS = DAMAGE_EVENTS + ("SPELL_PERIODIC_DAMAGE", "SPELL_PERIODIC_MISSED", "SPELL_AURA_APPLIED")
 
 COLS = [
@@ -41,7 +44,6 @@ COLS = [
     {"k": "spawn2", "l": "Addka 2. cast", "avoid": 1, "hot": [1, 2], "hotAll": [2, 4], "agg": "sum"},
     {"k": "stir", "l": "Vlny", "avoid": 1, "hot": [2, 3], "hotAll": [6, 10], "agg": "sum"},
     {"k": "flood", "l": "Vile Flood", "avoid": 1, "hot": [2, 3], "hotAll": [6, 10], "agg": "sum"},
-    {"k": "other", "l": "Jiné", "avoid": 1, "hot": [2, 3], "hotAll": [6, 10], "agg": "sum"},
     {"k": "max", "l": "Max", "grp": 1, "cls": "max", "high": 8, "agg": "max"},
 ]
 LEGEND = [
@@ -53,8 +55,8 @@ LEGEND = [
     "zhruba každou minutu; nelze se vyhnout, stack sám odpadne po ~25 s. <b>Výbuch</b> – nesoaknutý orb explodoval, 1 stack celému raidu.",
     "<b>Addka cíl</b> – první frontal (Corrosive Spit) addky Spawn of Vexhul na hráče, kterého si addka vybrala (čekaný, 1 na addku). "
     "<b>Addka v cestě</b> – frontal trefil i někoho jiného, kdo stál v kuželu. <b>Addka 2. cast</b> – addka se dožila dalšího frontalu a trefila "
-    "svůj cíl (měla umřít dřív). <b>Vlny</b> – zásah vlnou (Stir the Depths). <b>Vile Flood</b> – zásah "
-    "laserem Vexhul v intermission. <b>Jiné</b> – zdroj se nepodařilo přiřadit (vzácné, typicky stack v okamžiku smrti). Zbytečné stacky = v cestě + 2. cast + vlny + Vile Flood + jiné. Každý pull je uříznutý v okamžiku druhé smrti hráče (†).",
+    "svůj cíl (měla umřít dřív). <b>Vlny</b> – zásah vlnou (Stir the Depths; počítá se i zásah pod imunitou nebo bez zalogovaného debuffu). "
+    "<b>Vile Flood</b> – zásah laserem Vexhul v intermission. Zbytečné stacky = v cestě + 2. cast + vlny + Vile Flood. Každý pull je uříznutý v okamžiku druhé smrti hráče (†).",
 ]
 DESCRIPTION = ("Každý soaknutý <b>Caustic Globule</b> dá hráči 1 stack Eternal Venom. Stacky navíc přidává spawn addek (<b>Rouse the Brood</b>), "
                "výbuch nesoaknutého orbu, frontal addky (<b>Spawn of Vexhul</b>), vlny (<b>Stir the Depths</b>) a laser v intermission (<b>Vile Flood</b>). "
@@ -71,15 +73,18 @@ def analyze(pull, ctx):
         death_t[g].append(t)
     cutoff = deaths[cutoff_n - 1][0] if len(deaths) >= cutoff_n else pull["end"]
     evc = [(t, f) for t, f in pull["ev"] if t <= cutoff]
+    unmarked = 0
     names = dict(ctx["names"])
     orb_t, rouse_t, expl_t, stir_t, flood_t, spit_t, mark_t = (collections.defaultdict(list) for _ in range(7))
-    for t, f in evc:
+    rouse_all = []
+    for t, f in pull["ev"]:   # markers from the whole pull (the cutoff applies to the stacks below)
         if len(f) <= 10:
             continue
         if f[0] == "SPELL_CAST_SUCCESS" and f[9] == SPELL_ORB:
             orb_t[f[5]].append(t)
         if f[0] in DAMAGE_EVENTS and f[9] in (SPELL_ROUSE, SPELL_EMERGE):
             rouse_t[f[5]].append(t)
+            rouse_all.append(t)
         if f[0] in DAMAGE_EVENTS and f[9] == SPELL_EXPL:
             expl_t[f[5]].append(t)
         if f[0] in ("SPELL_AURA_APPLIED",) + DAMAGE_EVENTS and f[9] == SPELL_STIR:
@@ -124,8 +129,11 @@ def analyze(pull, ctx):
                 src = "explosion"
             elif near(flood_t[g], t, 0.6):
                 src = "flood"
+            elif near(rouse_all, t, 0.6):
+                src = "wave"   # add spawn is raid-wide; the player's own hit may be missing (died that instant)
             else:
-                src = "other"
+                src = "stir"
+                unmarked += 1
             gained[g][src] += 1
         if f[9] == SPELL_VENOM and f[0] in ("SPELL_AURA_APPLIED", "SPELL_AURA_APPLIED_DOSE", "SPELL_AURA_REMOVED_DOSE", "SPELL_AURA_REMOVED"):
             if f[0] == "SPELL_AURA_REMOVED" and near(death_t[g], t, 1.5):
@@ -154,7 +162,7 @@ def analyze(pull, ctx):
     n = len(rows) or 1
     net = sum(r["net"] for r in rows)
     diff = sum(r["diff"] for r in rows)
-    avoid = sum(r["spawnSide"] + r["spawn2"] + r["stir"] + r["flood"] + r["other"] for r in rows)
+    avoid = sum(r["spawnSide"] + r["spawn2"] + r["stir"] + r["flood"] for r in rows)
     cut = round((cutoff - st).total_seconds()) if len(deaths) >= cutoff_n else None
     total_orbs = sum(orbs.values())
     adds2 = sum(1 for v in spit_t.values() if len(v) >= 2)
@@ -163,11 +171,11 @@ def analyze(pull, ctx):
          "s": ("%d. smrt: " % cutoff_n + ", ".join(x[2] for x in deaths[:cutoff_n])) if cut is not None else "nedosažen (%d úmrtí)" % len(deaths)},
         {"l": "Soaknuté orby", "v": total_orbs, "cls": "accent", "s": "%.1f na hráče" % (total_orbs / n), "agg": "sum"},
         {"l": "Stacky (čisté)", "v": net, "cls": "venom", "s": ("+" if diff >= 0 else "") + str(diff) + " oproti orbům", "agg": "sum"},
-        {"l": "Zbytečné stacky", "v": avoid, "cls": "bad" if avoid else "", "s": "addka v cestě + 2. cast + vlny + Vile Flood + jiné", "agg": "sum"},
+        {"l": "Zbytečné stacky", "v": avoid, "cls": "bad" if avoid else "", "s": "addka v cestě + 2. cast + vlny + Vile Flood", "agg": "sum"},
         {"l": "Addky s 2. frontalem", "v": adds2, "cls": "bad" if adds2 else "", "s": "z %d addek, které dokončily frontal" % len(spit_t), "agg": "sum"},
         {"l": "Spawny addek", "v": waves, "cls": "", "s": "%d stacků raidu, odpadají po ~25 s" % (waves * 20), "agg": "sum"},
         {"l": "Výbuchy orbů", "v": expl_n, "cls": "bad" if expl_n else "", "s": ("%d stacků celému raidu" % (expl_n * 20)) if expl_n else "žádný nesoaknutý orb", "agg": "sum"},
     ]
     return {"cols": COLS, "legend": LEGEND, "description": DESCRIPTION, "stats": stats, "cutoff": cut,
-            "summary": {"orbs": total_orbs, "expl": expl_n, "waves": waves, "cutoffN": cutoff_n, "cutoffDeaths": [x[2] for x in deaths[:cutoff_n]]},
+            "summary": {"orbs": total_orbs, "expl": expl_n, "waves": waves, "unmarked": unmarked, "cutoffN": cutoff_n, "cutoffDeaths": [x[2] for x in deaths[:cutoff_n]]},
             "players": rows}
