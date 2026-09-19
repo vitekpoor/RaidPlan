@@ -467,20 +467,22 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
       .concat(rd ? [{ k: "ref", l: "top casts", cls: "ref", txt: function (x) { return String(x.ref); } },
         { k: "refM", l: "top /min", cls: "ref", txt: function (x) { return f1(x.refM); }, bar: function (x) { return [x.refM, caMax]; } }, dcell("dM", f1)] : []);
     // targets: share + per-second rate
-    var tgRows = join(d.tgt, rd ? rd.tgt : [], 0).map(function (x) {
-      var o = { name: x.name, us: x.us, ref: x.ref, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, usR: x.us / usSec, refR: rd ? x.ref / refSec : 0 };
+    // healers: healing targets are our raid members – no point comparing them with another guild's roster, list only ours
+    var tgRef = rd && d.metric !== "hps";
+    var tgRows = join(d.tgt, tgRef ? rd.tgt : [], 0).map(function (x) {
+      var o = { name: x.name, us: x.us, ref: x.ref, usS: x.us / (d.total || 1), refS: tgRef ? x.ref / (rd.total || 1) : 0, usR: x.us / usSec, refR: tgRef ? x.ref / refSec : 0 };
       o.dR = o.usR - o.refR; o.top = Math.max(o.usS, o.refS); o.miss = false; return o;
     });
     var tgMax = tgRows.reduce(function (m, x) { return Math.max(m, x.usS, x.refS); }, 0);
     var tgCols = [{ k: "name", l: "Target" },
       { k: "usS", l: "%", cls: "us", txt: function (x) { return pct(x.us, d.total); }, bar: function (x) { return [x.usS, tgMax]; } },
       { k: "usR", l: unit, cls: "us", txt: function (x) { return kfmt(x.usR); } }]
-      .concat(rd ? [{ k: "refS", l: "top %", cls: "ref", txt: function (x) { return pct(x.ref, rd.total); }, bar: function (x) { return [x.refS, tgMax]; } },
+      .concat(tgRef ? [{ k: "refS", l: "top %", cls: "ref", txt: function (x) { return pct(x.ref, rd.total); }, bar: function (x) { return [x.refS, tgMax]; } },
         { k: "refR", l: "top " + unit, cls: "ref", txt: function (x) { return kfmt(x.refR); } }, dcell("dR", kfmt)] : []);
     h += '<div class="cols">' +
       table("ab", "Abilities", abCols, abRows, "top") +
       table("ca", "Casts", caCols, caRows, "top") +
-      table("tg", d.metric === "hps" ? "Healing targets" : "Targets", tgCols, tgRows, "top") + "</div>";
+      table("tg", d.metric === "hps" ? "Healing targets (only ours)" : "Targets", tgCols, tgRows, "top") + "</div>";
 
     // summary of the comparison
     if (rd) {
