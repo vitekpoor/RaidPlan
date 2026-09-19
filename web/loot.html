@@ -21,6 +21,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/site.css">
 <style>
+/* široké tabulky: stránka využije šířku monitoru (sdílený limit 1100px je pro textové stránky) */
+:root { --wrap: min(1800px, 100%); }
 :root { --mplus: #7fb0e6; --mplus-soft: rgba(127, 176, 230, .12); --raid: var(--accent); --raid-soft: var(--accent-soft); }
 h2 { font-size: 22px; font-weight: 700; margin: 26px 0 10px; color: var(--accent); }
 .lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; }

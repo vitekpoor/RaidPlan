@@ -19,6 +19,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/site.css">
 <style>
+/* široké tabulky: stránka využije šířku monitoru (sdílený limit 1100px je pro textové stránky) */
+:root { --wrap: min(1800px, 100%); }
 :root { --venom: #b08ae6; --venom-soft: rgba(176, 138, 230, .14); --warn: #e1a23a; --warn-soft: rgba(225, 162, 58, .14); --bad: var(--dps); --bad-soft: rgba(240, 133, 122, .14); }
 .lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; max-width: 78ch; }
 .lead b { color: var(--ink-strong); font-weight: 600; }
