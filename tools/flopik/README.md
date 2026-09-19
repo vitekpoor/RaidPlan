@@ -51,6 +51,18 @@ nic neví, vykreslí, co dostane.
 Test bez Google: `engine.js` je čistý JS – načíst v prohlížeči s uloženými událostmi fightu z WCL API
 (viz `flopikFilterFor` pro filterExpression) a zavolat `flopikAnalyze(fight, events, actors, report.startTime)`.
 
+## Damage breakdown + srovnání s rank 1 logem
+
+Po kliknutí na jméno hráče se pod řádkem rozbalí rozpad za celý pull (bez death cutoffu): **schopnosti** (podíl na
+celkové damage, DPS), **casty** (počet, za minutu) a **cíle**, vedle stejného rozpadu z **rank 1 logu** téhož specu na
+tomto bossovi a obtížnosti (WCL `worldData.encounter.characterRankings`, metrika dps, u healerů hps + Healing tabulka).
+Data hráčů se berou z WCL tabulek `DamageDone` / `Healing` / `Casts` fightu při `refresh` (sekce **FLOPIK – Damage
+breakdown** v .gs, `flopikDmgAttach_`) a ukládají do Data JSON hráče (klíč `dmg`). Referenční logy jsou v listu
+**„FlopikRef“** (klíč `bossId|obtížnost|Class-Spec`, hledají se znovu po 7 dnech, neúspěch po dni); stránka je čte přes
+gviz CSV stejně jako list Flopik. Rank 1 kill má jinou délku než náš wipe, proto se srovnávají podíly a hodnoty za
+sekundu / minutu. Oranžově jsou schopnosti, které top log používá a my ne. Pully spočítané před přidáním modulu rozpad
+nemají – smazat jejich řádky v listu a stránka je načte znovu.
+
 ## Data v tabulce
 
 List „Flopik“: `Datum | Pull | Boss | Obtížnost | Start | Délka (s) | Kill | Hráč | Data | Boss klíč | Zapsáno | Report | Fight`.

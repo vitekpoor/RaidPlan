@@ -4221,7 +4221,7 @@ function flopikRefresh_(code, budgetMs) {
     var fights = (rep.fights || []).filter(function (f) { return (f.endTime - f.startTime) / 1000 >= FLOPIK_MIN_DUR; })
       .sort(function (a, b) { return a.startTime - b.startTime; });
     var todo = fights.filter(function (f) { return !have[String(f.id)]; });
-    var tz = Session.getScriptTimeZone(), added = 0;
+    var tz = Session.getScriptTimeZone(), added = 0, refsPending = false;
     for (var i = 0; i < todo.length; i++) {
       if (Date.now() - t0 > budgetMs) break;
       var f = todo[i];
@@ -4231,11 +4231,13 @@ function flopikRefresh_(code, budgetMs) {
       res.date = Utilities.formatDate(new Date(res.startMs), tz, "yyyy-MM-dd");
       res.start = Utilities.formatDate(new Date(res.startMs), tz, "HH:mm:ss");
       res.report = code; res.fight = f.id;
+      if (flopikDmgAttach_(code, f, res, function () { return Date.now() - t0 < budgetMs; })) refsPending = true;
       flopikRecordPull_(res);
       added++;
     }
+    // refsPending: na některý referenční (rank 1) log nezbyl čas – stránka zavolá refresh znovu a doplní se
     return { ok: true, code: code, title: rep.title, fights: fights.length, cached: Object.keys(have).length + added, added: added,
-      remaining: todo.length - added, points: null };
+      remaining: (todo.length - added) + (refsPending ? 1 : 0), refsPending: refsPending, points: null };
   } finally { lock.releaseLock(); }
 }
 
@@ -4256,6 +4258,137 @@ function flopikApiGet_(e) {
   } catch (err) {
     return simApiJson_({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+// ================== FLOPIK – Damage breakdown + srovnání s rank 1 logem ==================
+// Ke každému hráči v pullu se z WCL tabulek (DamageDone / Healing / Casts) uloží rozpad: schopnosti, cíle, počty
+// castů (Data JSON hráče, klíč `dmg`). Pro každý spec (ikona "Class-Spec") na daném bossovi a obtížnosti se jednou
+// (max 7 dní) najde rank 1 log (worldData.encounter.characterRankings, metrika dps / u healerů hps), stáhne stejný
+// rozpad a uloží do listu „FlopikRef“. Stránka flopik.html oba zdroje čte přes gviz CSV a po kliknutí na hráče
+// ukáže srovnání (podíl schopností, DPS, casty za minutu, cíle) – rozpad je za celý pull, bez death cutoffu.
+
+var FLOPIK_REF_SHEET = "FlopikRef";
+var FLOPIK_REF_HEADER = ["Klíč", "Boss ID", "Obtížnost", "Spec", "Metrika", "Hráč", "Server", "Guilda", "Report", "Fight", "Délka (s)", "Hodnota", "Data", "Načteno"];
+var FLOPIK_REF_MAX_AGE_MS = 7 * 86400000;      // rank 1 se hledá znovu po týdnu
+var FLOPIK_REF_ERR_AGE_MS = 86400000;          // neúspěšné hledání se opakuje po dni
+var FLOPIK_HEALER_SPECS = { "Paladin-Holy": 1, "Priest-Holy": 1, "Priest-Discipline": 1, "Druid-Restoration": 1, "Shaman-Restoration": 1, "Monk-Mistweaver": 1, "Evoker-Preservation": 1 };
+var FLOPIK_DIFF_ID = { LFR: 1, Normal: 3, Heroic: 4, Mythic: 5 };
+
+function flopikRefSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(FLOPIK_REF_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(FLOPIK_REF_SHEET);
+    sh.getRange(1, 1, 1, FLOPIK_REF_HEADER.length).setValues([FLOPIK_REF_HEADER]).setFontWeight("bold");
+    sh.setFrozenRows(1);
+    sh.getRange("I:I").setNumberFormat("@");
+    sh.getRange("M:M").setNumberFormat("@");
+    sh.protect().setDescription("FlopikRef – referenční (rank 1) logy, zapisuje skript").setWarningOnly(true);
+  }
+  return sh;
+}
+
+/** DamageDone + Casts (+ Healing) tabulky fightu; vrací { dur, dmg: {name: entry}, heal: {name: entry}, casts: {name: entry} }. */
+function flopikTables_(code, fightId, withHeal) {
+  var q = "query($c:String!,$f:[Int]!){ reportData { report(code:$c) { dmg: table(dataType: DamageDone, fightIDs:$f) casts: table(dataType: Casts, fightIDs:$f)" +
+    (withHeal ? " heal: table(dataType: Healing, fightIDs:$f)" : "") + " } } }";
+  var rep = wclGql_(q, { c: code, f: [fightId] }).reportData.report;
+  function byName(t) { var m = {}; ((t && t.data && t.data.entries) || []).forEach(function (e) { m[e.name] = e; }); return m; }
+  return { dur: (rep.dmg && rep.dmg.data && rep.dmg.data.totalTime) || 0, dmg: byName(rep.dmg), casts: byName(rep.casts), heal: withHeal ? byName(rep.heal) : {} };
+}
+
+/** Kompaktní rozpad jednoho hráče: { spec, total, active, dur, abil:[[guid,name,total]], tgt:[[name,total]], casts:[[guid,name,n]], castN }. */
+function flopikBreakdown_(main, castsE, durMs) {
+  function top(list, n, f) { return (list || []).slice().sort(function (a, b) { return b.total - a.total; }).slice(0, n).map(f); }
+  var out = { spec: (main && main.icon) || (castsE && castsE.icon) || "", dur: Math.round(durMs || 0), total: 0, active: 0, abil: [], tgt: [], casts: [], castN: 0 };
+  if (main) {
+    out.total = Math.round(main.total || 0); out.active = Math.round(main.activeTime || 0);
+    out.abil = top(main.abilities, 25, function (a) { return [a.guid, a.name, Math.round(a.total)]; });
+    out.tgt = top(main.targets, 8, function (t) { return [t.name, Math.round(t.total)]; });
+  }
+  if (castsE) {
+    out.castN = Math.round(castsE.total || 0);
+    out.casts = top(castsE.abilities, 30, function (a) { return [a.guid, a.name, Math.round(a.total)]; });
+  }
+  return out;
+}
+
+/** Klíč referenčního logu: boss | obtížnost (text) | spec. */
+function flopikRefKey_(encId, difficulty, spec) { return encId + "|" + difficulty + "|" + spec; }
+
+/**
+ * Zajistí referenční (rank 1) log pro spec na bossovi. Vrací "ok" | "fresh" | "skip" (došel čas) | "error".
+ * Řádek v listu FlopikRef se přepisuje; neúspěch se uloží s Data = {error} a zkusí znovu po dni.
+ */
+function flopikRefEnsure_(encId, difficulty, spec, haveTime) {
+  var sh = flopikRefSheet_();
+  var key = flopikRefKey_(encId, difficulty, spec);
+  var last = sh.getLastRow(), rowNo = 0;
+  if (last > 1) {
+    var vals = sh.getRange(2, 1, last - 1, FLOPIK_REF_HEADER.length).getValues();
+    for (var i = 0; i < vals.length; i++) {
+      if (String(vals[i][0]) !== key) continue;
+      rowNo = i + 2;
+      var fetched = vals[i][13] instanceof Date ? vals[i][13].getTime() : Date.parse(String(vals[i][13])) || 0;
+      var isErr = /^\{"error"/.test(String(vals[i][12] || ""));
+      if (Date.now() - fetched < (isErr ? FLOPIK_REF_ERR_AGE_MS : FLOPIK_REF_MAX_AGE_MS)) return "fresh";
+      break;
+    }
+  }
+  if (!haveTime()) return "skip";
+  var parts = spec.split("-"), cls = parts[0], specName = parts[1] || "";
+  var healer = !!FLOPIK_HEALER_SPECS[spec], metric = healer ? "hps" : "dps";
+  var diffId = FLOPIK_DIFF_ID[difficulty] || 5;
+  var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+  var row;
+  try {
+    var d = wclGql_("query($e:Int!,$cls:String!,$spec:String!,$dif:Int!,$m:CharacterRankingMetricType!){ worldData { encounter(id:$e) { characterRankings(className:$cls, specName:$spec, difficulty:$dif, metric:$m, page:1) } } }",
+      { e: encId, cls: cls, spec: specName, dif: diffId, m: metric });
+    var cr = d.worldData.encounter && d.worldData.encounter.characterRankings;
+    var r = cr && cr.rankings && cr.rankings[0];
+    if (!r) throw new Error("žádný ranking pro " + spec + " na bossovi " + encId + " (" + difficulty + ")");
+    var t = flopikTables_(r.report.code, r.report.fightID, healer);
+    var main = (healer ? t.heal : t.dmg)[r.name] || null, castsE = t.casts[r.name] || null;
+    if (!main) {   // jméno se neshoduje (diakritika / lokalizace) – vezmi nejsilnějšího hráče stejného specu
+      var pool = healer ? t.heal : t.dmg, best = null;
+      Object.keys(pool).forEach(function (n) { if (pool[n].icon === spec && (!best || pool[n].total > best.total)) best = pool[n]; });
+      main = best; castsE = best ? t.casts[best.name] || null : null;
+    }
+    var bd = flopikBreakdown_(main, castsE, t.dur || r.duration);
+    bd.metric = metric; bd.rank = 1;
+    row = [key, encId, difficulty, spec, metric, r.name, (r.server ? r.server.name + "-" + r.server.region : ""), (r.guild ? r.guild.name : ""),
+      r.report.code, r.report.fightID, Math.round((r.duration || 0) / 1000), Math.round(r.amount || 0), JSON.stringify(bd), now];
+  } catch (err) {
+    row = [key, encId, difficulty, spec, metric, "", "", "", "", "", "", "", JSON.stringify({ error: String(err && err.message || err) }), now];
+  }
+  if (rowNo) sh.getRange(rowNo, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
+  return row[5] ? "ok" : "error";
+}
+
+/**
+ * Přidá hráčům pullu rozpad `dmg` a zajistí referenční logy pro jejich specy. Vrací true, když se na nějaký
+ * referenční log nedostalo kvůli časovému budgetu (volající pak nechá stránku zavolat refresh znovu).
+ */
+function flopikDmgAttach_(code, fight, res, haveTime) {
+  var t;
+  try { t = flopikTables_(code, fight.id, true); }
+  catch (err) { res.summary.dmgError = String(err && err.message || err); return false; }
+  var specs = {};
+  (res.players || []).forEach(function (p) {
+    var castsE = t.casts[p.name] || null;
+    var icon = (t.dmg[p.name] && t.dmg[p.name].icon) || (t.heal[p.name] && t.heal[p.name].icon) || (castsE && castsE.icon) || "";
+    var healer = !!FLOPIK_HEALER_SPECS[icon];
+    var main = healer ? (t.heal[p.name] || t.dmg[p.name] || null) : (t.dmg[p.name] || null);
+    if (!main && !castsE) return;
+    p.dmg = flopikBreakdown_(main, castsE, t.dur || (fight.endTime - fight.startTime));
+    p.dmg.metric = healer ? "hps" : "dps";
+    if (p.dmg.spec) specs[p.dmg.spec] = 1;
+  });
+  var skipped = false;
+  Object.keys(specs).forEach(function (spec) {
+    if (flopikRefEnsure_(fight.encounterID, res.difficulty, spec, haveTime) === "skip") skipped = true;
+  });
+  return skipped;
 }
 
 // >>> FLOPIK ENGINE (generated from tools/flopik/engine.js by build_gs.py – edit engine.js, not this)
