@@ -4241,7 +4241,7 @@ function flopikRefresh_(code, budgetMs) {
   } finally { lock.releaseLock(); }
 }
 
-/** doGet ?p=flopik&action=reports | refresh&code=… (JSON, bez tokenu – jen čtení WCL + zápis cache do listu). */
+/** doGet ?p=flopik&action=reports | refresh&code=… | refwin&key=…&end=… (JSON, bez tokenu – jen čtení WCL + zápis cache do listu). */
 function flopikApiGet_(e) {
   var q = (e && e.parameter) || {};
   var action = String(q.action || "");
@@ -4253,6 +4253,10 @@ function flopikApiGet_(e) {
       var known = flopikReports_().some(function (r) { return r.code === code; });
       if (!known) return simApiJson_({ ok: false, error: "report " + code + " není mezi reporty guildy" });
       return simApiJson_(flopikRefresh_(code, FLOPIK_REFRESH_BUDGET_MS));
+    }
+    if (action === "refwin") {
+      if (!q.key || !q.end) return simApiJson_({ ok: false, error: "chybí key / end" });
+      return simApiJson_(flopikRefWindow_(String(q.key), q.end));
     }
     return simApiJson_({ ok: false, error: "neznámá action " + action });
   } catch (err) {
@@ -4366,6 +4370,39 @@ function flopikRefEnsure_(encId, difficulty, spec, haveTime) {
   }
   if (rowNo) sh.getRange(rowNo, 1, 1, row.length).setValues([row]); else sh.appendRow(row);
   return row[5] ? "ok" : "error";
+}
+
+/**
+ * Rozpad referenčního (rank 1) hráče jen do `endSec` sekund jeho killu – srovnání „ve stejném čase“ s naším hráčem,
+ * kterému okno skončilo smrtí / cutoffem. Volá stránka po rozkliknutí hráče (?p=flopik&action=refwin&key=…&end=…),
+ * výsledek je v CacheService 6 h. Vrací { ok, key, end, whole, data } – whole = okno pokrývá celý kill, stránka
+ * pak použije data z listu FlopikRef.
+ */
+function flopikRefWindow_(key, endSec) {
+  endSec = Math.max(1, Math.round(Number(endSec) || 0));
+  var cache = CacheService.getScriptCache(), ck = "flopik_rw_" + key + "|" + endSec;
+  var hit = cache.get(ck);
+  if (hit) return JSON.parse(hit);
+  var sh = flopikRefSheet_(), last = sh.getLastRow(), row = null;
+  if (last > 1) sh.getRange(2, 1, last - 1, FLOPIK_REF_HEADER.length).getValues().forEach(function (r) { if (String(r[0]) === key) row = r; });
+  if (!row || !row[8]) throw new Error("referenční log pro " + key + " není v listu FlopikRef");
+  var code = String(row[8]), fightId = Number(row[9]), name = String(row[5]), metric = String(row[4]), spec = String(row[3]);
+  var healer = metric === "hps";
+  var fd = wclGql_("query($c:String!,$f:[Int]!){ reportData { report(code:$c) { fights(fightIDs:$f) { startTime endTime } } } }", { c: code, f: [fightId] });
+  var f = fd.reportData.report.fights[0];
+  if (!f) throw new Error("fight " + fightId + " v reportu " + code + " nenalezen");
+  var out;
+  if (endSec * 1000 >= f.endTime - f.startTime - 1000) out = { ok: true, key: key, end: endSec, whole: true };
+  else {
+    var t = flopikTables_(code, fightId, healer, f.startTime + endSec * 1000);
+    var pool = healer ? t.heal : t.dmg, main = pool[name] || null, castsE = t.casts[name] || null;
+    if (!main) { var best = null; Object.keys(pool).forEach(function (n) { if (pool[n].icon === spec && (!best || pool[n].total > best.total)) best = pool[n]; }); main = best; castsE = best ? t.casts[best.name] || null : null; }
+    var bd = flopikBreakdown_(main, castsE, endSec * 1000);
+    bd.metric = metric; bd.cut = "window";
+    out = { ok: true, key: key, end: endSec, whole: false, data: bd };
+  }
+  cache.put(ck, JSON.stringify(out), 21600);
+  return out;
 }
 
 var FLOPIK_DMG_MAX_WINDOWS = 6;   // nejvýš tolik zvláštních WCL dotazů na okna „do první smrti hráče“ v jednom pullu

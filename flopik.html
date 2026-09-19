@@ -308,6 +308,17 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
     });
     return out;
   }
+  // reference cut at the same time as our player's window: fetched on demand from the web app, kept for the session
+  var REFWIN = {}, refwinPending = {};
+  function ensureRefWin(key, endSec) {
+    var k = key + "|" + endSec;
+    if (REFWIN[k] || refwinPending[k]) return;
+    refwinPending[k] = true;
+    fetch(WEBAPP + "?p=flopik&action=refwin&key=" + encodeURIComponent(key) + "&end=" + endSec, { redirect: "follow" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { REFWIN[k] = j && j.ok ? j : { ok: false, error: (j && j.error) || "chyba" }; delete refwinPending[k]; render(); })
+      .catch(function (e) { REFWIN[k] = { ok: false, error: e.message }; delete refwinPending[k]; render(); });
+  }
   function kfmt(n) { n = Number(n) || 0; var a = Math.abs(n); return a >= 1e6 ? (n / 1e6).toFixed(2) + "M" : a >= 1e3 ? (n / 1e3).toFixed(a >= 1e5 ? 0 : 1) + "k" : String(Math.round(n)); }
   function pct(part, whole) { return whole ? (100 * part / whole).toFixed(1) + " %" : "—"; }
   function dcls(d) { return d > 0 ? "d pos" : d < 0 ? "d neg" : "d zero"; }
@@ -316,8 +327,17 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
   function detailHtml(r, isAll, bossId, difficulty) {
     var d = r.dmg;
     if (!d) return '<div class="bd"><div class="note">Pro tohoto hráče není rozpad damage k dispozici (pull byl spočítaný před přidáním modulu – v Google tabulce smaž řádky pullu a stránka ho načte z Warcraft Logs znovu).</div></div>';
-    var ref = REFS[bossId + "|" + difficulty + "|" + d.spec] || null;
+    var refKey = bossId + "|" + difficulty + "|" + d.spec, ref = REFS[refKey] || null;
     var rd = ref && ref.data && !ref.data.error ? ref.data : null;
+    // single pull: cut the rank 1 log at the same time as our window (our death / cutoff); the sum view keeps the whole kill
+    var endSec = Math.round((d.dur || 0) / 1000), winTxt = "", winNote = "";
+    if (rd && !isAll && endSec > 0 && endSec < ref.dur - 2) {
+      var rw = REFWIN[refKey + "|" + endSec];
+      if (rw && rw.ok && rw.data) { rd = rw.data; winTxt = " · do " + fmt(endSec) + " jeho killu"; }
+      else if (rw && rw.ok && rw.whole) winTxt = " · celý kill";
+      else if (rw && !rw.ok) winNote = " (stejný čas se nepodařilo načíst: " + esc(rw.error) + ", zobrazen celý kill)";
+      else { ensureRefWin(refKey, endSec); winNote = " (načítám rank 1 log do " + fmt(endSec) + "…, zatím celý kill)"; }
+    }
     var min = (d.dur || 1) / 60000, rmin = rd ? (rd.dur || ref.dur * 1000 || 1) / 60000 : 0;
     var unit = d.metric === "hps" ? "HPS" : "DPS";
     var usPs = d.total / (d.dur / 1000 || 1), refPs = rd ? rd.total / ((rd.dur || ref.dur * 1000) / 1000 || 1) : 0;
@@ -328,8 +348,8 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
     h += '<span class="us"><b>' + kfmt(usPs) + "</b> " + unit + " · aktivní " + pct(d.active, d.dur) + " · " + kfmt(d.total) + " celkem · " + d.castN + " castů (" + (d.castN / min).toFixed(1) + "/min)</span>";
     if (rd) {
       h += '<span class="ref">rank 1: <b>' + esc(ref.name) + "</b> (" + esc(ref.server) + (ref.guild ? ", " + esc(ref.guild) : "") + ") · <b>" + kfmt(refPs) + "</b> " + unit +
-        " · aktivní " + pct(rd.active, rd.dur) + " · kill " + fmt(ref.dur) + " · " + rd.castN + " castů (" + (rd.castN / rmin).toFixed(1) + "/min) · " +
-        '<a href="https://www.warcraftlogs.com/reports/' + esc(ref.code) + "#fight=" + esc(ref.fight) + '&type=damage-done" target="_blank" rel="noopener">log</a></span>';
+        " · aktivní " + pct(rd.active, rd.dur) + " · kill " + fmt(ref.dur) + winTxt + " · " + rd.castN + " castů (" + (rd.castN / rmin).toFixed(1) + "/min) · " +
+        '<a href="https://www.warcraftlogs.com/reports/' + esc(ref.code) + "#fight=" + esc(ref.fight) + '&type=damage-done" target="_blank" rel="noopener">log</a>' + winNote + "</span>";
     } else if (ref && ref.data && ref.data.error) h += '<span class="ref">rank 1 log se nepodařilo najít: ' + esc(ref.data.error) + "</span>";
     else h += '<span class="ref">rank 1 log pro tento spec se ještě nenačetl (doplní se při dalším obnovení)</span>';
     h += "</div>";
@@ -375,7 +395,8 @@ table.fails tr.detail td { padding: 0; background: var(--surface); border-bottom
       table("Abilities", ["Ability", "us %", "us " + unit].concat(refCols), ab) +
       table("Casts", ["Ability", "us", "/min"].concat(rd ? ["top", "top /min", "diff"] : []), ca) +
       table(d.metric === "hps" ? "Healing targets" : "Targets", ["Target", "us %"].concat(rd ? ["top %"] : []), tg) + "</div>";
-    h += '<div class="note">Rozpad každého hráče je jen do jeho první smrti, nejpozději do death cutoffu pullu (rank 1 log je celý kill). ' +
+    h += '<div class="note">Rozpad každého hráče je jen do jeho první smrti, nejpozději do death cutoffu pullu; rank 1 log se u jednoho pullu ' +
+      'ořízne do stejného času jeho killu (v součtu pullů je celý kill). ' +
       '<span class="us">Zelená</span> = my, <span class="ref">fialová</span> = rank 1 log stejného specu na tomto bossovi a obtížnosti (' +
       (rd ? "jiná délka boje – proto se srovnávají podíly a hodnoty za sekundu / minutu" : "zatím bez reference") +
       '). <span style="color: var(--warn)">Oranžové</span> schopnosti používá top log a my ne.</div></div>';
