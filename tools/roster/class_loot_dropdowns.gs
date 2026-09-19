@@ -4304,18 +4304,50 @@ function flopikTables_(code, fightId, withHeal, endMs) {
   return { dur: (rep.dmg && rep.dmg.data && rep.dmg.data.totalTime) || 0, dmg: byName(rep.dmg), casts: byName(rep.casts), heal: withHeal ? byName(rep.heal) : {} };
 }
 
-/** Kompaktní rozpad jednoho hráče: { spec, total, active, dur, abil:[[guid,name,total]], tgt:[[name,total]], casts:[[guid,name,n]], castN }. */
-function flopikBreakdown_(main, castsE, durMs) {
+/**
+ * Kompletní seznamy schopností (damage / heal) a castů hráčů: agregovaná tabulka fightu má u každého hráče jen top 5
+ * schopností, tabulka se sourceID vrací všechno (damage petů je pod vyvolávací schopností, jako v WCL u hráče).
+ * ids = ID aktérů, healerIds = {id: 1} pro Healing místo DamageDone. Dávky po 10 hráčích v jednom dotazu (~1 bod/hráč).
+ * Vrací { id: { abil: [entries], casts: [entries] } }.
+ */
+function flopikPerSource_(code, fightId, ids, healerIds, endMs) {
+  var out = {};
+  for (var i = 0; i < ids.length; i += 10) {
+    var chunk = ids.slice(i, i + 10), parts = [];
+    chunk.forEach(function (id) {
+      parts.push("d" + id + ": table(dataType: " + (healerIds[id] ? "Healing" : "DamageDone") + ", fightIDs:$f, sourceID:" + id + ", endTime:$e)");
+      parts.push("c" + id + ": table(dataType: Casts, fightIDs:$f, sourceID:" + id + ", endTime:$e)");
+    });
+    var rep = wclGql_("query($c:String!,$f:[Int]!,$e:Float){ reportData { report(code:$c) { " + parts.join(" ") + " } } }",
+      { c: code, f: [fightId], e: endMs == null ? null : endMs }).reportData.report;
+    chunk.forEach(function (id) {
+      function entries(t) { return (t && t.data && t.data.entries) || []; }
+      out[id] = { abil: entries(rep["d" + id]), casts: entries(rep["c" + id]) };
+    });
+  }
+  return out;
+}
+
+/**
+ * Kompaktní rozpad jednoho hráče: { spec, total, active, dur, abil:[[guid,name,total]], tgt:[[name,total]], casts:[[guid,name,n]], castN }.
+ * main = řádek hráče z agregované tabulky (spec, celkem, aktivní čas, cíle), ps = jeho kompletní seznamy z flopikPerSource_
+ * (bez nich se použije zkrácený top 5 z agregované tabulky).
+ */
+function flopikBreakdown_(main, castsE, durMs, ps) {
   function top(list, n, f) { return (list || []).slice().sort(function (a, b) { return b.total - a.total; }).slice(0, n).map(f); }
   var out = { spec: (main && main.icon) || (castsE && castsE.icon) || "", dur: Math.round(durMs || 0), total: 0, active: 0, abil: [], tgt: [], casts: [], castN: 0 };
   if (main) {
     out.total = Math.round(main.total || 0); out.active = Math.round(main.activeTime || 0);
-    out.abil = top(main.abilities, 25, function (a) { return [a.guid, a.name, Math.round(a.total)]; });
-    out.tgt = top(main.targets, 8, function (t) { return [t.name, Math.round(t.total)]; });
+    out.tgt = top(main.targets, 10, function (t) { return [t.name, Math.round(t.total)]; });
   }
-  if (castsE) {
+  var abilSrc = ps && ps.abil && ps.abil.length ? ps.abil : (main && main.abilities) || [];
+  out.abil = top(abilSrc, 1000, function (a) { return [a.guid, a.name, Math.round(a.total)]; });
+  if (ps && ps.casts && ps.casts.length) {
+    out.casts = top(ps.casts, 1000, function (a) { return [a.guid, a.name, Math.round(a.total)]; });
+    out.castN = ps.casts.reduce(function (n, a) { return n + Math.round(a.total || 0); }, 0);
+  } else if (castsE) {
     out.castN = Math.round(castsE.total || 0);
-    out.casts = top(castsE.abilities, 30, function (a) { return [a.guid, a.name, Math.round(a.total)]; });
+    out.casts = top(castsE.abilities, 1000, function (a) { return [a.guid, a.name, Math.round(a.total)]; });
   }
   return out;
 }
@@ -4361,7 +4393,9 @@ function flopikRefEnsure_(encId, difficulty, spec, haveTime) {
       Object.keys(pool).forEach(function (n) { if (pool[n].icon === spec && (!best || pool[n].total > best.total)) best = pool[n]; });
       main = best; castsE = best ? t.casts[best.name] || null : null;
     }
-    var bd = flopikBreakdown_(main, castsE, t.dur || r.duration);
+    var psRef = {};
+    if (main) { var hid = {}; if (healer) hid[main.id] = 1; psRef = flopikPerSource_(r.report.code, r.report.fightID, [main.id], hid, null); }
+    var bd = flopikBreakdown_(main, castsE, t.dur || r.duration, main ? psRef[main.id] : null);
     bd.metric = metric; bd.rank = 1;
     row = [key, encId, difficulty, spec, metric, r.name, (r.server ? r.server.name + "-" + r.server.region : ""), (r.guild ? r.guild.name : ""),
       r.report.code, r.report.fightID, Math.round((r.duration || 0) / 1000), Math.round(r.amount || 0), JSON.stringify(bd), now];
@@ -4380,7 +4414,7 @@ function flopikRefEnsure_(encId, difficulty, spec, haveTime) {
  */
 function flopikRefWindow_(key, endSec) {
   endSec = Math.max(1, Math.round(Number(endSec) || 0));
-  var cache = CacheService.getScriptCache(), ck = "flopik_rw_" + key + "|" + endSec;
+  var cache = CacheService.getScriptCache(), ck = "flopik_rw2_" + key + "|" + endSec;   // rw2: kompletní seznamy schopností
   var hit = cache.get(ck);
   if (hit) return JSON.parse(hit);
   var sh = flopikRefSheet_(), last = sh.getLastRow(), row = null;
@@ -4397,7 +4431,9 @@ function flopikRefWindow_(key, endSec) {
     var t = flopikTables_(code, fightId, healer, f.startTime + endSec * 1000);
     var pool = healer ? t.heal : t.dmg, main = pool[name] || null, castsE = t.casts[name] || null;
     if (!main) { var best = null; Object.keys(pool).forEach(function (n) { if (pool[n].icon === spec && (!best || pool[n].total > best.total)) best = pool[n]; }); main = best; castsE = best ? t.casts[best.name] || null : null; }
-    var bd = flopikBreakdown_(main, castsE, endSec * 1000);
+    var psW = {};
+    if (main) { var hidW = {}; if (healer) hidW[main.id] = 1; psW = flopikPerSource_(code, fightId, [main.id], hidW, f.startTime + endSec * 1000); }
+    var bd = flopikBreakdown_(main, castsE, endSec * 1000, main ? psW[main.id] : null);
     bd.metric = metric; bd.cut = "window";
     out = { ok: true, key: key, end: endSec, whole: false, data: bd };
   }
@@ -4426,10 +4462,24 @@ function flopikDmgAttach_(code, fight, res, haveTime) {
     endOf[p.name] = e;
   });
   var extraEnds = Object.keys(extra).map(Number).sort(function (a, b) { return a - b; }).slice(0, FLOPIK_DMG_MAX_WINDOWS);
-  var main, byEnd = {};
+  var main, byEnd = {}, psByEnd = {};
   try {
     main = flopikTables_(code, fight.id, true, winEnd === fightEnd ? null : winEnd);
     extraEnds.forEach(function (e) { byEnd[e] = flopikTables_(code, fight.id, true, e); });
+    // complete ability / cast lists per player, one batch per window end
+    var groups = {};
+    (res.players || []).forEach(function (p) {
+      var e = endOf[p.name], t = byEnd[e] || main;
+      var row = t.dmg[p.name] || t.heal[p.name] || t.casts[p.name];
+      if (!row) return;
+      var g = groups[e] || (groups[e] = { ids: [], healers: {} });
+      g.ids.push(row.id);
+      if (FLOPIK_HEALER_SPECS[row.icon]) g.healers[row.id] = 1;
+    });
+    Object.keys(groups).forEach(function (e) {
+      var eNum = Number(e);
+      psByEnd[e] = flopikPerSource_(code, fight.id, groups[e].ids, groups[e].healers, byEnd[eNum] ? eNum : (winEnd === fightEnd ? null : winEnd));
+    });
   } catch (err) { res.summary.dmgError = String(err && err.message || err); return false; }
   var specs = {};
   (res.players || []).forEach(function (p) {
@@ -4439,7 +4489,8 @@ function flopikDmgAttach_(code, fight, res, haveTime) {
     var healer = !!FLOPIK_HEALER_SPECS[icon];
     var mainE = healer ? (t.heal[p.name] || t.dmg[p.name] || null) : (t.dmg[p.name] || null);
     if (!mainE && !castsE) return;
-    p.dmg = flopikBreakdown_(mainE, castsE, e - st);
+    var pid = (mainE || castsE).id, ps = psByEnd[e] ? psByEnd[e][pid] : null;
+    p.dmg = flopikBreakdown_(mainE, castsE, e - st, ps);
     p.dmg.metric = healer ? "hps" : "dps";
     p.dmg.cut = e < winEnd ? "death" : res.cutoff == null || winEnd === fightEnd ? "end" : "cutoff";   // čím okno končí
     if (p.dmg.spec) specs[p.dmg.spec] = 1;

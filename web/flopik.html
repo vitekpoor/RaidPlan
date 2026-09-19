@@ -397,17 +397,17 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
       rows.forEach(function (row) { t += '<tr class="' + (row.miss ? "miss" : "") + '">' + row.cells.join("") + "</tr>"; });
       return t + "</tbody></table></div>";
     }
+    // both sides merged by ability name: the same ability can appear under several spell ids (ranks, talents, pets)
     function join(ours, theirs, keyIdx, nameIdx) {
       var map = {}, order = [];
-      ours.forEach(function (x) { var k = String(x[keyIdx]); map[k] = { name: x[nameIdx], us: x[x.length - 1], ref: 0 }; order.push(k); });
-      (theirs || []).forEach(function (x) {
-        var k = String(x[keyIdx]);
-        if (!map[k]) { // same name under another spell id (rank, talent) counts as the same ability
-          var byName = order.filter(function (o) { return map[o].name === x[nameIdx] && !map[o].refSet; })[0];
-          if (byName) k = byName; else { map[k] = { name: x[nameIdx], us: 0, ref: 0 }; order.push(k); }
-        }
-        map[k].ref += x[x.length - 1]; map[k].refSet = true;
-      });
+      function add(list, side) {
+        (list || []).forEach(function (x) {
+          var k = String(x[nameIdx]).toLowerCase();
+          if (!map[k]) { map[k] = { name: x[nameIdx], us: 0, ref: 0 }; order.push(k); }
+          map[k][side] += x[x.length - 1];
+        });
+      }
+      add(ours, "us"); add(theirs, "ref");
       return order.map(function (k) { return map[k]; });
     }
     var usSec = d.dur / 1000 || 1, refSec = rd ? ((rd.dur || ref.dur * 1000) / 1000 || 1) : 1;
@@ -420,7 +420,7 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     // abilities: share of total + per-second rate, sorted by the bigger of ours / theirs
     var abRows = join(d.abil, rd ? rd.abil : [], 0, 1).map(function (x) {
       return { name: x.name, us: x.us, ref: x.ref, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, usR: x.us / usSec, refR: rd ? x.ref / refSec : 0 };
-    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); }).slice(0, 45);
+    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); });
     var abMax = abRows.reduce(function (m, x) { return Math.max(m, x.usS, x.refS); }, 0);
     var ab = abRows.map(function (x) {
       return { miss: !x.us && x.ref > 0, cells: ["<td>" + esc(x.name) + "</td>", cell("us", pct(x.us, d.total), x.usS, abMax), cell("us", kfmt(x.usR))]
@@ -428,7 +428,7 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     });
     var caRows = join(d.casts, rd ? rd.casts : [], 0, 1).map(function (x) {
       return { name: x.name, us: x.us, ref: x.ref, usM: x.us / min, refM: rd ? x.ref / rmin : 0 };
-    }).sort(function (a, b) { return Math.max(b.usM, b.refM) - Math.max(a.usM, a.refM); }).slice(0, 45);
+    }).sort(function (a, b) { return Math.max(b.usM, b.refM) - Math.max(a.usM, a.refM); });
     var caMax = caRows.reduce(function (m, x) { return Math.max(m, x.usM, x.refM); }, 0);
     var ca = caRows.map(function (x) {
       return { miss: !x.us && x.ref > 0, cells: ["<td>" + esc(x.name) + "</td>", cell("us", String(x.us)), cell("us", x.usM.toFixed(1), x.usM, caMax)]
@@ -436,7 +436,7 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     });
     var tgRows = join(d.tgt, rd ? rd.tgt : [], 0, 0).map(function (x) {
       return { name: x.name, usS: x.us / (d.total || 1), refS: rd ? x.ref / (rd.total || 1) : 0, us: x.us, ref: x.ref };
-    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); }).slice(0, 15);
+    }).sort(function (a, b) { return Math.max(b.usS, b.refS) - Math.max(a.usS, a.refS); });
     var tgMax = tgRows.reduce(function (m, x) { return Math.max(m, x.usS, x.refS); }, 0);
     var tg = tgRows.map(function (x) {
       return { miss: false, cells: ["<td>" + esc(x.name) + "</td>", cell("us", pct(x.us, d.total), x.usS, tgMax), cell("us", kfmt(x.us / usSec))]
