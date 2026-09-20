@@ -122,7 +122,7 @@ SPEC_BY_ROLE = {
                     "dps": "balance", "ranged": "balance", "melee": "feral"},
     "evoker":      {"heal": "preservation", "dps": "devastation"},
     "hunter":      {"dps": "marksmenship", "melee": "survival"},
-    "mage":        {"dps": "fire"},
+    "mage":        {"dps": "arcane"},
     "monk":        {"tank": "brewmaster", "heal": "mistweaver", "dps": "windwalker"},
     "paladin":     {"tank": "protection", "heal": "holy", "dps": "retribution"},
     "priest":      {"heal": "holy", "dps": "shadow"},
