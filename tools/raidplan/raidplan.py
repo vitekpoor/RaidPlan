@@ -31,6 +31,17 @@ Two modes (full help: python raidplan.py --help):
      python raidplan.py <plan-url-or-code> "Old=New" ["Old2=New2" ...]
          [--sheet URL] [--gid N] [--name "Plan name"] [--dry-run] [--check]
 
+3) Restore a backup (--restore): every in-place save first writes the
+   untouched document to backup_<code>_rev<N>.json next to this script.
+   --restore pushes such a file back to its plan (the current document is
+   backed up first, so a restore can itself be undone).
+
+     python raidplan.py --restore backup_<code>_rev37.json   # this file
+     python raidplan.py --boss 02 --restore                  # newest backup
+     python raidplan.py --boss 02 --restore rev35            # that revision
+     python raidplan.py --restore <plan-url-or-code>         # newest backup
+     python raidplan.py --list-backups                       # what is there
+
 Swap separators:   A-B, A~B, A+B, A:B, "A x B", "A<->B"   (both directions)
 Rename separators: Old=New, Old->New
 Swaps/renames touch markers (incl. names inside assignment markers like
@@ -69,8 +80,15 @@ LINEUP_SIZE = 20
 # Boss sestavy layout (must match class_loot_dropdowns.gs): headers "NN Boss"
 # in row 1, slot rows labeled 1..20 in column A (rows are located by those
 # labels — gviz drops empty rows, so absolute row numbers can't be trusted).
-DEFAULT_PLANS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                  "venomabyss_plans.txt")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_PLANS_FILE = os.path.join(SCRIPT_DIR, "venomabyss_plans.txt")
+# Where in-place saves park the untouched document (and where --restore looks).
+BACKUP_DIR = SCRIPT_DIR
+BACKUP_RE = re.compile(r"^backup_([a-z0-9]+)_rev(\d+)\.json$")
+# Document keys that make up a plan's content (what a save sends and what a
+# restore compares).
+DOC_KEYS = ("nodes", "steps", "header_notes_raw", "footer_notes_raw",
+            "step_notes_raw", "single_note")
 
 # Standard WoW class colors as used by the roster sheet cell fills.
 CLASS_COLORS = {
@@ -252,6 +270,85 @@ def http_bytes(url):
     req = urllib.request.Request(url, headers={"User-Agent": "raidplan-rename/1.0"})
     with urllib.request.urlopen(req) as r:
         return r.read()
+
+
+def fetch_plan(code, indent="  "):
+    """Download plan metadata + document; returns (plan, doc)."""
+    meta = http_json(f"https://raidplan.io/api/plan/{code}")
+    plan = meta["plan"]
+    doc = http_json(plan["doc_url"])
+    print(f"{indent}'{plan['name']}' — {plan['title']}, {plan['steps']} steps, "
+          f"{len(doc['nodes'])} nodes, revision {plan_revision(plan, doc)}")
+    return plan, doc
+
+
+def plan_revision(plan, doc=None):
+    return plan.get("revision", (doc or {}).get("revision", 0))
+
+
+def backup_path(code, revision):
+    return os.path.join(BACKUP_DIR, f"backup_{code}_rev{revision}.json")
+
+
+def write_backup(code, revision, doc):
+    """Park the untouched document as backup_<code>_rev<N>.json (never
+    overwrites — the same revision is the same document). Returns the path."""
+    path = backup_path(code, revision)
+    if os.path.exists(path):
+        print(f"  (revision {revision} is already backed up: {path})")
+        return path
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False)
+    print(f"  Original document backed up to {path}")
+    return path
+
+
+def find_backups(code=None):
+    """Backup files in BACKUP_DIR and the cwd -> [(code, revision, path)],
+    grouped by code, newest revision first."""
+    seen, found = set(), []
+    for d in dict.fromkeys([BACKUP_DIR, os.getcwd()]):
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for n in names:
+            m = BACKUP_RE.match(n)
+            if m and (code is None or m.group(1) == code) and n not in seen:
+                seen.add(n)
+                found.append((m.group(1), int(m.group(2)), os.path.join(d, n)))
+    return sorted(found, key=lambda t: (t[0], -t[1]))
+
+
+def save_plan(target, key, doc, name, headers=None, in_place=True):
+    """POST a document to raidplan.io. Exits with key help when the key /
+    cookie does not grant edit access to an in-place target."""
+    notes = doc.get("step_notes_raw") or []
+    payload = {
+        "access_key": key,
+        "steps": doc["steps"],
+        "name": name,
+        "nodes": doc["nodes"],
+        "header_notes": doc.get("header_notes_raw") or "",
+        "footer_notes": doc.get("footer_notes_raw") or "",
+        "step_notes": [n or "" for n in notes] or [""] * doc["steps"],
+        "single_note": doc.get("single_note", False),
+    }
+    try:
+        http_json(f"https://raidplan.io/api/plans/{target}", payload=payload, headers=headers)
+    except urllib.error.HTTPError as e:
+        if in_place and e.code in (401, 403):
+            print(f"\nSave rejected (HTTP {e.code}) — the key/cookie does not grant edit access "
+                  f"to plan '{target}'.\n")
+            sys.exit(key_help(target))
+        raise
+
+
+def marker_names(doc):
+    """Sorted multiset of non-empty marker texts -> {text: count}."""
+    from collections import Counter
+    return Counter((n["attr"].get("text") or "").strip() for n in doc["nodes"]
+                   if n["type"] == "marker" and (n["attr"].get("text") or "").strip())
 
 
 def norm(name):
@@ -530,11 +627,7 @@ def boss_mode(args, cli_renames):
               "  (absence colors live in the sheet)")
 
         print(f"  Fetching plan {info['code']} ...")
-        meta = http_json(f"https://raidplan.io/api/plan/{info['code']}")
-        plan = meta["plan"]
-        doc = http_json(plan["doc_url"])
-        print(f"  '{plan['name']}' — {plan['title']}, {plan['steps']} steps, "
-              f"{len(doc['nodes'])} nodes")
+        plan, doc = fetch_plan(info["code"])
 
         renames, (to_add, to_remove) = lineup_renames(doc, lu, roster, cli_renames)
         a = copy.copy(args)
@@ -546,6 +639,128 @@ def boss_mode(args, cli_renames):
         if to_remove:
             print(f"  REMOVE MANUALLY (in the plan, not in the lineup, no free "
                   f"replacement): {', '.join(sorted(to_remove))}")
+
+
+def list_backups(plans):
+    """--list-backups: every backup file grouped by plan, newest first."""
+    by_code = {p["code"]: (num, p["name"]) for num, p in plans.items() if "code" in p}
+    found = find_backups()
+    if not found:
+        print(f"No backup_<code>_rev<N>.json files in {BACKUP_DIR} or {os.getcwd()}.")
+        return
+    last = None
+    for code, rev, path in found:
+        if code != last:
+            num, name = by_code.get(code, ("??", "(not in the plans file)"))
+            print(f"\n{num} {name}  —  https://raidplan.io/plan/{code}")
+            last = code
+        size = os.path.getsize(path)
+        print(f"    rev{rev:<5} {size // 1024:>4} KB  {path}")
+    print("\nRestore one with:  raidplan.py --restore <file>   or   "
+          "raidplan.py --boss NN --restore [revN]")
+
+
+def restore_mode(args):
+    """--restore [FILE|latest|revN]: push a backup document back to its plan."""
+    plans = load_plans_file(args.plans_file) if os.path.isfile(args.plans_file) else {}
+    if args.list_backups:
+        list_backups(plans)
+        return
+    by_code = {p["code"]: (num, p) for num, p in plans.items() if "code" in p}
+
+    # 1) Which plan? From the plan argument, --boss NN, or the file itself.
+    code, url_key = None, None
+    spec = (args.restore or "latest").strip()
+    if args.plan:
+        code, url_key = plan_code(args.plan)
+    elif args.boss:
+        if len(args.boss) != 1 or args.boss[0].lower() == "all":
+            sys.exit("--restore works on ONE plan at a time: --boss NN --restore [revN]")
+        num = args.boss[0].zfill(2)
+        if num not in plans:
+            sys.exit(f"Plans file has no boss '{num}' (known: {', '.join(sorted(plans))}).")
+        code = plans[num]["code"]
+    elif not os.path.isfile(spec) and re.fullmatch(r"(?:https?://\S+|[a-z0-9]{10,})", spec) \
+            and not re.fullmatch(r"(?i)latest|rev\d+", spec):
+        code, url_key = plan_code(spec)   # "--restore <plan-url-or-code>"
+        spec = "latest"
+
+    # 2) Which file?
+    if os.path.isfile(spec):
+        path = spec
+    else:
+        m = re.fullmatch(r"(?i)latest|rev(\d+)|(\d+)", spec)
+        if not m:
+            sys.exit(f"Backup file {spec!r} not found (and it is not 'latest' / 'revN'). "
+                     f"Use --list-backups to see what is available.")
+        if not code:
+            sys.exit("Tell me which plan to restore: --boss NN, a plan URL/code, or the "
+                     "path of the backup file. Use --list-backups to see what is available.")
+        cands = find_backups(code)
+        if not cands:
+            sys.exit(f"No backups for plan {code} in {BACKUP_DIR} or {os.getcwd()}.")
+        want = m.group(1) or m.group(2)
+        if want:
+            hit = [c for c in cands if c[1] == int(want)]
+            if not hit:
+                sys.exit(f"No backup of plan {code} at revision {want} — available: "
+                         f"{', '.join('rev%d' % c[1] for c in cands)}")
+            path = hit[0][2]
+        else:
+            path = cands[0][2]
+
+    with open(path, encoding="utf-8") as f:
+        backup = json.load(f)
+    if not isinstance(backup, dict) or "nodes" not in backup or "steps" not in backup:
+        sys.exit(f"{path} is not a RaidPlan document backup (no nodes/steps).")
+    fm = BACKUP_RE.match(os.path.basename(path))
+    file_code = backup.get("code") or (fm.group(1) if fm else None)
+    file_rev = backup.get("revision", int(fm.group(2)) if fm else "?")
+    if code and file_code and code != file_code:
+        sys.exit(f"{os.path.basename(path)} belongs to plan {file_code}, not {code}.")
+    code = code or file_code
+    if not code:
+        sys.exit(f"Cannot tell which plan {path} belongs to — pass the plan URL/code "
+                 f"or --boss NN as well.")
+
+    # 3) Edit key: --key, edit link, plans file.
+    key = args.key or url_key or ""
+    if not key and code in by_code:
+        key = by_code[code][1].get("key", "")
+    label = f"{by_code[code][0]} {by_code[code][1]['name']}" if code in by_code else code
+
+    print(f"===== restore {label} =====")
+    print(f"  backup: {path}")
+    print(f"          revision {file_rev}, {backup['steps']} steps, {len(backup['nodes'])} nodes")
+    print(f"  Fetching plan {code} ...")
+    plan, doc = fetch_plan(code)
+
+    if all(doc.get(k) == backup.get(k) for k in DOC_KEYS):
+        print("\nThe live plan already equals this backup — nothing to do.")
+        return
+    cur, old = marker_names(doc), marker_names(backup)
+    back = sorted(n for n in old if old[n] > cur.get(n, 0))
+    gone = sorted(n for n in cur if cur[n] > old.get(n, 0))
+    if back:
+        print(f"  markers coming back: {', '.join(back)}")
+    if gone:
+        print(f"  markers going away:  {', '.join(gone)}")
+    if not back and not gone:
+        print("  same marker names — differences are in positions, icons, texts or notes")
+    if args.dry_run:
+        print("\nDry run — nothing restored.")
+        return
+    if not (key or args.cookie):
+        print(f"\nNo edit key for plan '{code}' (not in {os.path.basename(args.plans_file)}, "
+              f"no --key, no edit link).\n")
+        sys.exit(key_help(code))
+
+    print("\nBacking up the current document first ...")
+    write_backup(code, plan_revision(plan, doc), doc)
+    print(f"Restoring revision {file_rev} ...")
+    headers = {"Cookie": args.cookie} if args.cookie else None
+    save_plan(code, key, backup, args.name or plan["name"], headers)
+    print(f"Done. Plan restored to revision {file_rev}:  https://raidplan.io/plan/{code}")
 
 
 def replace_in_text(text, renames, hits=None):
@@ -625,6 +840,17 @@ MODES
      link or bare code creates a clone "<name> v2" instead. Class colors
      come from the roster Google Sheet (--sheet/--gid, needs openpyxl).
 
+  3) Restore a backup  (undo an in-place save)
+       raidplan.py --restore FILE
+       raidplan.py --boss NN --restore [latest | revN]
+       raidplan.py --restore <plan-url-or-code>          (newest backup)
+       raidplan.py --list-backups
+     Every in-place save first writes the untouched document to
+     backup_<code>_rev<N>.json in the script folder. --restore pushes such a
+     file back to its plan (edit key from venomabyss_plans.txt, the pasted
+     edit link or --key). The current document is backed up first, so a
+     restore can itself be undone. --dry-run shows what would change.
+
 SWAPS AND RENAMES (positional; quote anything containing spaces or < >)
   A-B   A~B   A+B   A:B   "A x B"   "A<->B"
         swap two players: their positions, every assignment text ("T1 A",
@@ -656,6 +882,10 @@ EXAMPLES
   raidplan.py --boss all --check             also list roster/plan mismatches
   raidplan.py https://raidplan.io/plan/<code>/<key> "Miky=Hase" --sync-names
   raidplan.py <code> --check                 report only (no roster changes)
+  raidplan.py --list-backups                 backups on disk, per plan
+  raidplan.py --boss 02 --restore            undo the last save of plan 02
+  raidplan.py --boss 02 --restore rev35 --dry-run   what going back would change
+  raidplan.py --restore backup_<code>_rev37.json    restore exactly this file
 """
 
 
@@ -737,6 +967,17 @@ def main():
     g.add_argument("--cookie", default="",
                    help="raidplan.io Cookie header value, for plans owned by a logged-in account")
 
+    g = ap.add_argument_group("restore a backup")
+    g.add_argument("--restore", nargs="?", const="latest", default=None,
+                   metavar="FILE|latest|revN",
+                   help="push a backup_<code>_rev<N>.json (written before every in-place save "
+                        "into the script folder) back to its plan. FILE = path of the backup; "
+                        "'latest' (default) or 'rev37' picks a backup of the plan named by "
+                        "--boss NN or the plan argument. The current document is backed up "
+                        "first. Edit key: plans file, edit link or --key. Works with --dry-run.")
+    g.add_argument("--list-backups", action="store_true",
+                   help="list the backup files per plan (newest first) and exit")
+
     # A doubled "--boss --boss 02" (update_plans.bat used to prepend --boss
     # even when the user typed it) would make argparse abort; collapse it.
     argv = sys.argv[1:]
@@ -777,6 +1018,13 @@ def main():
         if swap:
             renames[b] = a
 
+    if args.restore is not None or args.list_backups:
+        if renames:
+            sys.exit("--restore replaces the whole document — swaps/renames cannot be "
+                     "combined with it (restore first, then run them separately).")
+        restore_mode(args)
+        return
+
     if args.boss:
         boss_mode(args, renames)
         return
@@ -793,10 +1041,7 @@ def main():
             args.in_place = True
             print("Edit link detected — will save changes back to this plan (in place).")
     print(f"Fetching plan {code} ...")
-    meta = http_json(f"https://raidplan.io/api/plan/{code}")
-    plan = meta["plan"]
-    doc = http_json(plan["doc_url"])
-    print(f"  '{plan['name']}' — {plan['title']}, {plan['steps']} steps, {len(doc['nodes'])} nodes")
+    plan, doc = fetch_plan(code)
 
     print("Loading roster sheet ...")
     roster, tab = load_roster(args.sheet, args.gid)
@@ -998,34 +1243,19 @@ def process_plan(code, args, doc, plan, renames, roster):
                   "to prove you own the plan.\n")
             sys.exit(key_help(code))
         target, key = code, args.key
-        backup = f"backup_{code}_rev{plan.get('revision', 0)}.json"
-        with open(backup, "w", encoding="utf-8") as f:
-            json.dump(original_doc, f, ensure_ascii=False)
-        print(f"\nOriginal document backed up to {backup}")
+        print()
+        write_backup(code, plan_revision(plan, original_doc), original_doc)
+        print("  (undo with: raidplan.py --restore <that file>)")
         print("Saving to the original plan ...")
     else:
         print("\nCloning plan ...")
         clone = http_json(f"https://raidplan.io/api/plans/{code}/clone", payload={}, headers=headers)
         target, key = clone["plan"]["code"], clone["access_key"]
 
-    payload = {
-        "access_key": key,
-        "steps": doc["steps"],
-        "name": args.name or (plan["name"] if args.in_place else f"{plan['name']} v2"),
-        "nodes": doc["nodes"],
-        "header_notes": doc.get("header_notes_raw") or "",
-        "footer_notes": doc.get("footer_notes_raw") or "",
-        "step_notes": step_notes or [""] * doc["steps"],
-        "single_note": doc.get("single_note", False),
-    }
-    try:
-        http_json(f"https://raidplan.io/api/plans/{target}", payload=payload, headers=headers)
-    except urllib.error.HTTPError as e:
-        if args.in_place and e.code in (401, 403):
-            print(f"\nSave rejected (HTTP {e.code}) — the key/cookie does not grant edit access "
-                  f"to plan '{target}'.\n")
-            sys.exit(key_help(target))
-        raise
+    doc["step_notes_raw"] = step_notes
+    save_plan(target, key, doc,
+              args.name or (plan["name"] if args.in_place else f"{plan['name']} v2"),
+              headers, in_place=args.in_place)
 
     if args.in_place:
         print(f"Done. Plan updated in place:  https://raidplan.io/plan/{target}")

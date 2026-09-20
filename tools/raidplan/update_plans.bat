@@ -12,6 +12,12 @@ rem                                          A:B, "A x B", "A<->B" in quotes)
 rem   update_plans.bat 02 Miky=Hase       -> sync + explicit rename
 rem   update_plans.bat 02 --dry-run       -> preview without saving
 rem   update_plans.bat --help             -> full help of raidplan.py
+rem Undo (every save first backs up the plan as backup_<code>_rev<N>.json here):
+rem   update_plans.bat --list-backups     -> what backups exist, per plan
+rem   update_plans.bat 02 --restore       -> put plan 02 back to its newest backup
+rem   update_plans.bat 02 --restore rev35 -> back to that revision
+rem   update_plans.bat --restore backup_<code>_rev35.json   -> exactly this file
+rem   (add --dry-run to see what a restore would change without saving)
 rem Quote anything with spaces or <> ("Gina x Houdy", "Gina<->Houdy").
 rem Class/spec icons, border colors and name spelling follow the Roster tab
 rem (Main classa / Main role / optional Main spec). Plans are saved IN PLACE
@@ -26,6 +32,10 @@ if "%~1"=="" (
 ) else if "%~1"=="/?" (
     python -X utf8 raidplan.py --help
 ) else if /i "%~1"=="--boss" (
+    python -X utf8 raidplan.py %*
+) else if /i "%~1"=="--restore" (
+    python -X utf8 raidplan.py %*
+) else if /i "%~1"=="--list-backups" (
     python -X utf8 raidplan.py %*
 ) else (
     python -X utf8 raidplan.py --boss %*
