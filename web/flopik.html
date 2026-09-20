@@ -675,7 +675,8 @@ table.fails td.vstop small { font-weight: 400; color: var(--muted); }
     });
     document.querySelector("#tbl tfoot").innerHTML = ft + "</tr>";
 
-    var lg = (lastMeta.legend || []).map(function (l) { return "<div>" + l + "</div>"; });
+    // popis mechaniky bosse (engine.js description) nad legendou sloupců
+    var lg = (lastMeta.description ? ["<div>" + lastMeta.description + "</div>"] : []).concat((lastMeta.legend || []).map(function (l) { return "<div>" + l + "</div>"; }));
     lg.push(cutoffN
       ? "<div><b>Death cutoff " + cutoffN + "</b> – každý pull se hodnotí jen do " + cutoffN + ". smrti hráče (pak už je wipe rozjetý a další stacky / zásahy nic neříkají). " +
         "Sloupec <b>Smrti</b> počítá úmrtí za celý pull, i po cutoffu.</div>"
