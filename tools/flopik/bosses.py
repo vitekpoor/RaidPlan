@@ -52,7 +52,11 @@ BOSSES = {
              note="zásah Tempestem (1287083) – každý cast se počítá jednou (unique hit count), ne ticky"),
     ]},
     3421: {"key": "twinfangs", "name": "The Twin Fangs", "cutoff": 2, "analyze": twinfangs, "metrics": []},
-    3429: {"key": "coiledaltar", "name": "The Coiled Altar", "metrics": []},
+    # orb pickups: Volatile Venom debuff on the carrier (5 s per orb, relays count again); spawn_ids / cast_ids only in engine.js
+    3429: {"key": "coiledaltar", "name": "The Coiled Altar", "ver": 2, "metrics": [
+        debuff("orbs", "Orby", [1282419], avoid=False, cast_ids=[1299960], spawn_ids=[1299781],
+               note="sebrání orbu Coalesced Venom (debuff Volatile Venom 1282419 při každém sebrání)"),
+    ]},
     3492: {"key": "ulatek", "name": "Ula'tek", "metrics": []},
     3379: {"key": "nymrissa", "name": "Nymrissa Wavecaller", "metrics": []},
 }

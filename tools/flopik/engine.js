@@ -11,10 +11,14 @@
 var FLOPIK_DIFFICULTY = { 1: "LFR", 3: "Normal", 4: "Heroic", 5: "Mythic" };
 
 /** Which bosses are tracked and which fails are counted – mirror of tools/flopik/bosses.py. */
+// Metric options: avoid (default true = fail, false = desirable action such as an orb pickup), window (s, hits clustering),
+// castIds (boss casts counted for the summary), spawnIds (summon events counted for the summary – "X z N spawnutých"),
+// spawnNoun / castLabel (words for that summary text), cls (page cell class, e.g. "orb"), hot / hotAll, note (legend).
 function flopikMetric_(kind, key, label, ids, opts) {
-  var m = { kind: kind, k: key, l: label, ids: ids.map(String), avoid: true, window: 1.5, castIds: [] };
+  var m = { kind: kind, k: key, l: label, ids: ids.map(String), avoid: true, window: 1.5, castIds: [], spawnIds: [] };
   Object.keys(opts || {}).forEach(function (o) { m[o] = opts[o]; });
   m.castIds = (m.castIds || []).map(String);
+  m.spawnIds = (m.spawnIds || []).map(String);
   return m;
 }
 function flopikHits_(key, label, ids, opts) { return flopikMetric_("hits", key, label, ids, opts); }
@@ -31,7 +35,16 @@ var FLOPIK_BOSSES = {
       note: "zásah Tempestem (1287083) – každý cast se počítá jednou (unique hit count), ne ticky" })
   ] },
   3421: { key: "twinfangs", name: "The Twin Fangs", cutoff: 2, analyze: "twinfangs", metrics: [] },
-  3429: { key: "coiledaltar", name: "The Coiled Altar", metrics: [] },
+  // Zul'jan: Toxic Deluge (cast 1299960) summons Coalesced Venom orbs (summon 1299781, NPC "Coalesced Venom Stalker");
+  // a player who runs over an orb picks it up = debuff Volatile Venom 1282419 for 5 s, then the orb is put down and can be
+  // picked up again (relay), so pickups can exceed spawned orbs. Verified on report YZKv4kb6DtmqA73f (2026-09-20).
+  // ver: bump when the metrics change – cached pulls with an older ver are recomputed by flopikRefresh_.
+  3429: { key: "coiledaltar", name: "The Coiled Altar", ver: 2, sortBy: "orbs", metrics: [
+    flopikDebuff_("orbs", "Orby", [1282419], { avoid: false, cls: "orb", castIds: [1299960], castLabel: "Toxic Deluge", spawnIds: [1299781], spawnNoun: "spawnutých orbů",
+      note: "sebrání orbu Coalesced Venom (debuff Volatile Venom 1282419 při každém sebrání) – orb se nese 5 s, pak se položí a může ho sebrat někdo další, " +
+        "takže sebrání může být víc než spawnutých orbů; smrt s orbem v ruce se počítá jako sebrání" })
+  ], description: "Zelené orby (<b>Coalesced Venom</b>) po každém <b>Toxic Deluge</b> se sbírají přeběhnutím a nosí doprostřed, kde je tank zničí Severem. " +
+    "<b>Orby</b> = kolikrát hráč orb sebral (počítá se i další sebrání po položení)." },
   3492: { key: "ulatek", name: "Ula'tek", metrics: [] },
   3379: { key: "nymrissa", name: "Nymrissa Wavecaller", metrics: [] }
 };
@@ -46,7 +59,7 @@ function flopikBossFor(encounterID, name) {
 /** WCL events filterExpression: only what the boss's metrics need + player deaths. */
 function flopikFilterFor(boss) {
   var ids = [];
-  (boss.metrics || []).forEach(function (m) { ids = ids.concat(m.ids, m.castIds || []); });
+  (boss.metrics || []).forEach(function (m) { ids = ids.concat(m.ids, m.castIds || [], m.spawnIds || []); });
   if (boss.analyze === "twinfangs") ids = ids.concat(FLOPIK_TF.ids);
   var parts = ["(type = 'death' and target.type = 'player')"];
   if (ids.length) parts.push("ability.id in (" + ids.join(",") + ")");
@@ -97,7 +110,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
     startMs: reportStartMs + fight.startTime, dur: Math.round(dur), boss: boss.name, bossKey: boss.key, bossId: fight.encounterID,
     difficulty: FLOPIK_DIFFICULTY[fight.difficulty] || String(fight.difficulty || ""), kill: !!fight.kill, deaths: deaths.length, cutoff: cutoff,
     deathList: deaths.map(function (d) { return { n: d.n, t: Math.round((d.t - st) / 1000) }; }),
-    cols: [], legend: [], description: "", stats: [], summary: { cutoffN: cutoffN }, players: []
+    cols: [], legend: [], description: boss.description || "", stats: [], summary: { cutoffN: cutoffN, ver: boss.ver || 1 }, players: []
   };
   var rows = {};   // name -> row
   Object.keys(players).forEach(function (id) { rows[players[id]] = { name: players[id], died: false }; });
@@ -109,10 +122,11 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
     out.players.forEach(function (r) { rows[r.name] = r; });
   } else {
     (boss.metrics || []).forEach(function (m) {
-      var per = {}, casts = 0;
+      var per = {}, casts = 0, spawned = 0;
       evc.forEach(function (e) {
         var ab = String(e.abilityGameID);
         if (e.type === "cast" && m.castIds.indexOf(ab) >= 0) casts++;
+        if (e.type === "summon" && m.spawnIds.indexOf(ab) >= 0) spawned++;
         if (m.ids.indexOf(ab) < 0) return;
         var hitTypes = m.kind === "hits" ? ["damage", "applydebuff"] : m.kind === "debuff" ? ["applydebuff", "applydebuffstack"] : ["cast"];
         if (hitTypes.indexOf(e.type) < 0 || e.tick) return;   // periodic ticks are not new hits
@@ -128,12 +142,20 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
       });
       var col = { k: m.k, l: m.l, agg: "sum" };
       if (m.avoid) col.avoid = 1;
+      if (m.cls) col.cls = m.cls;
       if (m.hot) col.hot = m.hot;
       if (m.hotAll) col.hotAll = m.hotAll;
       res.cols.push(col);
       if (m.note) res.legend.push("<b>" + m.l + "</b> – " + m.note + ".");
-      var stat = { l: m.l, v: total, cls: total ? "bad" : "", agg: "sum" };
-      if (m.castIds.length) { res.summary[m.k + "Casts"] = casts; stat.s = total + " zásahů z " + casts + " castů"; }
+      // fail → red when it happened; desirable action (avoid: false) → accent
+      var stat = { l: m.l, v: total, cls: total ? (m.avoid ? "bad" : "accent") : "", agg: "sum" };
+      if (m.castIds.length) res.summary[m.k + "Casts"] = casts;
+      if (m.spawnIds.length) {
+        res.summary[m.k + "Spawned"] = spawned;
+        stat.s = total + " sebrání z " + spawned + " " + (m.spawnNoun || "spawnů") + (m.castIds.length ? " (" + casts + "× " + (m.castLabel || "cast") + ")" : "");
+      } else if (m.castIds.length) {
+        stat.s = total + " zásahů z " + casts + " castů";
+      }
       res.stats.push(stat);
     });
   }
@@ -146,6 +168,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
   });
   var list = Object.keys(rows).map(function (n) { return rows[n]; });
   if (boss.analyze === "twinfangs") list.sort(function (a, b) { return (b.orbs || 0) - (a.orbs || 0) || (a.diff || 0) - (b.diff || 0) || a.name.localeCompare(b.name); });
+  else if (boss.sortBy) list.sort(function (a, b) { return (b[boss.sortBy] || 0) - (a[boss.sortBy] || 0) || b.deaths - a.deaths || a.name.localeCompare(b.name); });
   else list.sort(function (a, b) { return b.deaths - a.deaths || a.name.localeCompare(b.name); });
   res.players = list;
   if (!res.cols.some(function (c) { return c.k === "deaths"; })) res.cols.push(FLOPIK_DEATH_COL);
