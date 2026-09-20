@@ -188,11 +188,25 @@ a.best:hover .open { color: var(--ink-strong); }
 .vault.roll { border-left-color: var(--dps); } .vault.roll .verdict { color: var(--dps); }
 .vault.none .verdict { color: var(--muted); font-weight: 500; }
 .vault .why code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; color: var(--ink-strong); }
-/* postava s víc simovanými specy: hlavička každého specu v kartě (badge + zdroj / čas / reporty) */
+/* postava s víc simovanými specy: sloupec na spec vedle sebe, každý sbalitelný (summary = hlavička specu) */
+.specs { display: grid; gap: 0; border-top: 2px solid var(--line); align-items: start; }
+.specs > .specblock + .specblock { border-left: 2px solid var(--line); }
+.specs .specblock { min-width: 0; }
 .spechead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 9px 16px 7px; font-size: 13px; color: var(--muted);
-            background: var(--surface3); border-top: 2px solid var(--line); }
+            background: var(--surface3); cursor: pointer; list-style: none; }
+.spechead::-webkit-details-marker { display: none; }
+.spechead::before { content: "▾"; color: var(--muted); width: 12px; display: inline-block; }
+.specblock:not([open]) .spechead::before { content: "▸"; }
+.specblock:not([open]) .spechead { opacity: .75; }
 .spechead .badge { font-size: 12.5px; }
+.spechead .cnt { color: var(--ink); font-weight: 600; }
 .spechead .meta a { color: var(--ink); }
+/* ve sloupci specu jsou raid a M+ pod sebou (vedle sebe by se nevešly) */
+.specs .pair { grid-template-columns: 1fr; }
+.specs .pair > .sect + .sect { border-left: 3px solid var(--mplus); }
+.specs .vault .vrow { grid-template-columns: 1fr; gap: 2px; }
+.specs .vault .meta { margin-left: 0; }
+@media (max-width: 900px) { .specs { grid-template-columns: 1fr !important; } .specs > .specblock + .specblock { border-left: 0; border-top: 2px solid var(--line); } }
 .chip .spec, .ptile .spec { color: var(--muted); font-size: 11px; }
 .vault .vs { color: var(--muted); }
 .vault .chips { gap: 4px; }
@@ -977,16 +991,21 @@ a.best:hover .open { color: var(--ink-strong); }
       var mRows = rows.filter(function (r) { return r.kind === "mplus"; });
       var tgRow = rows.filter(function (r) { return r.kind === "topgear"; })[0];
       var raidAny = raidRows[0], mAny = mRows[0];
-      var html = multi ? '<div class="spechead">' + roleBadge(a) + '<span class="meta">' + specMetaHtml(rows, a) + "</span></div>" : "";
       // vault / bonus roll vždy – i bez vaultu v exportu je z HC raid simu doporučení, na koho rollovat
-      html += vaultHtml(rows, vault);
-      if (tgRow) html += bestHtml(tgRow, rows);
-      // raid vlevo, M+ vpravo (jen jedna sekce = přes celou šířku)
+      var body = vaultHtml(rows, vault);
+      if (tgRow) body += bestHtml(tgRow, rows);
+      // raid vlevo, M+ vpravo (jen jedna sekce = přes celou šířku); ve sloupci specu pod sebou (CSS .specs .pair)
       var parts = [];
       if (kindOk("raid")) parts.push(sectionHtml("raid", raidRows.filter(passes).sort(byMetricDesc), raidAny && raidAny.report));
       if (kindOk("mplus") && (mRows.length || state.kind === "mplus")) parts.push(sectionHtml("mplus", mRows.filter(passes).sort(byMetricDesc), mAny && mAny.report));
-      html += parts.length === 2 ? '<div class="pair">' + parts.join("") + "</div>" : parts.join("");
-      return html;
+      body += parts.length === 2 ? '<div class="pair">' + parts.join("") + "</div>" : parts.join("");
+      if (!multi) return body;
+      // víc speců: každý spec = rozbalovací sloupec vedle ostatních (hlavička = badge + zdroj / čas / reporty)
+      var up = rows.filter(function (r) { return LIST_KINDS[r.kind] && (metric(r) || 0) > 0; }).length;
+      return '<details class="specblock" open><summary class="spechead">' + roleBadge(a) +
+        '<span class="cnt">' + up + (up === 1 ? " upgrade" : " upgradů") + "</span>" +
+        '<span class="meta">' + specMetaHtml(rows, a) + "</span></summary>" +
+        '<div class="specbody">' + body + "</div></details>";
   }
 
   function playerCardHtml(n, g) {
@@ -1005,7 +1024,13 @@ a.best:hover .open { color: var(--ink-strong); }
           (crestHtml(n) ? " · Myth cresty " + crestHtml(n) : "") + "</span>" +
           '<span class="meta">' + charLinksHtml(n) + (g.rows.some(function (r) { return r.kind === "mplus"; }) ? "" : " · M+ sim zatím není") + "</span></summary>";
       }
-      groups.forEach(function (sg) { html += specBlockHtml(sg, vault, multi); });
+      if (multi) {
+        // sloupce vedle sebe (jeden na spec), každý sbalitelný; pod 900 px pod sebou (CSS)
+        html += '<div class="specs" style="grid-template-columns: repeat(' + groups.length + ', minmax(0, 1fr))">' +
+          groups.map(function (sg) { return specBlockHtml(sg, vault, true); }).join("") + "</div>";
+      } else {
+        html += specBlockHtml(groups[0], vault, false);
+      }
       html += "</details>";
       return html;
   }
