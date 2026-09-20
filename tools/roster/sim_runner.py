@@ -20,13 +20,16 @@ Co dělá (jeden spuštěný příkaz, pak se jen čeká):
      Raidbots najít nejlepší kombinaci ("best overall" řádek na stránce Simy).
      Řádek je ✅, až když jsou hotové všechny tři reporty; když některý selže,
      při dalším běhu se dosimuje jen ten chybějící.
-  6. má-li postava v SimC stringu Great Vault, běží navíc "HC raid" Droptimizer
-     (kind "raidhc"): Season 2 Raids, obtížnost "Heroic Vault" (Myth 1/6) +
-     Upgrade up to Myth 6/6 = všechny raidové itemy max 334. Bonus roll na HC
-     (a na mythic bossech, které zabíjíme) dává mythic ilvl, ale max 334 – jen
-     poslední mythic bossové dropí 344 base, a tam bonus roll ještě dlouho
-     nepůjde. Stránka Simy proto srovnává "vzít z vaultu vs. nechat si bonus
-     roll" proti tomuhle reportu, ne proti plnému mythic Droptimizeru.
+  6. u každé postavy (i bez Great Vaultu v SimC stringu) běží navíc "HC raid"
+     Droptimizer (kind "raidhc"): Season 2 Raids, obtížnost "Heroic Vault"
+     (Myth 1/6) + Upgrade up to Myth 6/6 = všechny raidové itemy max 334. Bonus
+     roll na HC (a na mythic bossech, které zabíjíme) dává mythic ilvl, ale max
+     334 – jen poslední mythic bossové dropí 344 base, a tam bonus roll ještě
+     dlouho nepůjde. Stránka Simy proto doporučení bonus rollu (a srovnání
+     "vzít z vaultu vs. nechat si bonus roll", když hráč vault poslal) počítá
+     z tohohle reportu, ne z plného mythic Droptimizeru.
+  Každý řádek fronty = postava + spec; výsledky jiného specu téže postavy se
+  nepřepisují (Apps Script je drží zvlášť).
 
 Kolik simů Raidbots pustí najednou, určuje účet (Premium tier); když další
 sim odmítne, runner řádek vrátí do fronty a dál posílá jen tolik, kolik
@@ -57,7 +60,7 @@ každou hodinu a na kliknutí (menu Simy → Spustit simy online, tlačítko na 
 Konfigurace přes env: SIM_WEBAPP_URL, SIM_API_TOKEN, SIM_STORAGE_STATE (cesta
 k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE, SIM_MPLUS=0 (vypne
 druhý, dungeonový Droptimizer), SIM_TOPGEAR=0 (vypne Top Gear), SIM_RAIDHC=0 (vypne
-HC raid Droptimizer u postav s vaultem). Místo (nebo vedle)
+HC raid Droptimizer pro bonus roll). Místo (nebo vedle)
 uložené session jde použít RAIDBOTS_EMAIL + RAIDBOTS_PASSWORD – když skript zjistí,
 že není přihlášený, přihlásí se e-mailem a heslem na https://www.raidbots.com/auth.
 Discord: DISCORD_BOT_TOKEN (+ DISCORD_GUILD_ID pro discord-rooms). Discord blokuje bot API
@@ -66,7 +69,7 @@ vrátí `notify` (kanál, zmínka, text), runner ji pošle a nahlásí action=no
   python sim_runner.py --parallel 3 # max 3 simy najednou (výchozí 10)
   python sim_runner.py --no-mplus   # jen raidový Droptimizer (bez Mythic+ dungeonů)
   python sim_runner.py --no-topgear # bez třetího simu (Top Gear z nejlepších itemů)
-  python sim_runner.py --no-raidhc  # bez HC raid Droptimizeru (srovnání vaultu s bonus rollem)
+  python sim_runner.py --no-raidhc  # bez HC raid Droptimizeru (doporučení bonus rollu / srovnání s vaultem)
   python sim_runner.py --dry-run    # všechno kromě kliknutí na Run (kontrola nastavení)
   python sim_runner.py --row 7      # jen konkrétní řádek listu
   python sim_runner.py --headless   # bez okna prohlížeče
@@ -116,7 +119,7 @@ DEFAULTS = {
     "mplus_source": "Mythic+ Dungeons",
     "mplus_dungeons": "All Dungeons",   # dlaždice pod zdrojem (výchozí vybraná)
     "mplus_difficulty": "+10 Vault",    # Myth track (318) – s upgrade "max" = Myth 6/6 jako raid
-    "raidhc": True,          # jen u postav s Great Vaultem v SimC stringu: další raidový Droptimizer (kind "raidhc")
+    "raidhc": True,          # u každé postavy další raidový Droptimizer (kind "raidhc") = základ pro bonus roll
     "raidhc_difficulty": "Heroic Vault",   # dlaždice "Heroic Vault / Myth 1/6" + upgrade max = všechno 334 Myth 6/6
                              # (bonus roll na HC dává mythic item, ale max 334; poslední mythic bossové dropí 344 base)
     "topgear": True,         # třetí sim: Top Gear z nejlepších raid + M+ itemů (kind "topgear")
@@ -1346,7 +1349,7 @@ def cmd_run(cfg, args):
     healers = []
     want_mplus = bool(cfg.get("mplus", True))
     want_topgear = bool(cfg.get("topgear", True))
-    want_raidhc = bool(cfg.get("raidhc", True))   # jen řádky s vaultem (sloupec "Vault" z Apps Scriptu)
+    want_raidhc = bool(cfg.get("raidhc", True))   # u každého řádku (i bez vaultu) – z HC reportu je doporučení bonus rollu
     # hotové Droptimizer reporty postavy (z listu i z tohohle běhu) – až jsou oba, jede Top Gear
     reports = {}
     def topgear_ready(row):
@@ -1361,7 +1364,7 @@ def cmd_run(cfg, args):
         else:
             reports[row["row"]] = {k: report_id_from_url(row.get("report_" + k)) for k in ("raid", "mplus") if row.get("report_" + k)}
             kinds = [k for k in ("raid", "mplus") if (k == "raid" or want_mplus) and not row.get("report_" + k)]
-            if want_raidhc and str(row.get("vault") or "").strip() and not row.get("report_raidhc"):
+            if want_raidhc and not row.get("report_raidhc"):
                 kinds.append("raidhc")
             for k in kinds:
                 todo.append((row, k))
@@ -1396,7 +1399,7 @@ def cmd_run(cfg, args):
             results[rkey(row)] = qe_row(rb, api, row, args.dry_run)
         if todo:
             log(f"Posílám až {parallel} simů najednou ({'raid + M+' if want_mplus else 'jen raid'} Droptimizer"
-                f"{' + Top Gear' if want_topgear else ''}{' + HC raid u postav s vaultem' if want_raidhc else ''} za postavu).")
+                f"{' + Top Gear' if want_topgear else ''}{' + HC raid' if want_raidhc else ''} za postavu).")
         while todo or active:
             # 1) doplnit běžící simy do limitu
             while todo and len(active) < parallel:
@@ -1477,7 +1480,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="vše kromě kliknutí na Run Droptimizer")
     ap.add_argument("--no-mplus", action="store_true", help="jen raidový Droptimizer, bez Mythic+ dungeonů")
     ap.add_argument("--no-topgear", action="store_true", help="bez třetího simu (Top Gear z nejlepších itemů)")
-    ap.add_argument("--no-raidhc", action="store_true", help="bez HC raid Droptimizeru u postav s vaultem (srovnání vault vs. bonus roll)")
+    ap.add_argument("--no-raidhc", action="store_true", help="bez HC raid Droptimizeru (doporučení bonus rollu / srovnání s vaultem)")
     ap.add_argument("--headless", action="store_true", help="bez okna prohlížeče")
     ap.add_argument("--row", type=int, help="zpracovat jen řádek listu N")
     ap.add_argument("--max", type=int, help="nejvýše N řádků")

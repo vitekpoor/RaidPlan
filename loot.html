@@ -5,7 +5,8 @@
      a list "Vault" (Great Vault ze SimC exportu) – oba plní Apps Script, čte se přes gviz CSV.
      "Raid HC" = raidový Droptimizer s obtížností "Heroic Vault" (Myth 1/6 → Myth 6/6 = všechno max 334): bonus roll
      na HC (a na mythic bossech, které zabíjíme) dá mythic item max 334, 344 base dropí jen poslední mythic bossové.
-     Tyhle řádky nejdou do tabulek, slouží jen verdiktu "vzít z vaultu vs. nechat si bonus roll".
+     Tyhle řádky nejdou do tabulek, slouží doporučení bonus rollu (vždy) a verdiktu "vzít z vaultu vs. nechat si bonus roll"
+     (když hráč poslal vault). Řádky se drží na postavu + spec – postava s víc specy má v kartě blok na každý spec.
      Společný vzhled: assets/css/site.css (odvozeno ze šablony TemplateMo 579 Cyborg Gaming). -->
 <html lang="cs">
 <head>
@@ -186,6 +187,13 @@ a.best:hover .open { color: var(--ink-strong); }
 .vault.take { border-left-color: var(--accent); } .vault.take .verdict { color: var(--accent); }
 .vault.roll { border-left-color: var(--dps); } .vault.roll .verdict { color: var(--dps); }
 .vault.none .verdict { color: var(--muted); font-weight: 500; }
+.vault .why code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; color: var(--ink-strong); }
+/* postava s víc simovanými specy: hlavička každého specu v kartě (badge + zdroj / čas / reporty) */
+.spechead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 9px 16px 7px; font-size: 13px; color: var(--muted);
+            background: var(--surface3); border-top: 2px solid var(--line); }
+.spechead .badge { font-size: 12.5px; }
+.spechead .meta a { color: var(--ink); }
+.chip .spec, .ptile .spec { color: var(--muted); font-size: 11px; }
 .vault .vs { color: var(--muted); }
 .vault .chips { gap: 4px; }
 .vault .stale { color: var(--dps); font-size: 12.5px; }
@@ -277,7 +285,7 @@ a.best:hover .open { color: var(--ink-strong); }
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: listy „Sim výsledky“ a „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+, u vaultu i HC raid max 334 pro srovnání s bonus rollem) a QE Live (healeři) · itemy z Wowheadu.</p>
+  <p>Data: listy „Sim výsledky“ a „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+ a HC raid max 334 = základ pro bonus roll a srovnání s vaultem) a QE Live (healeři) · každý spec postavy zvlášť · itemy z Wowheadu.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
@@ -331,7 +339,7 @@ a.best:hover .open { color: var(--ink-strong); }
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
 
   var $ = function (s) { return document.querySelector(s); };
-  var state = { view: "players", unit: "pct", kind: "all", player: null, boss: null, rows: [], items: {}, bosses: [], vault: {}, roster: [], crests: {}, sort: { key: "diff", dir: -1 } };
+  var state = { view: "players", unit: "pct", kind: "all", player: null, boss: null, rows: [], items: {}, bosses: [], vault: {}, roster: [], crests: {}, multiSpec: {}, sort: { key: "diff", dir: -1 } };
   try { state.unit = localStorage.getItem("lootUnit") || "pct"; } catch (e) {}
   try { state.kind = localStorage.getItem("lootKind") || "all"; } catch (e) {}
   if (!LIST_KINDS[state.kind]) state.kind = "all";
@@ -487,7 +495,13 @@ a.best:hover .open { color: var(--ink-strong); }
           worn: idx["Stav"] != null && /nasazeno/i.test(String(r[idx["Stav"]] || ""))   // Raidbots nesimoval: hráč item (nebo lepší) už má
         };
       });
+      // postavy s víc simovanými specy (affliction + destruction…) – u nich se spec ukazuje i u chipů
+      var specsOf = {};
+      state.rows.forEach(function (r) { var k = nkey(r.player); (specsOf[k] = specsOf[k] || {})[r.spec || "?"] = 1; });
+      state.multiSpec = {};
+      Object.keys(specsOf).forEach(function (k) { if (Object.keys(specsOf[k]).length > 1) state.multiSpec[k] = true; });
       // Vault: Postava | Čas | Item ID | Item | Slot | ilvl | Bonus ID  → { nkey(postava): { player, time, items[] } }
+      // (vault je na postavu, ne na spec; postava bez řádků = export bez otevřeného vaultu → stránka ukáže jen bonus roll)
       state.vault = {};
       var vt = vaultText ? parseCsv(vaultText) : [];
       var vh = vt.shift() || []; var vi = {}; vh.forEach(function (h, i) { vi[h.trim()] = i; });
@@ -637,6 +651,8 @@ a.best:hover .open { color: var(--ink-strong); }
     return '<span style="' + (color ? "color:" + color : "") + '">' + esc(r.player) + "</span>";
   }
   function roleBadge(r) { return '<span class="badge ' + r.role + '">' + esc(r.spec.replace(/_/g, " ")) + " · " + r.unit + "</span>"; }
+  /** Spec za jménem (chipy, dlaždice bossů) – jen u postavy, která má simovaných víc speců. */
+  function specTagHtml(r) { return state.multiSpec[nkey(r.player)] ? ' <span class="spec">' + esc(String(r.spec || "").replace(/_/g, " ")) + "</span>" : ""; }
   function kindBadge(k) { return '<span class="kind ' + k + '">' + KIND_LABEL[k] + "</span>"; }
   function byMetricDesc(a, b) { return (metric(b) || 0) - (metric(a) || 0); }
 
@@ -804,7 +820,7 @@ a.best:hover .open { color: var(--ink-strong); }
     var isQe = playerRows.some(function (r) { return /QE/i.test(r.src || ""); });
     var basis = useHc ? '<span class="basis" title="Raidový Droptimizer s obtížností Heroic Vault (Myth 1/6) a upgradem na Myth 6/6 – všechno max 334, jako bonus roll na HC nebo na mythic bossech, které zabíjíme.">srovnání: HC raid, max 334</span>'
       : isQe ? '<span class="basis" title="QE Live počítá raidové itemy na 334 (Myth 6/6) – stejný základ jako bonus roll na HC.">srovnání: raid na 334</span>'
-      : '<span class="basis warn" title="Chybí HC raid sim (Heroic Vault → Myth 6/6, max 334). Plný mythic Droptimizer nadhodnocuje poslední bossy (344). Pošli nový SimC string s otevřeným vaultem.">⚠ srovnání s Mythic raidem (344) – HC sim chybí</span>';
+      : '<span class="basis warn" title="Chybí HC raid sim (Heroic Vault → Myth 6/6, max 334). Plný mythic Droptimizer nadhodnocuje poslední bossy (344). Pošli nový SimC string, HC sim proběhne automaticky.">⚠ srovnání s Mythic raidem (344) – HC sim chybí</span>';
     var bestVault = found[0] && (metric(found[0].r) || 0) > 0 ? found[0] : null;
     var vaultLtv = bestVault ? ltv(bestVault.r) : 0;   // dlouhodobá cena itemu z vaultu (dočasný jen za TEMP_WEIGHT)
     var tmpNote = bestVault && bestVault.r.lasting === false
@@ -824,8 +840,22 @@ a.best:hover .open { color: var(--ink-strong); }
       return rs.slice(0, max).map(function (r) { return "<b>" + esc(itemLabel(r)) + "</b> " + fmtVal(r); }).join(", ") + (rs.length > max ? ", …" : "");
     }
     var mood = "none", verdict, why = "", recBoss = null;
-    if (!vault.items.length) {
-      verdict = "Vault zatím nic nenabízí";
+    var missing = !!vault.missing;   // export bez otevřeného Great Vaultu → jen doporučení bonus rollu
+    var noVaultNote = missing ? " V SimC exportu nebyl Great Vault – otevři ho před <code>/simc</code> a uvidíš i srovnání vaultu s bonus rollem."
+                    : " Vault zatím nic nenabízí.";
+    if (missing || !vault.items.length) {
+      if (bestBoss) {
+        mood = "roll"; recBoss = bestBoss;
+        verdict = "🎲 Bonus roll na " + bestBoss.name;
+        why = "Průměrný roll " + fmtNum(bestBoss.ev) + " (" + bestBoss.up + "/" + bestBoss.n + " upgrade" +
+          (bestBoss.best ? ", nejlepší <b>" + esc(itemLabel(bestBoss.best)) + "</b> " + fmtVal(bestBoss.best) : "") + ")." + noVaultNote;
+      } else if (!raidRows.length) {
+        verdict = missing ? "Bonus roll: raidový sim zatím není" : "Vault zatím nic nenabízí";
+        why = missing ? "Až doběhne HC raid sim, uvidíš tu, na koho se vyplatí bonus roll." : "";
+      } else {
+        verdict = "Z raidu nic není upgrade";
+        why = "Bonus roll teď nemá smysl – žádný boss nedá v průměru nic." + noVaultNote;
+      }
     } else if (!found.length) {
       verdict = "Vault nabízí jen itemy mimo raid a M+";
       why = "Delvy a world itemy tu nesimujeme – vezmi, co se hodí.";
@@ -863,13 +893,16 @@ a.best:hover .open { color: var(--ink-strong); }
         ' target="_blank" rel="noopener">' + esc(r.item) + "</a>" + catHtml(r) + ' <span class="v">' + fmtVal(r) + "</span>" + estHtml(r) + tmpHtml(r) + "</span>";
     }).join("");
     if (ignored) chips += '<span class="chip up0" title="itemy z delvů / worldu nebo bez simu">+' + ignored + " mimo raid/M+</span>";
+    // seznam bossů pro bonus roll je vidět vždy, když je z čeho počítat (i bez vaultu v exportu)
     return '<div class="vault ' + mood + '">' +
-      '<div class="vhead"><span class="tag">Great Vault</span><span class="verdict">' + esc(verdict) + "</span>" +
-        '<span class="meta">' + (vault.time ? '<span class="when">vault z ' + fmtDate(vault.time) + "</span>" : "") + (found.length ? basis : "") + "</span></div>" +
+      '<div class="vhead"><span class="tag">' + (missing ? "Bonus roll" : "Great Vault") + '</span><span class="verdict">' + esc(verdict) + "</span>" +
+        '<span class="meta">' + (vault.time ? '<span class="when">vault z ' + fmtDate(vault.time) + "</span>" : "") +
+          (missing ? '<span class="when" title="Export ze /simc neobsahoval blok Great Vaultu – starý vault postavy se smazal.">bez vaultu v exportu</span>' : "") +
+          (found.length || bosses.length ? basis : "") + "</span></div>" +
       (found.length ? '<div class="vrow"><span class="vlabel">Vault nabízí</span><span class="chips">' + chips + "</span></div>" : "") +
       (why ? '<div class="vrow"><span class="vlabel">Proč</span><span class="why">' + why + "</span></div>" : "") +
       (stale ? '<div class="vrow"><span class="vlabel"></span><span class="stale">⚠ Vault je z minulého týdne – pošli nový SimC string.</span></div>' : "") + "</div>" +
-      (found.length ? rollsHtml(bosses, recBoss, mood) : "");
+      (bosses.length ? rollsHtml(bosses, recBoss, mood) : "");
   }
 
   // ---- Top Gear: best overall (nejlepší kombinace z nejlepších raid + M+ itemů) ----
@@ -912,30 +945,67 @@ a.best:hover .open { color: var(--ink-strong); }
     return html + "</div>";
   }
 
-  function playerCardHtml(n, g) {
-      var a = g.rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
-      var raidRows = g.rows.filter(function (r) { return r.kind === "raid"; });
-      var mRows = g.rows.filter(function (r) { return r.kind === "mplus"; });
-      var tgRow = g.rows.filter(function (r) { return r.kind === "topgear"; })[0];
+  /**
+   * Specy postavy (affliction / destruction / demonology…) podle času posledního simu, nejnovější první.
+   * Každý spec má v listu vlastní řádky (sim jiného specu ty předchozí nepřepíše) a v kartě vlastní blok.
+   */
+  function specGroups(rows) {
+    var by = {};
+    rows.forEach(function (r) {
+      var k = r.spec || "?";
+      var g = by[k] = by[k] || { spec: k, rows: [], last: null };
+      g.rows.push(r);
+      if (r.time && (!g.last || r.time > g.last)) g.last = r.time;
+    });
+    return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return (b.last || 0) - (a.last || 0); });
+  }
+  /** Meta řádek jednoho specu: zdroj, čas, odkazy na reporty, základ. */
+  function specMetaHtml(rows, a) {
+    var raidAny = rows.filter(function (r) { return r.kind === "raid"; })[0], mAny = rows.filter(function (r) { return r.kind === "mplus"; })[0];
+    var links = [];
+    if (raidAny && raidAny.report) links.push('<a href="' + esc(raidAny.report) + '" target="_blank" rel="noopener">report raid</a>');
+    if (mAny && mAny.report && !(raidAny && raidAny.report === mAny.report)) links.push('<a href="' + esc(mAny.report) + '" target="_blank" rel="noopener">report M+</a>');
+    return esc(a.src) + (a.time ? " · " + fmtDate(a.time) : "") + (links.length ? " · " + links.join(" · ") : "") +
+      (a.base != null ? ' · základ <span class="mono">' + Math.round(a.base).toLocaleString("cs-CZ") + "</span> " + a.unit : "") +
+      (mAny ? "" : " · M+ sim zatím není");
+  }
+  /** Blok jednoho specu v kartě: vault / bonus roll, Top Gear, tabulky raid + M+. */
+  function specBlockHtml(sg, vault, multi) {
+      var rows = sg.rows;
+      var a = rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || rows[0];
+      var raidRows = rows.filter(function (r) { return r.kind === "raid"; });
+      var mRows = rows.filter(function (r) { return r.kind === "mplus"; });
+      var tgRow = rows.filter(function (r) { return r.kind === "topgear"; })[0];
       var raidAny = raidRows[0], mAny = mRows[0];
-      var shown = g.rows.filter(passes).sort(byMetricDesc);
-      var html = "";
-      var links = [];
-      if (raidAny && raidAny.report) links.push('<a href="' + esc(raidAny.report) + '" target="_blank" rel="noopener">report raid</a>');
-      if (mAny && mAny.report && !(raidAny && raidAny.report === mAny.report)) links.push('<a href="' + esc(mAny.report) + '" target="_blank" rel="noopener">report M+</a>');
-      html += '<details class="card" open><summary><span class="name">' + playerHtml(a) + ilvlHtml(g.rows) + "</span> " + roleBadge(a) +
-        '<span class="meta">' + esc(a.src) + (a.time ? " · " + fmtDate(a.time) : "") + (links.length ? " · " + links.join(" · ") : "") +
-        (crestHtml(n) ? " · Myth cresty " + crestHtml(n) : "") +
-        (a.base != null ? ' · základ <span class="mono">' + Math.round(a.base).toLocaleString("cs-CZ") + "</span> " + a.unit : "") + "</span>" +
-        '<span class="meta">' + charLinksHtml(n) + (mRows.length ? "" : " · M+ sim zatím není") + "</span></summary>";
-      var vault = state.vault[nkey(n)];
-      if (vault) html += vaultHtml(g.rows, vault);
-      if (tgRow) html += bestHtml(tgRow, g.rows);
+      var html = multi ? '<div class="spechead">' + roleBadge(a) + '<span class="meta">' + specMetaHtml(rows, a) + "</span></div>" : "";
+      // vault / bonus roll vždy – i bez vaultu v exportu je z HC raid simu doporučení, na koho rollovat
+      html += vaultHtml(rows, vault);
+      if (tgRow) html += bestHtml(tgRow, rows);
       // raid vlevo, M+ vpravo (jen jedna sekce = přes celou šířku)
       var parts = [];
       if (kindOk("raid")) parts.push(sectionHtml("raid", raidRows.filter(passes).sort(byMetricDesc), raidAny && raidAny.report));
       if (kindOk("mplus") && (mRows.length || state.kind === "mplus")) parts.push(sectionHtml("mplus", mRows.filter(passes).sort(byMetricDesc), mAny && mAny.report));
       html += parts.length === 2 ? '<div class="pair">' + parts.join("") + "</div>" : parts.join("");
+      return html;
+  }
+
+  function playerCardHtml(n, g) {
+      var groups = specGroups(g.rows), multi = groups.length > 1;
+      var a = groups[0].rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
+      // vault je na postavu (ne na spec); bez vaultu v exportu se ukáže jen doporučení bonus rollu
+      var vault = state.vault[nkey(n)] || { player: n, time: null, items: [], missing: true };
+      var html = '<details class="card" open><summary><span class="name">' + playerHtml(a) + ilvlHtml(g.rows) + "</span> ";
+      if (multi) {
+        // víc speců: v hlavičce jen badge všech speců, detaily (zdroj, čas, reporty) má každý blok zvlášť
+        html += groups.map(function (sg) { return roleBadge(sg.rows[0]); }).join(" ") +
+          '<span class="meta">' + groups.length + " specy" + (crestHtml(n) ? " · Myth cresty " + crestHtml(n) : "") + "</span>" +
+          '<span class="meta">' + charLinksHtml(n) + "</span></summary>";
+      } else {
+        html += roleBadge(a) + '<span class="meta">' + specMetaHtml(g.rows, a).replace(" · M+ sim zatím není", "") +
+          (crestHtml(n) ? " · Myth cresty " + crestHtml(n) : "") + "</span>" +
+          '<span class="meta">' + charLinksHtml(n) + (g.rows.some(function (r) { return r.kind === "mplus"; }) ? "" : " · M+ sim zatím není") + "</span></summary>";
+      }
+      groups.forEach(function (sg) { html += specBlockHtml(sg, vault, multi); });
       html += "</details>";
       return html;
   }
@@ -950,11 +1020,14 @@ a.best:hover .open { color: var(--ink-strong); }
     if (names.length === 1) state.player = names[0];   // jediný výsledek hledání rovnou rozbalit
     var html = '<div class="pgrid">';
     names.forEach(function (n) {
-      var g = by[n], a = g.rows.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
-      var tg = g.rows.filter(function (r) { return r.kind === "topgear"; })[0];
-      var best = g.rows.filter(function (r) { return LIST_KINDS[r.kind] && (metric(r) || 0) > 0; }).sort(byMetricDesc)[0];
-      // hodnota vedle jména: Top Gear (všechny upgrady najednou), jinak nejlepší jednotlivý item
+      var g = by[n], groups = specGroups(g.rows);
+      var g0 = groups[0].rows, a = g0.filter(function (r) { return LIST_KINDS[r.kind]; })[0] || g.any;
+      // hodnota vedle jména = nejnovější spec: Top Gear (všechny upgrady najednou), jinak nejlepší jednotlivý item
+      var tg = g0.filter(function (r) { return r.kind === "topgear"; })[0];
+      var best = g0.filter(function (r) { return LIST_KINDS[r.kind] && (metric(r) || 0) > 0; }).sort(byMetricDesc)[0];
       var top = tg && (metric(tg) || 0) > 0 ? tg : best;
+      // badge každého specu (nejnovější první) – postava s víc simovanými specy má v kartě blok na spec
+      var badges = groups.map(function (sg) { return roleBadge(sg.rows[0]); }).join(" ");
       var val = top ? '<span class="val ' + cls(top) + '" title="' + (top === tg ? "Top Gear – všechny upgrady najednou" : "nejlepší jednotlivý item") + '">' + fmtVal(top) + "</span>" : "";
       var sub = charLinksHtml(n);   // místo počtu upgradů: ikonky Warcraft Logs / Raider.IO / Armory
       var crest = crestHtml(n);   // Myth cresty vpravo na řádku s badgem specu
@@ -966,7 +1039,7 @@ a.best:hover .open { color: var(--ink-strong); }
       var ago = last ? '<span class="ago' + (stale ? " stale" : "") + '" title="poslední sim ' + esc(fmtDate(last)) + (stale ? " – starší než 6 dní" : "") + '">' + esc(fmtAgo(last)) + "</span>" : "";
       // div místo <button>: uvnitř jsou odkazy (ikonky), a <a> v <button> není validní HTML
       html += '<div class="ptile' + (state.player === n || state.player === "*" ? " active" : "") + '" role="button" tabindex="0" data-player="' + esc(n) + '">' +
-        '<span class="pname"><span class="who">' + playerHtml(a) + ilvlHtml(g.rows) + "</span>" + val + "</span>" + '<span class="psub">' + roleBadge(a) + crest + "</span>" + '<span class="psub">' + sub + ago + "</span></div>";
+        '<span class="pname"><span class="who">' + playerHtml(a) + ilvlHtml(g.rows) + "</span>" + val + "</span>" + '<span class="psub">' + badges + crest + "</span>" + '<span class="psub">' + sub + ago + "</span></div>";
     });
     // hráči z Rosteru bez jediného simu – nerozklikávací dlaždice na konci mřížky (při hledání jen ti, kterých se dotaz týká)
     var ql = q.toLowerCase();
@@ -1005,16 +1078,16 @@ a.best:hover .open { color: var(--ink-strong); }
         '<span class="hint">' + (e ? Object.keys(e.items).length + " itemů se zájemci" : "nikdo nic") + "</span></div>";
       if (!e) return html;
       var list = Object.keys(e.items).map(function (iid) {
-        // jeden chip na hráče – když má k itemu řádek surový i přes katalyzátor, zůstane lepší
+        // jeden chip na hráče a spec – když má k itemu řádek surový i přes katalyzátor, zůstane lepší
         var perPlayer = {};
-        e.items[iid].forEach(function (r) { var c = perPlayer[r.player]; if (!c || (metric(r) || 0) > (metric(c) || 0)) perPlayer[r.player] = r; });
+        e.items[iid].forEach(function (r) { var k = r.player + "/" + r.spec; var c = perPlayer[k]; if (!c || (metric(r) || 0) > (metric(c) || 0)) perPlayer[k] = r; });
         var rs = Object.keys(perPlayer).map(function (n) { return perPlayer[n]; }).sort(byMetricDesc);
         return { iid: iid, rs: rs, top: metric(rs[0]) || 0 };
       }).sort(function (x, y) { return y.top - x.top; });
       html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Zájemci (seřazeno podle upgradu)</th></tr></thead><tbody>';
       list.forEach(function (en) {
         html += '<tr class="' + kind + '"><td>' + itemHtml(dropRow(en.rs)) + '</td><td><div class="chips">' + en.rs.map(function (r) {
-          return '<span class="chip ' + cls(r) + '" title="' + esc(r.spec + " · " + r.src + (r.catalystId ? " · přes katalyzátor → " + r.item : "")) + '">' + playerHtml(r) +
+          return '<span class="chip ' + cls(r) + '" title="' + esc(r.spec + " · " + r.src + (r.catalystId ? " · přes katalyzátor → " + r.item : "")) + '">' + playerHtml(r) + specTagHtml(r) +
             (r.catalystId ? ' <span class="cat" title="' + esc("přes katalyzátor → " + r.item) + '">⚗</span>' : "") + ' <span class="v">' + fmtVal(r) + "</span></span>";
         }).join("") + "</div></td></tr>";
       });
@@ -1027,7 +1100,7 @@ a.best:hover .open { color: var(--ink-strong); }
       var n = e ? Object.keys(e.items).length : 0;
       var top = null;
       if (e) Object.keys(e.items).forEach(function (iid) { e.items[iid].forEach(function (r) { if (!top || (metric(r) || 0) > (metric(top) || 0)) top = r; }); });
-      var sub = n ? n + (n === 1 ? " item" : n < 5 ? " itemy" : " itemů") + " se zájemci" + (top ? ' · <span class="val ' + cls(top) + '">' + fmtVal(top) + "</span> " + esc(top.player) : "") : "nikdo nic";
+      var sub = n ? n + (n === 1 ? " item" : n < 5 ? " itemy" : " itemů") + " se zájemci" + (top ? ' · <span class="val ' + cls(top) + '">' + fmtVal(top) + "</span> " + esc(top.player) + specTagHtml(top) : "") : "nikdo nic";
       var active = state.boss === k || state.boss === "*";
       return '<button class="ptile boss ' + kind + (active ? " active" : "") + (n ? "" : " empty") + '" data-boss="' + esc(k) + '">' +
         '<span class="pname">' + (b && b.num ? '<span class="num">' + esc(b.num) + "</span>" : "") + esc(title) + "</span>" +
