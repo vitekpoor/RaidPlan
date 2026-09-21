@@ -123,6 +123,14 @@ table.fails td.parse.p3, .bd .parse.p3 { color: #a335ee; } table.fails td.parse.
 /* "% top": our DPS as % of the rank 1 log in the same time window – NOT a percentile, so no parse colours */
 table.fails td.vstop.lo { color: var(--muted); } table.fails td.vstop.hi { color: var(--accent); }
 table.fails td.vstop small, table.fails td.parse small { font-weight: 400; color: var(--muted); }
+/* Parse + % top are a DPS/HPS block, not fails: own group header, tint and a divider before the fail columns */
+table.fails .perf { background: rgba(255, 255, 255, .035); }
+table.fails th.perf { background: color-mix(in srgb, var(--surface), #fff 4%); }
+table.fails .perf.last { border-right: 2px solid var(--line); }
+table.fails tr.groups th { position: static; cursor: default; text-align: center; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 6px 12px 2px; border-bottom: 0; }
+table.fails tr.groups th.perf { color: var(--accent); }
+table.fails tr.groups th:hover { color: var(--muted); } table.fails tr.groups th.perf:hover { color: var(--accent); }
+table.fails tbody tr:hover td.perf { background: rgba(255, 255, 255, .06); }
 .bd .note a { color: var(--accent); }
 @media (max-width: 560px) { .stat .v { font-size: 22px; } .live { margin-left: 0; } }
 </style>
@@ -628,10 +636,16 @@ table.fails td.vstop small, table.fails td.parse small { font-weight: 400; color
       var x = sortVal(a, state.sort), y = sortVal(c, state.sort);
       return state.dir * (x - y) || String(a.name).localeCompare(String(c.name), "cs");
     });
-    var th = "<tr>";
-    cols.forEach(function (c) { th += "<th" + (c.grp ? ' class="grp"' : "") + ' data-k="' + c.k + '"' + (state.sort === c.k ? ' aria-sort="' + (state.dir < 0 ? "descending" : "ascending") + '"' : "") + ">" + esc(isAll && c.agg === "max" ? c.l + " (pull)" : c.l) + "</th>"; });
+    var PERF = { parse: "perf", vstop: "perf last" };   // DPS/HPS block – visually separated from the fail columns
+    var nPerf = cols.filter(function (c) { return PERF[c.k]; }).length, nFail = cols.length - 1 - nPerf;
+    var th = '<tr class="groups"><th></th><th class="perf last" colspan="' + nPerf + '" title="výkon hráče (DPS / HPS) proti ostatním logům – nesouvisí s faily">Výkon</th>' +
+      '<th colspan="' + nFail + '" title="faily bosse v pullu">Faily</th></tr><tr>';
+    cols.forEach(function (c) {
+      var cls = [c.grp ? "grp" : "", PERF[c.k] || ""].filter(Boolean).join(" ");
+      th += "<th" + (cls ? ' class="' + cls + '"' : "") + ' data-k="' + c.k + '"' + (state.sort === c.k ? ' aria-sort="' + (state.dir < 0 ? "descending" : "ascending") + '"' : "") + ">" + esc(isAll && c.agg === "max" ? c.l + " (pull)" : c.l) + "</th>";
+    });
     document.querySelector("#tbl thead").innerHTML = th + "</tr>";
-    Array.prototype.forEach.call(document.querySelectorAll("#tbl th"), function (h) {
+    Array.prototype.forEach.call(document.querySelectorAll("#tbl th[data-k]"), function (h) {
       h.onclick = function () { var k = h.getAttribute("data-k"); if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = k === "name" ? 1 : -1; } render(); };
     });
     var body = "";
@@ -642,14 +656,14 @@ table.fails td.vstop small, table.fails td.parse small { font-weight: 400; color
         if (c.k === "name") { body += '<td class="name" title="rozpad damage a srovnání s rank 1 logem">' + esc(r.name) + (r.died ? '<span class="dead" title="' + (isAll ? "umřel v některém pullu" : "umřel") + '">†</span>' : "") + "</td>"; return; }
         if (c.k === "parse") {
           var pr = r.parse;
-          body += !pr ? '<td class="parse zero" title="' + (isAll ? "žádný kill s parse" : pull.kill ? "Warcraft Logs zatím rankings killu nemá (doplní se)" : "parse má jen kill") + '">—</td>'
-            : '<td class="parse ' + parseClass(pr.pct) + '" title="' + (isAll ? "průměrný parse z " + plural(pr.kills || 1, "killu", "killů", "killů")
+          body += !pr ? '<td class="parse perf zero" title="' + (isAll ? "žádný kill s parse" : pull.kill ? "Warcraft Logs zatím rankings killu nemá (doplní se)" : "parse má jen kill") + '">—</td>'
+            : '<td class="parse perf ' + parseClass(pr.pct) + '" title="' + (isAll ? "průměrný parse z " + plural(pr.kills || 1, "killu", "killů", "killů")
               : "Warcraft Logs parse (" + (pr.metric === "hps" ? "HPS" : "DPS") + " percentil), rank " + esc(pr.rank) + " z " + esc(pr.n)) + '">' + Math.round(pr.pct) + "</td>";
           return;
         }
         if (c.k === "vstop") {
-          body += r.vstop == null ? '<td class="vstop zero" title="bez rozpadu / referenčního logu">—</td>'
-            : '<td class="vstop ' + vsTopClass(r.vstop) + '" title="' + (r.vstopExact ? "DPS/HPS v % rank 1 logu stejného specu ve stejném čase (není to percentil)" : "zatím proti celému killu rank 1 logu, stejný čas se načítá") + '">' + Math.round(r.vstop) + (r.vstopExact ? "" : "<small>~</small>") + "</td>";
+          body += r.vstop == null ? '<td class="vstop perf last zero" title="bez rozpadu / referenčního logu">—</td>'
+            : '<td class="vstop perf last ' + vsTopClass(r.vstop) + '" title="' + (r.vstopExact ? "DPS/HPS v % rank 1 logu stejného specu ve stejném čase (není to percentil)" : "zatím proti celému killu rank 1 logu, stejný čas se načítá") + '">' + Math.round(r.vstop) + (r.vstopExact ? "" : "<small>~</small>") + "</td>";
           return;
         }
         var val = r[c.k], cls = [];
@@ -683,13 +697,13 @@ table.fails td.vstop small, table.fails td.parse small { font-weight: 400; color
       if (c.k === "parse") {
         var pv = view.players.map(function (r) { return r.parse ? Number(r.parse.pct) : null; }).filter(function (v) { return v != null; });
         var pavg = pv.length ? pv.reduce(function (a, v) { return a + v; }, 0) / pv.length : null;
-        ft += pavg == null ? "<td></td>" : '<td class="parse ' + parseClass(pavg) + '" title="průměrný parse raidu">' + Math.round(pavg) + "</td>";
+        ft += pavg == null ? '<td class="perf"></td>' : '<td class="parse perf ' + parseClass(pavg) + '" title="průměrný parse raidu">' + Math.round(pavg) + "</td>";
         return;
       }
       if (c.k === "vstop") {
         var vals = view.players.map(function (r) { return r.vstop; }).filter(function (v) { return v != null; });
         var avg = vals.length ? vals.reduce(function (a, v) { return a + v; }, 0) / vals.length : null;
-        ft += avg == null ? "<td></td>" : '<td class="vstop ' + vsTopClass(avg) + '" title="průměr hráčů s referencí">' + Math.round(avg) + "</td>";
+        ft += avg == null ? '<td class="perf last"></td>' : '<td class="vstop perf last ' + vsTopClass(avg) + '" title="průměr hráčů s referencí">' + Math.round(avg) + "</td>";
         return;
       }
       if (c.agg === "max") { ft += "<td" + (c.grp ? ' class="grp"' : "") + "></td>"; return; }
@@ -704,6 +718,7 @@ table.fails td.vstop small, table.fails td.parse small { font-weight: 400; color
       ? "<div><b>Death cutoff " + cutoffN + "</b> – každý pull se hodnotí jen do " + cutoffN + ". smrti hráče (pak už je wipe rozjetý a další stacky / zásahy nic neříkají). " +
         "Sloupec <b>Smrti</b> počítá úmrtí za celý pull, i po cutoffu.</div>"
       : "<div><b>Bez death cutoffu</b> – hodnotí se celý pull od začátku do konce.</div>");
+    lg.push("<div><b>Výkon</b> (sloupce Parse a % top) je DPS/HPS srovnání s ostatními logy a <b>s faily nesouvisí</b> – hráč může mít nízký parse a nula failů i naopak.</div>");
     lg.push("<div><b>Parse</b> = skutečný percentil z Warcraft Logs (rankings killu: DPS, u healerů HPS, mezi všemi logy stejného specu na tomto bossovi a obtížnosti), " +
       "stejné číslo a barvy jako na WCL: <span style=\"color:#9d9d9d\">&lt; 25</span> · <span style=\"color:#1eff00\">25</span> · <span style=\"color:#0070ff\">50</span> · " +
       "<span style=\"color:#a335ee\">75</span> · <span style=\"color:#ff8000\">95</span> · <span style=\"color:#e268a8\">99</span>. Mají ho jen killy" +
