@@ -3,7 +3,8 @@
      (s cestami web/loot_items.json a web/assets/). Data čte živě z Google Sheets:
      databáze (Cloudflare D1 přes Worker API GET /api/sims/results – plní sim_runner.py / sim_results.py;
      Původ = Raid | M+ | Top Gear | Raid HC; list "Sim výsledky" v Sheets je jen záloha, když API neodpoví)
-     a list "Vault" (Great Vault ze SimC exportu) – ten plní Apps Script, čte se přes gviz CSV.
+     + GET /api/sims/extras (Great Vault, cresty, Discord místnosti – plní formulář sim.html přes Worker).
+     Roster se dál čte z Google Sheets (gviz CSV) – ten edituje raid leader ručně.
      "Raid HC" = raidový Droptimizer s obtížností "Heroic Vault" (Myth 1/6 → Myth 6/6 = všechno max 334): bonus roll
      na HC (a na mythic bossech, které zabíjíme) dá mythic item max 334, 344 base dropí jen poslední mythic bossové.
      Tyhle řádky nejdou do tabulek, slouží doporučení bonus rollu (vždy) a verdiktu "vzít z vaultu vs. nechat si bonus roll"
@@ -300,7 +301,7 @@ a.best:hover .open { color: var(--ink-strong); }
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: databáze simů (eternal-shadows Worker + D1) a list „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+ a HC raid max 334 = základ pro bonus roll a srovnání s vaultem) a QE Live (healeři) · každý spec postavy zvlášť · itemy z Wowheadu.</p>
+  <p>Data: databáze simů (eternal-shadows Worker + D1: výsledky, Great Vault, cresty) a roster z guildovní tabulky · Raidbots Droptimizer (DPS, raid + Mythic+ a HC raid max 334 = základ pro bonus roll a srovnání s vaultem) a QE Live (healeři) · každý spec postavy zvlášť · itemy z Wowheadu.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
@@ -315,6 +316,7 @@ a.best:hover .open { color: var(--ink-strong); }
   // Když API neodpoví, stránka spadne na list "Sim výsledky" (gviz CSV) – ten Apps Script zatím plní dál.
   var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
   var API_URL = API_BASE + "/api/sims/results";
+  var EXTRAS_URL = API_BASE + "/api/sims/extras";   // vault + cresty + Discord místnosti (záloha: listy Vault / Cresty / Discord přes gviz)
   var VAULT_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(VAULT_TAB);
   var ROSTER_TAB = "Roster";   // hlavní soupiska (řádky nad „LAVIČKA“) – hráči bez simu se ukážou v mřížce jako prázdné dlaždice
   var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
@@ -436,6 +438,21 @@ a.best:hover .open { color: var(--ink-strong); }
       });
   }
 
+  // vault + cresty + Discord: API (JSON) → { api: true, text }, jinak tři listy přes gviz → { api: false, vault, crest, discord, text }
+  var extrasFailed = false;
+  function csvOpt(url) { return fetch(url, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }); }
+  function loadExtras() {
+    return fetch(EXTRAS_URL, { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("API HTTP " + r.status); return r.text(); })
+      .then(function (t) { if (t.charAt(0) !== "{") throw new Error("API: ne JSON"); extrasFailed = false; return { api: true, text: t }; })
+      .catch(function (err) {
+        if (!extrasFailed) { extrasFailed = true; console.warn("Simy: API extras neodpovědělo (" + err.message + "), beru listy Vault/Cresty/Discord"); }
+        return Promise.all([csvOpt(VAULT_URL), csvOpt(CREST_URL), csvOpt(DISCORD_URL)]).then(function (t) {
+          return { api: false, vault: t[0], crest: t[1], discord: t[2], text: t[0] + "\n " + t[1] + "\n " + t[2] };
+        });
+      });
+  }
+
   function refresh(manual) {
     if (refreshing) return;
     refreshing = true;
@@ -443,20 +460,15 @@ a.best:hover .open { color: var(--ink-strong); }
     if (manual) status.textContent = "Obnovuji…";
     Promise.all([
       loadResults(),
-      // list Vault je volitelný – bez něj stránka funguje, jen bez verdiktu
-      fetch(VAULT_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
+      loadExtras(),
       // list Roster je volitelný – bez něj se jen neukážou hráči bez simu
-      fetch(ROSTER_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
-      // list Cresty je volitelný – bez něj se jen neukáže stav Myth crestů
-      fetch(CREST_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
-      loadItems(),
-      // list Discord je volitelný – bez něj jen chybí ikonka místnosti hráče
-      fetch(DISCORD_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; })
+      csvOpt(ROSTER_URL),
+      loadItems()
     ]).then(function (res) {
-      var combined = res[0].text + "\n " + res[1] + "\n " + res[2] + "\n " + res[3] + "\n " + res[5];
+      var combined = res[0].text + "\n " + res[1].text + "\n " + res[2];
       if (combined === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
       lastCsv = combined;
-      applyData(res[0], res[1], res[4], res[2], res[3], res[5]);
+      applyData(res[0], res[1], res[3], res[2]);
       openFromHash();
       render();
     }).catch(function (err) {
@@ -519,9 +531,46 @@ a.best:hover .open { color: var(--ink-strong); }
                catalystFrom: idx["Katalyzátor z"] != null ? r[idx["Katalyzátor z"]] : "" };
     });
   }
-  function applyData(results, vaultText, lib, rosterText, crestText, discordText) {
+  // Vault / cresty / Discord v neutrálním tvaru (z API i z CSV)
+  function extrasRecords(extras) {
+    var out = { vault: [], crests: [], discord: [] };
+    if (extras.api) {
+      var d = JSON.parse(extras.text);
+      (d.vault || []).forEach(function (v) { out.vault.push({ character: v.character, time: v.time ? new Date(v.time) : null, itemId: String(v.itemId || ""), item: v.item, slot: v.slot, ilvl: v.ilvl }); });
+      (d.crests || []).forEach(function (c) { out.crests.push({ character: c.character, time: c.time ? new Date(c.time) : null, myth: c.myth, hero: c.hero, champion: c.champion, veteran: c.veteran, adventurer: c.adventurer,
+                                                                 server: String(c.server || "").toLowerCase(), region: String(c.region || "").toLowerCase() }); });
+      (d.discord || []).forEach(function (r) { out.discord.push({ player: r.player, url: r.channelUrl }); });
+      return out;
+    }
+    // Vault: Postava | Čas | Item ID | Item | Slot | ilvl | Bonus ID
+    var vt = extras.vault ? parseCsv(extras.vault) : [];
+    var vh = vt.shift() || []; var vi = {}; vh.forEach(function (h, i) { vi[h.trim()] = i; });
+    if (vi["Postava"] != null && vi["Item ID"] != null) {
+      vt.forEach(function (r) { if (r[vi["Postava"]]) out.vault.push({ character: r[vi["Postava"]], time: parseDate(r[vi["Čas"]]), itemId: String(num(r[vi["Item ID"]]) || ""), item: r[vi["Item"]], slot: r[vi["Slot"]], ilvl: num(r[vi["ilvl"]]) }); });
+    }
+    // Cresty: Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth | Server | Region
+    var ct = extras.crest ? parseCsv(extras.crest) : [];
+    var chd = ct.shift() || []; var ci = {}; chd.forEach(function (h, i) { ci[h.trim().toLowerCase()] = i; });
+    if (ci["postava"] != null && ci["myth"] != null) {
+      ct.forEach(function (r) {
+        if (!r[ci["postava"]]) return;
+        out.crests.push({ character: r[ci["postava"]], time: parseDate(r[ci["čas"]]), myth: num(r[ci["myth"]]), hero: num(r[ci["hero"]]), champion: num(r[ci["champion"]]),
+                          veteran: num(r[ci["veteran"]]), adventurer: num(r[ci["adventurer"]]),
+                          server: ci["server"] != null ? String(r[ci["server"]] || "").trim().toLowerCase() : "", region: ci["region"] != null ? String(r[ci["region"]] || "").trim().toLowerCase() : "" });
+      });
+    }
+    // Discord: Hráč | Kanál URL … (hlídá hlavičku – gviz bez listu vrací default tab)
+    var dt = extras.discord ? parseCsv(extras.discord) : [];
+    var dh = dt.shift() || []; var di = {}; dh.forEach(function (h, i) { di[h.trim().toLowerCase()] = i; });
+    if (di["hráč"] != null && di["kanál url"] != null) {
+      dt.forEach(function (r) { if (r[di["hráč"]]) out.discord.push({ player: String(r[di["hráč"]]).trim(), url: String(r[di["kanál url"]] || "").trim() }); });
+    }
+    return out;
+  }
+  function applyData(results, extras, lib, rosterText) {
       var records = results.api ? recordsFromApi(results.text) : recordsFromCsv(results.text);
       state.source = results.api ? "api" : "sheet";
+      var ex = extrasRecords(extras);
       var items = lib.items || {}, bosses = lib.bosses || [];
       var bossById = {}; bosses.forEach(function (b) { bossById[String(b.id)] = b; });
       state.items = items; state.bosses = bosses; state.bossById = bossById;
@@ -560,22 +609,17 @@ a.best:hover .open { color: var(--ink-strong); }
       state.rows.forEach(function (r) { var k = nkey(r.player); (specsOf[k] = specsOf[k] || {})[r.spec || "?"] = 1; });
       state.multiSpec = {};
       Object.keys(specsOf).forEach(function (k) { if (Object.keys(specsOf[k]).length > 1) state.multiSpec[k] = true; });
-      // Vault: Postava | Čas | Item ID | Item | Slot | ilvl | Bonus ID  → { nkey(postava): { player, time, items[] } }
-      // (vault je na postavu, ne na spec; postava bez řádků = export bez otevřeného vaultu → stránka ukáže jen bonus roll)
+      // Vault → { nkey(postava): { player, time, items[] } } (vault je na postavu, ne na spec; postava bez řádků = export bez
+      // otevřeného vaultu → stránka ukáže jen bonus roll)
       state.vault = {};
-      var vt = vaultText ? parseCsv(vaultText) : [];
-      var vh = vt.shift() || []; var vi = {}; vh.forEach(function (h, i) { vi[h.trim()] = i; });
-      if (vi["Postava"] != null && vi["Item ID"] != null) {
-        vt.forEach(function (r) {
-          var name = r[vi["Postava"]]; if (!name) return;
-          var id = String(num(r[vi["Item ID"]]) || ""); if (!id) return;
-          var k = nkey(name);
-          var v = state.vault[k] = state.vault[k] || { player: name, time: parseDate(r[vi["Čas"]]), items: [] };
-          var lib = items[id] || {};
-          v.items.push({ itemId: id, item: r[vi["Item"]] || lib.name || ("#" + id), icon: lib.icon || "", slot: r[vi["Slot"]] || lib.slot || "",
-                         ilvl: num(r[vi["ilvl"]]), libKind: lib.kind === "mplus" ? "mplus" : (lib.bosses && lib.bosses.length ? "raid" : "") });
-        });
-      }
+      ex.vault.forEach(function (r) {
+        var id = r.itemId; if (!id) return;
+        var k = nkey(r.character);
+        var v = state.vault[k] = state.vault[k] || { player: r.character, time: r.time, items: [] };
+        var lib = items[id] || {};
+        v.items.push({ itemId: id, item: r.item || lib.name || ("#" + id), icon: lib.icon || "", slot: r.slot || lib.slot || "",
+                       ilvl: num(r.ilvl), libKind: lib.kind === "mplus" ? "mplus" : (lib.bosses && lib.bosses.length ? "raid" : "") });
+      });
       // Roster: Hráč | Main char | Main classa | Main role | | Alt char | Alt classa | Alt role – jen hlavní soupiska (po řádek „LAVIČKA“)
       state.roster = []; state.charClass = {};   // nkey(postava) → classa (z Rosteru) – dořeší nejednoznačné specy (protection, holy, frost, restoration)
       var rt = rosterText ? parseCsv(rosterText) : [];
@@ -593,29 +637,17 @@ a.best:hover .open { color: var(--ink-strong); }
           if (alt && altClass) state.charClass[nkey(alt)] = altClass.toLowerCase().replace(/\s+/g, "");
         }
       }
-      // Discord: Hráč | Kanál URL … → { nkey(hráč): { player, url } } (hlídá hlavičku – gviz bez listu vrací default tab)
+      // Discord místnosti → { nkey(hráč): { player, url } }
       state.discord = {};
-      var dt = discordText ? parseCsv(discordText) : [];
-      var dh = dt.shift() || []; var di = {}; dh.forEach(function (h, i) { di[h.trim().toLowerCase()] = i; });
-      if (di["hráč"] != null && di["kanál url"] != null) {
-        dt.forEach(function (r) {
-          var who = String(r[di["hráč"]] || "").trim(), url = String(r[di["kanál url"]] || "").trim();
-          if (who && /^https?:\/\/(www\.)?(discord\.com|discordapp\.com|ptb\.discord\.com|canary\.discord\.com)\//.test(url)) state.discord[nkey(who)] = { player: who, url: url };
-        });
-      }
-      // Cresty: Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth | Server | Region → { nkey(postava): { time, myth, ..., server, region } }
+      ex.discord.forEach(function (r) {
+        if (r.player && /^https?:\/\/(www\.)?(discord\.com|discordapp\.com|ptb\.discord\.com|canary\.discord\.com)\//.test(r.url)) state.discord[nkey(r.player)] = { player: r.player, url: r.url };
+      });
+      // Cresty → { nkey(postava): { time, myth, ..., server, region } }
       state.crests = {};
-      var ct = crestText ? parseCsv(crestText) : [];
-      var chd = ct.shift() || []; var ci = {}; chd.forEach(function (h, i) { ci[h.trim().toLowerCase()] = i; });
-      if (ci["postava"] != null && ci["myth"] != null) {
-        ct.forEach(function (r) {
-          var name = r[ci["postava"]]; if (!name) return;
-          state.crests[nkey(name)] = { player: name, time: parseDate(r[ci["čas"]]), myth: num(r[ci["myth"]]), hero: num(r[ci["hero"]]),
-                                       champion: num(r[ci["champion"]]), veteran: num(r[ci["veteran"]]), adventurer: num(r[ci["adventurer"]]),
-                                       server: ci["server"] != null ? String(r[ci["server"]] || "").trim().toLowerCase() : "",
-                                       region: ci["region"] != null ? String(r[ci["region"]] || "").trim().toLowerCase() : "" };
-        });
-      }
+      ex.crests.forEach(function (c) {
+        state.crests[nkey(c.character)] = { player: c.character, time: c.time, myth: num(c.myth), hero: num(c.hero), champion: num(c.champion), veteran: num(c.veteran), adventurer: num(c.adventurer),
+                                            server: c.server || "", region: c.region || "" };
+      });
       // nejčastější server týmu = default pro postavy, u kterých SimC export server neměl
       var cnt = {}; Object.keys(state.crests).forEach(function (k) { var s = state.crests[k].server; if (s) cnt[s] = (cnt[s] || 0) + 1; });
       state.defaultServer = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; })[0] || DEFAULT_SERVER;

@@ -3,17 +3,17 @@
 sim_runner.py – automatický Raidbots Droptimizer pro frontu "Sim fronta".
 
 Co dělá (jeden spuštěný příkaz, pak se jen čeká):
-  1. stáhne čekající řádky z Google Sheets (JSON API web appu, ?p=simapi),
+  1. stáhne čekající řádky fronty z databáze (Worker API GET /api/sims/queue, worker/queue.js;
+     řádky tam přidává formulář sim.html přes POST /api/sims/submit),
   2. pro každý řádek otevře v Chromiu DVA panely s Raidbots Droptimizerem:
      raid ("Season 2 Raids", Mythic) a Mythic+ ("Mythic+ Dungeons", All Dungeons,
      "+10 Vault"), oba s "Upgrade up to" Myth 6/6 – takže se raidové i dungeonové
      itemy srovnávají na stejném (maximálním) ilvl. Vloží SimC string, klikne Run –
      až `parallel` simů najednou (výchozí 10),
   3. hlídá všechny běžící reporty (…/simbot/report/<id>) a jak který doběhne,
-  4. nahlásí ho zpět do Sheets (action=done&kind=raid|mplus) – Apps Script
-     zapíše výsledky do listu "Sim výsledky" a raidový report zkusí nahrát do
-     wowaudit – a zároveň report rozparsuje a uloží do databáze (Cloudflare D1
-     přes Worker API, sim_results.py; env ES_API_TOKEN) – z ní čte stránka Simy,
+  4. report rozparsuje a uloží do databáze (sim_results.py → POST /api/sims/results),
+     raidový report zkusí nahrát do wowaudit (jen s env WOWAUDIT_API_KEY) a nahlásí ho
+     frontě (POST /api/sims/queue/status action=done) – z databáze čte stránka Simy,
   5. když má postava hotový raid i M+ report, pustí třetí sim: Raidbots Top Gear
      (kind "topgear") – z obou Droptimizerů vezme pro každý slot nejlepší raidový
      a nejlepší M+ item (jen kladné upgrady, nejvýš `topgear_max_items`), přidá je
@@ -30,7 +30,7 @@ Co dělá (jeden spuštěný příkaz, pak se jen čeká):
      "vzít z vaultu vs. nechat si bonus roll", když hráč vault poslal) počítá
      z tohohle reportu, ne z plného mythic Droptimizeru.
   Každý řádek fronty = postava + spec; výsledky jiného specu téže postavy se
-  nepřepisují (Apps Script je drží zvlášť).
+  nepřepisují (databáze je drží zvlášť).
 
 Kolik simů Raidbots pustí najednou, určuje účet (Premium tier); když další
 sim odmítne, runner řádek vrátí do fronty a dál posílá jen tolik, kolik
@@ -48,25 +48,25 @@ Prohlížeč používá vlastní trvalý profil (.raidbots_profile/), takže
 přihlášení do Raidbots (Premium) i nastavení Droptimizeru se pamatují.
 
 Použití (v tools/roster/):
-  python sim_runner.py setup        # uloží URL web appu + token (menu Simy → Token pro sim_runner.py…)
+  python sim_runner.py setup        # uloží URL Worker API + token (= secret API_TOKEN Workeru)
   python sim_runner.py login        # otevře prohlížeč, přihlas se do Raidbots, pak Enter
   python sim_runner.py login --export   # …a navíc uloží přihlášení do raidbots_state.json (secret pro GitHub Actions)
   python sim_runner.py pending      # jen vypíše, kolik řádků čeká
-  python sim_runner.py discord-rooms  # bot vypíše místnosti hráčů (kategorie "Players") a pošle je do listu "Discord"
+  python sim_runner.py discord-rooms  # bot vypíše místnosti hráčů (kategorie "Players") a pošle je do databáze (discord_rooms)
   python sim_runner.py discord-test --character Akka   # testovací zpráva do místnosti hráče (bot)
   python sim_runner.py              # zpracuje frontu
 
 Online (bez PC): .github/workflows/sims.yml spouští tenhle skript v GitHub Actions
 každou hodinu a na kliknutí (menu Simy → Spustit simy online, tlačítko na hubu).
-Konfigurace přes env: SIM_WEBAPP_URL, SIM_API_TOKEN, SIM_STORAGE_STATE (cesta
-k JSON z `login --export`), volitelně SIM_PARALLEL, SIM_UPGRADE, SIM_MPLUS=0 (vypne
+Konfigurace přes env: ES_API_URL (výchozí Worker), ES_API_TOKEN, SIM_STORAGE_STATE (cesta
+k JSON z `login --export`), volitelně WOWAUDIT_API_KEY (upload raidového reportu do wowaudit), SIM_PARALLEL, SIM_UPGRADE, SIM_MPLUS=0 (vypne
 druhý, dungeonový Droptimizer), SIM_TOPGEAR=0 (vypne Top Gear), SIM_RAIDHC=0 (vypne
 HC raid Droptimizer pro bonus roll). Místo (nebo vedle)
 uložené session jde použít RAIDBOTS_EMAIL + RAIDBOTS_PASSWORD – když skript zjistí,
 že není přihlášený, přihlásí se e-mailem a heslem na https://www.raidbots.com/auth.
 Discord: DISCORD_BOT_TOKEN (+ DISCORD_GUILD_ID pro discord-rooms). Discord blokuje bot API
-z Google serverů, proto zprávy do místností hráčů posílá runner: když Apps Script u `done`
-vrátí `notify` (kanál, zmínka, text), runner ji pošle a nahlásí action=notified.
+z Google serverů a bot token je jen v GitHub secrets, proto zprávy do místností hráčů posílá
+runner: když Worker u `done` vrátí `notify` (kanál, zmínka, text), runner ji pošle a nahlásí action=notified.
   python sim_runner.py --parallel 3 # max 3 simy najednou (výchozí 10)
   python sim_runner.py --no-mplus   # jen raidový Droptimizer (bez Mythic+ dungeonů)
   python sim_runner.py --no-topgear # bez třetího simu (Top Gear z nejlepších itemů)
@@ -113,7 +113,9 @@ LIMIT_RE = re.compile(r"(?i)already (have|running)|sim(ulation)? (is )?(already 
                       r"one sim at a time|concurrent|too many|wait for your|queue is full|limit")
 
 DEFAULTS = {
-    "webapp_url": "",
+    "api_url": "",           # Worker API (prázdné = sim_results.DEFAULT_API_URL)
+    "api_token": "",         # = secret API_TOKEN Workeru (GitHub secret ES_API_TOKEN)
+    "webapp_url": "",        # (staré: Apps Script web app – už se nepoužívá)
     "token": "",
     "source": "Season 2 Raids",
     "difficulty": "Mythic",
@@ -383,118 +385,155 @@ def kind_label(kind):
 
 
 def cmd_setup(cfg):
-    print("Nastavení sim_runner.py – hodnoty najdeš v Sheets: menu Simy → Token pro sim_runner.py…")
-    print("Web app URL = stejná …/exec adresa, na které hráči mají formulář absence / simu.")
-    url = input(f"Web app URL [{cfg['webapp_url'] or '-'}]: ").strip() or cfg["webapp_url"]
-    token = input(f"Token [{'(uložený)' if cfg['token'] else '-'}]: ").strip() or cfg["token"]
+    print("Nastavení sim_runner.py – token je secret API_TOKEN Workeru eternal-shadows (Cloudflare dashboard).")
+    url = input(f"Worker API URL [{cfg['api_url'] or sim_results.DEFAULT_API_URL}]: ").strip() or cfg["api_url"] or sim_results.DEFAULT_API_URL
+    token = input(f"Token [{'(uložený)' if cfg['api_token'] else '-'}]: ").strip() or cfg["api_token"]
     source = input(f"Raidbots zdroj [{cfg['source']}]: ").strip() or cfg["source"]
     diff = input(f"Obtížnost [{cfg['difficulty']}]: ").strip() or cfg["difficulty"]
     par = input(f"Simů najednou [{cfg['parallel']}]: ").strip() or cfg["parallel"]
     mp = input(f"Druhý Droptimizer na Mythic+ dungeony (a/n) [{'a' if cfg.get('mplus', True) else 'n'}]: ").strip().lower()
     if mp:
         cfg["mplus"] = mp.startswith(("a", "y", "1"))
-    if not url or not token:
-        sys.exit("Chybí URL nebo token.")
-    url = url.split("?")[0]
-    if not url.endswith("/exec"):
-        print("Pozor: URL web appu obvykle končí na /exec.")
-    cfg.update({"webapp_url": url, "token": token, "source": source, "difficulty": diff, "parallel": int(par)})
+    if not token:
+        sys.exit("Chybí token.")
+    cfg.update({"api_url": url.rstrip("/"), "api_token": token, "source": source, "difficulty": diff, "parallel": int(par)})
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Uloženo do {CONFIG_PATH.name} (soubor je v .gitignore).")
-    api = SheetApi(cfg)
+    api = QueueApi(cfg)
     try:
         rows = api.queue()
-    except requests.HTTPError as err:
-        code = err.response.status_code if err.response is not None else "?"
-        print(f"Web app odpověděl HTTP {code}.")
-        if code == 404:
-            print("Tohle není adresa nasazené web appy. Použij stejnou …/exec adresu, na které hráči mají")
-            print("formulář absence / simu (Apps Script → Nasadit → Spravovat nasazení), a spusť setup znovu.")
-        return
     except Exception as err:  # noqa: BLE001
         print(f"Spojení selhalo: {err}")
-        print("Zkontroluj token (menu Simy → Token pro sim_runner.py…) a že je web app nasazená v nové verzi.")
+        print("Zkontroluj URL a token (Worker → Settings → Variables and Secrets → API_TOKEN).")
         return
     print(f"Spojení OK – ve frontě čeká {len(rows)} řádků.")
 
 
-# ------------------------------------------------------------- Sheets API ----
+# ------------------------------------------------------------ Worker API ----
 
-class SheetApi:
+WOWAUDIT_API = "https://api.wowaudit.com/v1"
+
+
+def wowaudit_upload(character, report_id):
+    """Raidový Droptimizer report do wowaudit (POST /v1/wishlists) – jen když je env WOWAUDIT_API_KEY.
+    Best effort: wowaudit reporty s "Upgrade up to" často odmítá. Vrací text do poznámky nebo None (vypnuto)."""
+    key = os.environ.get("WOWAUDIT_API_KEY", "").strip()
+    if not key:
+        return None
+    h = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
+    try:
+        chars = requests.get(f"{WOWAUDIT_API}/characters", headers=h, timeout=60).json()
+        want = sim_results.name_key(character)
+        cid = next((c.get("id") for c in chars if sim_results.name_key(c.get("name")) == want), None)
+        if not cid:
+            return "wowaudit: postava není v týmu"
+        r = requests.post(f"{WOWAUDIT_API}/wishlists", headers={**h, "Content-Type": "application/json"},
+                          json={"report_id": report_id, "character_id": cid, "replace_manual_edits": False}, timeout=120)
+        try:
+            d = r.json()
+        except ValueError:
+            d = {}
+        if r.ok and d.get("created") is not False:
+            return "wowaudit nahráno"
+        return f"wowaudit odmítl: {str(d or r.text)[:120]}"
+    except Exception as err:  # noqa: BLE001
+        return f"wowaudit: {str(err)[:120]}"
+
+
+class QueueApi:
+    """Fronta simů ve Worker API (worker/queue.js, databáze D1). Stejná rozhraní jako dřívější Apps Script simapi:
+    queue / running / done / error / note / notified, post("rooms"), call("notify_test")."""
+
+    RETRY_STATUS = (429, 500, 502, 503, 504)
+
     def __init__(self, cfg):
-        if not cfg["webapp_url"] or not cfg["token"]:
+        if not cfg.get("api_token"):
             if os.environ.get("GITHUB_ACTIONS"):
-                sys.exit("Chybí secrets SIM_WEBAPP_URL / SIM_API_TOKEN – repo → Settings → Secrets and variables → Actions → New repository secret.")
-            sys.exit("Není nastavené URL/token – spusť: python sim_runner.py setup")
-        self.url = cfg["webapp_url"]
-        self.token = cfg["token"]
+                sys.exit("Chybí secret ES_API_TOKEN – repo → Settings → Secrets and variables → Actions → New repository secret.")
+            sys.exit("Není nastavený token API – spusť: python sim_runner.py setup")
+        self.cfg = cfg
+        self.es = sim_results.EsApi(cfg.get("api_url") or sim_results.DEFAULT_API_URL, cfg["api_token"])
+        self.url = self.es.url
 
-    RETRY_STATUS = (404, 429, 500, 502, 503, 504)   # Google občas vrátí 404 z googleusercontent echo nebo 5xx – zkusit znovu
-
-    def _request(self, action, method="get", params=None, body=None, timeout=90, tries=4):
-        """GET/POST na web app s opakováním: Apps Script odpovídá přes 302 na script.googleusercontent.com,
-        které občas vrátí 404 / 5xx / HTML stránku Googlu místo výstupu skriptu. Vrací parsovaný JSON
-        (i s ok:false – to řeší volající)."""
+    def _request(self, method, path, params=None, body=None, timeout=120, tries=3):
         last = ""
         for attempt in range(tries):
-            if method == "post":
-                r = requests.post(self.url, data=body, headers={"Content-Type": "text/plain;charset=utf-8"}, timeout=timeout, allow_redirects=True)
-            else:
-                r = requests.get(self.url, params=params, timeout=timeout, allow_redirects=True)
-            text = r.text
-            if r.status_code < 400 and not text.lstrip().startswith("<"):
-                try:
-                    return r.json()
-                except ValueError:
-                    last = f"HTTP {r.status_code}, ne JSON: {text[:160]}"
-            elif r.status_code in self.RETRY_STATUS or text.lstrip().startswith("<"):
-                plain = re.sub(r"<script.*?</script>|<style.*?</style>", " ", text, flags=re.S)
-                plain = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", plain)).strip()
-                last = f"HTTP {r.status_code} {plain[:160]}"
-            else:
-                r.raise_for_status()
+            try:
+                if method == "post":
+                    r = requests.post(self.url + path, headers=self.es._headers(), params=params,
+                                      data=json.dumps(body, ensure_ascii=False).encode("utf-8"), timeout=timeout)
+                else:
+                    r = requests.get(self.url + path, headers=self.es._headers(), params=params, timeout=timeout)
+                if r.status_code in self.RETRY_STATUS:
+                    last = f"HTTP {r.status_code} {r.text[:120]}"
+                else:
+                    try:
+                        data = r.json()
+                    except ValueError:
+                        raise RuntimeError(f"API {path}: HTTP {r.status_code}, ne JSON: {r.text[:160]}")
+                    if r.status_code >= 400 or not data.get("ok"):
+                        raise RuntimeError(f"API {path}: HTTP {r.status_code} {data.get('error') or data.get('message') or data}")
+                    return data
+            except requests.RequestException as err:
+                last = str(err)[:160]
             if attempt < tries - 1:
                 wait = 3 * (attempt + 1)
-                log(f"   web app ({action}): {last[:90]} – pokus {attempt + 1}/{tries}, čekám {wait} s")
+                log(f"   API ({path}): {last[:90]} – pokus {attempt + 1}/{tries}, čekám {wait} s")
                 time.sleep(wait)
-        raise RuntimeError(f"Web app neodpověděl správně ani po {tries} pokusech ({action}): {last}")
+        raise RuntimeError(f"API neodpovědělo ani po {tries} pokusech ({path}): {last}")
 
-    def call(self, action, **params):
-        q = {"p": "simapi", "token": self.token, "action": action}
-        q.update({k: v for k, v in params.items() if v is not None})
-        data = self._request(action, "get", params=q)
-        if not data.get("ok"):
-            raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
-        return data
+    def _status(self, **body):
+        return self._request("post", "/api/sims/queue/status", body=body)
 
     def queue(self):
-        return self.call("queue")["rows"]
+        return self._request("get", "/api/sims/queue")["rows"]
 
     def running(self, row, character, url, kind="raid"):
-        return self.call("running", row=row, character=character, url=url, kind=kind)
+        return self._status(row=row, character=character, action="running", kind=kind, url=url)
 
-    def done(self, row, character, url, kind="raid"):
-        """kind: raid | mplus | raidhc | topgear (Raidbots) | qe (QE Live – raid i dungeony v jednom reportu)."""
-        return self._request("done", "get", params={"p": "simapi", "token": self.token, "action": "done",
-                                                    "row": row, "character": character, "url": url, "kind": kind}, timeout=120)
+    def done(self, row, url, kind="raid"):
+        """row = dict z queue() (potřebuje row/character/spec). Uloží výsledky do databáze (sim_results.store_report),
+        u raidu zkusí wowaudit a nahlásí report frontě. Vrací {ok, message, complete, notify}.
+        kind: raid | mplus | raidhc | topgear | topgear-skip (Raidbots) | qe (QE Live – raid i dungeony v jednom)."""
+        character, spec = row["character"], row.get("spec", "")
+        if kind == "topgear-skip":
+            try:
+                self.es.delete(character, spec, "topgear")
+            except Exception as err:  # noqa: BLE001
+                log(f"   ({character}: starý Top Gear řádek se nesmazal: {err})")
+            return self._status(row=row["row"], character=character, action="done", kind=kind, url="")
+        res = sim_results.store_report(self.es, character, spec, url, kind)
+        note = res["message"] if res["ok"] else "⚠ výsledky se nenačetly: " + res["message"]
+        if res["ok"] and kind in ("raid", "qe"):
+            link = sim_results.parse_report_link(url)
+            wa = wowaudit_upload(character, link["id"]) if link and link["kind"] == "raidbots" else None
+            if wa:
+                note += " · " + wa
+        out = self._status(row=row["row"], character=character, action="done", kind=kind, url=url, note=note)
+        out["ok"] = bool(out.get("ok")) and res["ok"]
+        if not res["ok"]:
+            out["message"] = f"⚠ {character} [{kind_label(kind)}]: {res['message']}"
+        return out
 
     def error(self, row, character, note):
-        return self.call("error", row=row, character=character, note=note[:500])
+        return self._status(row=row, character=character, action="error", note=note[:500])
 
     def notified(self, row, character, result):
         """Výsledek Discord zprávy poslané runnerem (nahradí „⏳“ v poznámce řádku)."""
-        return self.call("notified", row=row, character=character, result=result[:160])
-
-    def post(self, action, **body):
-        """POST JSON na web app (doPost, p=simapi) – pro větší data (seznam Discord kanálů)."""
-        body.update({"p": "simapi", "token": self.token, "action": action})
-        data = self._request(action, "post", body=json.dumps(body).encode("utf-8"), timeout=120)
-        if not data.get("ok"):
-            raise RuntimeError(f"simapi/{action}: {data.get('error') or data.get('message') or data}")
-        return data
+        return self._status(row=row, character=character, action="notified", result=result[:160])
 
     def note(self, row, character, note):
-        return self.call("note", row=row, character=character, note=note[:500])
+        return self._status(row=row, character=character, action="note", note=note[:500])
+
+    def post(self, action, **body):
+        if action == "rooms":
+            return self._request("post", "/api/discord/rooms", body=body)
+        raise RuntimeError(f"neznámá action {action}")
+
+    def call(self, action, **params):
+        if action == "notify_test":
+            return self._request("get", "/api/sims/notify-test", params=params)
+        raise RuntimeError(f"neznámá action {action}")
 
 
 # --------------------------------------------------------------- Raidbots ----
@@ -1130,7 +1169,7 @@ def discord_post(channel_id, text, user_id=""):
 
 
 def handle_notify(api, row, res):
-    """Apps Script u `done` vrátí notify={channelId,userId,text,player}, když má zprávu poslat bot z runneru."""
+    """Worker u `done` vrátí notify={channelId,userId,text,player}, když má zprávu poslat bot z runneru."""
     n = res.get("notify") if isinstance(res, dict) else None
     if not n or not n.get("channelId"):
         return
@@ -1149,7 +1188,7 @@ def handle_notify(api, row, res):
 
 
 def cmd_discord_rooms(cfg):
-    """Bot vypíše kanály serveru a pošle je Apps Scriptu, který naplní list "Discord" (místnosti hráčů)."""
+    """Bot vypíše kanály serveru a pošle je Workeru, který naplní tabulku discord_rooms (místnosti hráčů)."""
     guild = os.environ.get("DISCORD_GUILD_ID", "").strip()
     if not guild:
         sys.exit("chybí env DISCORD_GUILD_ID (ID Discord serveru)")
@@ -1169,29 +1208,29 @@ def cmd_discord_rooms(cfg):
                      "permission_overwrites": [{"id": o.get("id"), "type": o.get("type"), "allow": o.get("allow")}
                                                for o in (c.get("permission_overwrites") or []) if int(o.get("type", 0)) == 1]})
     log(f"Discord: {len(slim)} kanálů na serveru {guild}, bot {me.json().get('username')}")
-    api = SheetApi(cfg)
+    api = QueueApi(cfg)
     res = api.post("rooms", guild=guild, me=me.json().get("id", ""), channels=slim)
     print(res.get("message") or res)
 
 
 def cmd_discord_test(cfg, character):
-    """Testovací Discord zpráva pro postavu: Apps Script ji připraví (notify_test), bot z runneru pošle."""
+    """Testovací Discord zpráva pro postavu: Worker ji připraví (notify-test), bot z runneru pošle."""
     if not character:
         sys.exit("chybí --character (nebo env DISCORD_TEST_CHARACTER)")
-    api = SheetApi(cfg)
+    api = QueueApi(cfg)
     res = api.call("notify_test", character=character)
     n = res.get("notify")
     tgt = res.get("target") or {}
     log(f"{character} → hráč {tgt.get('player') or '?'}; " + (res.get("note") or ""))
     if not n or not n.get("channelId"):
-        sys.exit("Apps Script nevrátil zprávu pro bota – hráč nemá v listu Discord Kanál URL (nebo má webhook, pak se poslalo přímo).")
+        sys.exit("Worker nevrátil zprávu pro bota – hráč nemá v databázi místnost (Kanál URL), nebo má webhook a poslalo se přímo.")
     discord_post(n["channelId"], n.get("text") or f"Test: {character}", n.get("userId") or "")
     log(f"Testovací zpráva poslána do místnosti {n.get('player') or n['channelId']}.")
 
 
 def cmd_pending(cfg):
     """Jen spočítá frontu (GitHub Actions: přeskočí instalaci Chromia, když není co dělat)."""
-    api = SheetApi(cfg)
+    api = QueueApi(cfg)
     rows = api.queue()
     n = len(rows)
     print(f"Ve frontě: {n}" + (": " + ", ".join(f"{r['character']} ({r['spec']})" for r in rows) if n else ""))
@@ -1203,31 +1242,6 @@ def cmd_pending(cfg):
 
 def rkey(row):
     return f"{row['character']} (ř.{row['row']})"
-
-
-_db_warned = False
-
-
-def store_db(cfg, row, url, kind):
-    """Po hotovém simu uložit výsledky i do databáze (Worker API, sim_results.py). Bez tokenu jen upozorní;
-    chyba nikdy nezastaví běh – Sheets zápis (api.done) proběhl nezávisle."""
-    global _db_warned
-    if not cfg.get("api_token"):
-        if not _db_warned:
-            log("   DB: ES_API_TOKEN / api_token není nastavený – výsledky jdou jen do Sheets")
-            _db_warned = True
-        return
-    es = sim_results.EsApi(cfg["api_url"], cfg["api_token"])
-    tag = f"{row['character']} [{kind_label(kind)}]"
-    if kind == "topgear-skip":
-        try:
-            es.delete(row["character"], row["spec"], "topgear")
-            log(f"   {tag}: DB – starý Top Gear řádek smazán (nic není upgrade)")
-        except Exception as err:  # noqa: BLE001
-            log(f"   ⚠ {tag}: DB smazání Top Gearu selhalo: {err}")
-        return
-    res = sim_results.store_report(es, row["character"], row["spec"], url, kind)
-    log(f"   {tag}: DB {'✅ ' + res['message'] if res['ok'] else '⚠ ' + res['message']}")
 
 
 def fail_row(api, row, msg):
@@ -1253,9 +1267,8 @@ def qe_row(rb, api, row, dry_run):
             log(f"   {character}: dry-run QE Live ({qe_spec}) – import OK, GO! nekliknuto")
             return "dry"
         log(f"   {character}: QE Live report {url}")
-        res = api.done(row["row"], character, url, "qe")
+        res = api.done(row, url, "qe")
         log(f"   {character}: {res.get('message') or res}")
-        store_db(rb.cfg, row, url, "qe")
         return "done" if res.get("ok") else "error"
     except Exception as err:  # noqa: BLE001
         rb.screenshot(page, f"error_qe_{strip_accents(character)}")
@@ -1312,12 +1325,11 @@ def submit_topgear(rb, api, row, reports, dry_run):
         log(f"   {tag}: žádný item není upgrade – Top Gear není potřeba")
         try:
             api.note(row["row"], character, "Top Gear: žádný kandidát (nic není upgrade)")
-            res = api.done(row["row"], character, "", "topgear-skip")
+            res = api.done(row, "", "topgear-skip")
             handle_notify(api, row, res)
             log(f"   {tag}: {res.get('message') or res}")
         except Exception as err:  # noqa: BLE001
             log(f"   (poznámka se nezapsala: {err})")
-        store_db(rb.cfg, row, "", "topgear-skip")
         return None
     log(f"   {tag}: kandidáti: " + ", ".join(f"{c['name']} ({kind_label(c['kind'])} {c['gain']:+.2f}%{', zbraň' if c['protected'] else ''})" for c in cands if not c.get("companion")))
     page = rb.new_tab()
@@ -1354,20 +1366,19 @@ def finish_sim(rb, api, sim):
     tag = f"{character} [{kind_label(sim['kind'])}]"
     log(f"   {tag}: sim hotový, zapisuji výsledky…")
     try:
-        res = api.done(row["row"], character, sim["url"], sim["kind"])
+        res = api.done(row, sim["url"], sim["kind"])
         log(f"   {tag}: {res.get('message') or res}")
         ok = bool(res.get("ok"))
         handle_notify(api, row, res)
     except Exception as err:  # noqa: BLE001
         log(f"   ⚠ {character}: upload selhal: {err}")
         ok = False
-    store_db(rb.cfg, row, sim["url"], sim["kind"])
     sim["page"].close()
     return "done" if ok else "error"
 
 
 def cmd_run(cfg, args):
-    api = SheetApi(cfg)
+    api = QueueApi(cfg)
     rows = api.queue()
     if args.row:
         rows = [r for r in rows if r["row"] == args.row]

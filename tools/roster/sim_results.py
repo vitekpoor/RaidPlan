@@ -12,6 +12,7 @@ Použití (v tools/roster/):
         kind: raid | mplus | raidhc | topgear (Raidbots) | qe (QE Live = raid i M+ z jednoho reportu)
   python sim_results.py rebuild [--character Akka] [--origin topgear]   # znovu stáhne a rozparsuje uložené reporty (čas simu zůstává)
   python sim_results.py import-sheet                 # jednorázově: list "Sim výsledky" (gviz CSV) → databáze
+  python sim_results.py import-extras                # jednorázově: listy "Vault", "Cresty", "Discord" → databáze
   python sim_results.py show [--character Akka]      # výpis, co v databázi je
   python sim_results.py migrate                      # založí tabulky (POST /api/admin/migrate)
 
@@ -374,6 +375,12 @@ class EsApi:
         return self._check(requests.post(f"{self.url}/api/sims/results", headers=self._headers(),
                                          data=json.dumps({"reports": reports}, ensure_ascii=False).encode("utf-8"), timeout=120), "store")
 
+    def import_extras(self, body):
+        """body: {vault: [...], crests: [...], discord: [...]} – každý uvedený seznam nahradí svou tabulku."""
+        self.require_token()
+        return self._check(requests.post(f"{self.url}/api/sims/extras", headers=self._headers(),
+                                         data=json.dumps(body, ensure_ascii=False).encode("utf-8"), timeout=120), "import-extras")
+
     def delete(self, character, spec=None, origin=None):
         self.require_token()
         params = {"character": character}
@@ -532,6 +539,30 @@ def cmd_import_sheet(api, sheet_id=SHEET_ID, dry_run=False):
     log(f"Hotovo: {ok} reportů uloženo")
 
 
+def _sheet_csv(sheet_id, tab):
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&headers=1&sheet={requests.utils.quote(tab)}"
+    r = requests.get(url, timeout=120)
+    r.raise_for_status()
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    return [{k.strip().lower(): (v or "").strip() for k, v in row.items() if k} for row in rows]
+
+
+def cmd_import_extras(api, sheet_id=SHEET_ID):
+    """Jednorázový přenos listů Vault (Postava | Čas | Item ID | Item | Slot | ilvl | Bonus ID), Cresty
+    (Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth | Server | Region) a Discord
+    (Hráč | Kanál URL | Webhook URL | Discord user ID). Každý list nahradí celou tabulku."""
+    vault = [{"character": r["postava"], "time": sheet_time_to_iso(r.get("čas")), "itemId": _num(r.get("item id")), "item": r.get("item", ""),
+              "slot": r.get("slot", ""), "ilvl": _num(r.get("ilvl")), "bonusId": r.get("bonus id", "")}
+             for r in _sheet_csv(sheet_id, "Vault") if r.get("postava") and _num(r.get("item id"))]
+    crests = [{"character": r["postava"], "time": sheet_time_to_iso(r.get("čas")), "adventurer": _num(r.get("adventurer")), "veteran": _num(r.get("veteran")),
+               "champion": _num(r.get("champion")), "hero": _num(r.get("hero")), "myth": _num(r.get("myth")), "server": r.get("server", ""), "region": r.get("region", "")}
+              for r in _sheet_csv(sheet_id, "Cresty") if r.get("postava")]
+    discord = [{"player": r["hráč"], "channelUrl": r.get("kanál url", ""), "webhookUrl": r.get("webhook url", ""), "userId": r.get("discord user id", "")}
+               for r in _sheet_csv(sheet_id, "Discord") if r.get("hráč")]
+    res = api.import_extras({"vault": vault, "crests": crests, "discord": discord})
+    log(f"Import: vault {len(vault)} řádků, cresty {len(crests)} postav, Discord {len(discord)} hráčů → {res.get('imported')}")
+
+
 def cmd_show(api, character=None):
     data = api.results(character)
     reps = data.get("reports") or []
@@ -547,7 +578,7 @@ def cmd_show(api, character=None):
 
 def main():
     ap = argparse.ArgumentParser(description="Výsledky simů → databáze (Worker API)")
-    ap.add_argument("command", choices=["store", "rebuild", "import-sheet", "show", "migrate", "delete"])
+    ap.add_argument("command", choices=["store", "rebuild", "import-sheet", "import-extras", "show", "migrate", "delete"])
     ap.add_argument("--character")
     ap.add_argument("--spec")
     ap.add_argument("--url", help="(store) odkaz na Raidbots / QE Live report")
@@ -569,6 +600,8 @@ def main():
         cmd_rebuild(api, args.character, args.origin)
     elif args.command == "import-sheet":
         cmd_import_sheet(api, args.sheet_id, args.dry_run)
+    elif args.command == "import-extras":
+        cmd_import_extras(api, args.sheet_id)
     elif args.command == "show":
         cmd_show(api, args.character)
     elif args.command == "delete":

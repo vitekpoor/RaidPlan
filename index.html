@@ -96,8 +96,8 @@
     <h4><em>SimC</em> string</h4>
   </div>
   <p class="steps">Addon <a href="https://www.curseforge.com/wow/addons/simulationcraft" target="_blank" rel="noopener">SimulationCraft</a> → ve hře otevři <b>Great Vault</b>, pak <code>/simc</code> → <code>Ctrl+A</code>, <code>Ctrl+C</code> → vložit sem. Proběhne raidový i Mythic+ Droptimizer (Myth 6/6), výsledek je v <a href="loot.html">Simech</a> – i s doporučením, na kterého bosse se vyplatí bonus roll (počítá se proti HC raidu, kde bonus roll dá mythic item max 334), a s otevřeným vaultem i s porovnáním, jestli vzít item z vaultu, nebo si roll nechat. Export bez vaultu tvůj starý vault smaže. Každý spec (např. affliction / destruction) se drží zvlášť.</p>
-  <div class="frame"><iframe data-src="__WEBAPP__?p=sim" title="Formulář SimC" loading="lazy"></iframe></div>
-  <p class="framenote"><a href="__WEBAPP__?p=sim" target="_blank" rel="noopener">Otevřít formulář ve vlastním okně ↗</a></p>
+  <div class="frame"><iframe data-src="sim.html" title="Formulář SimC" loading="lazy"></iframe></div>
+  <p class="framenote"><a href="sim.html">Otevřít formulář ve vlastním okně ↗</a></p>
   <form class="leader" id="runsims">
     <span>Raid leader:</span>
     <input type="password" id="runpw" placeholder="heslo" autocomplete="current-password" required>
@@ -116,7 +116,9 @@
 
 <script>
 (function () {
-  var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";
+  var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";   // formulář absence (Apps Script)
+  // Worker API (fronta simů): na workers.dev / vlastní doméně relativně, z GitHub Pages absolutně
+  var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
   document.querySelectorAll("iframe[data-src], a[href^='__WEBAPP__']").forEach(function (el) {
     var attr = el.tagName === "IFRAME" ? "data-src" : "href";
     el.setAttribute(attr, el.getAttribute(attr).replace("__WEBAPP__", WEBAPP));
@@ -139,16 +141,16 @@
   window.addEventListener("hashchange", route);
   route();
 
-  // raid leader: POST { p: "runsims", pw } -> web app -> GitHub Actions workflow_dispatch
+  // raid leader: POST { pw } -> Worker /api/sims/run (secret RUN_PASSWORD) -> GitHub Actions workflow_dispatch
   var form = document.getElementById("runsims");
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
     var btn = form.querySelector("button"), msg = document.getElementById("runmsg"), pw = document.getElementById("runpw");
     btn.disabled = true; msg.textContent = "Spouštím…";
-    fetch(WEBAPP, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ p: "runsims", pw: pw.value }), redirect: "follow" })
+    fetch(API_BASE + "/api/sims/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pw: pw.value, reason: "hub" }) })
       .then(function (r) { return r.json(); })
       .then(function (j) { msg.textContent = (j.ok ? "✅ " : "⚠ ") + (j.message || ""); if (j.ok) pw.value = ""; })
-      .catch(function (err) { msg.textContent = "⚠ Web app neodpověděl: " + err.message; })
+      .catch(function (err) { msg.textContent = "⚠ API neodpovědělo: " + err.message; })
       .then(function () { btn.disabled = false; });
   });
 })();

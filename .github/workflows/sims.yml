@@ -1,15 +1,14 @@
 name: Sim queue (Raidbots / QE Live)
 
-# Zpracuje frontu "Sim fronta" z Google Sheets: pro každou postavu pustí
-# Raidbots Droptimizer (DPS/tank) nebo QE Live (healer) a výsledky nahlásí
-# zpět do tabulky (list "Sim výsledky" -> stránka Simy). Stejný skript jako
-# lokálně: tools/roster/sim_runner.py.
+# Zpracuje frontu simů z databáze (Worker API eternal-shadows, D1): pro každou
+# postavu pustí Raidbots Droptimizer (DPS/tank) nebo QE Live (healer), výsledky
+# uloží do databáze (stránka Simy) a frontě nahlásí hotový report. Stejný skript
+# jako lokálně: tools/roster/sim_runner.py. Spouští ho Worker po každém odeslání
+# formuláře (workflow_dispatch, secret GITHUB_TOKEN ve Workeru) a hodinový cron.
 #
 # Secrets (Settings -> Secrets and variables -> Actions):
-#   SIM_WEBAPP_URL          .../exec adresa Apps Script web appu
-#   SIM_API_TOKEN           token (menu Simy -> Token pro sim_runner.py…)
-#   ES_API_TOKEN            token Worker API (= secret API_TOKEN Workeru eternal-shadows) – výsledky simů
-#                           do databáze D1 (tools/roster/sim_results.py); bez něj jdou jen do Sheets
+#   ES_API_TOKEN            token Worker API (= secret API_TOKEN Workeru eternal-shadows) – fronta i výsledky
+#   WOWAUDIT_API_KEY        (volitelné) API klíč wowaudit týmu – raidový report se zkusí nahrát i tam
 #   RAIDBOTS_STORAGE_STATE  obsah souboru z `python sim_runner.py login --export`
 #                           (přihlášení do Raidbots Premium; bez něj běží jako free účet)
 #   RAIDBOTS_EMAIL          e-mail + heslo účtu Raidbots (https://www.raidbots.com/auth) –
@@ -54,9 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 110
     env:
-      SIM_WEBAPP_URL: ${{ secrets.SIM_WEBAPP_URL }}
-      SIM_API_TOKEN: ${{ secrets.SIM_API_TOKEN }}
       ES_API_TOKEN: ${{ secrets.ES_API_TOKEN }}
+      WOWAUDIT_API_KEY: ${{ secrets.WOWAUDIT_API_KEY }}
       PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4

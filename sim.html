@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<!--
+  sim.html - formulář "Sim pro loot": hráč vloží SimC string (/simc), Worker (POST /api/sims/submit,
+  worker/queue.js) ho ověří proti Rosteru, uloží do fronty (D1) a spustí runner v GitHub Actions.
+  Nahrazuje formulář z Apps Scriptu (?p=sim). Pod formulářem je stav fronty (GET /api/sims/status).
+  build.bat kopíruje do kořene repa jako sim.html (cesty assets/ -> web/assets/).
+-->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sim pro loot – Eternal Shadows</title>
+<link rel="icon" href="web/assets/images/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="web/assets/images/favicon-32.png">
+<link rel="apple-touch-icon" href="web/assets/images/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="web/assets/css/site.css">
+<style>
+  .simcard { max-width: 760px; }
+  .simcard textarea { width: 100%; min-height: 15rem; font-size: 12.5px; padding: 10px 12px; margin-top: 10px; background: var(--ground); color: var(--ink);
+                      border: 1px solid var(--line); border-radius: var(--radius-sm); font-family: Consolas, "Cascadia Mono", monospace; resize: vertical; }
+  .simcard textarea:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+  #detected { color: var(--muted); font-size: 13.5px; margin-top: 8px; min-height: 1.3em; }
+  #detected b { color: var(--ink-strong); }
+  #detected .warn { color: var(--dps); }
+  .simcard .btn { margin-top: 14px; min-width: 200px; }
+  #status { margin-top: 14px; font-weight: 600; min-height: 1.4em; white-space: pre-line; }
+  #status.ok { color: var(--accent); } #status.err { color: var(--dps); }
+  .how { background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 14px; margin-top: 22px; }
+  .how ol { margin: 6px 0 0; padding-left: 20px; } .how li { margin-bottom: 4px; }
+  .queue { margin-top: 26px; }
+  .queue table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .queue th, .queue td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .queue th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; }
+  .queue td.note { color: var(--muted); font-size: 12.5px; max-width: 420px; overflow-wrap: anywhere; }
+  .queue .st { white-space: nowrap; }
+  .queue .st.pending { color: #e6c86e; } .queue .st.running { color: var(--tank); } .queue .st.done { color: var(--accent); } .queue .st.error { color: var(--dps); }
+  .queue .meta { color: var(--muted); font-size: 12.5px; margin: 4px 0 10px; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+<div class="container">
+<nav class="main-nav">
+  <a href="index.html" class="logo"><span class="mark" aria-hidden="true"></span>Eternal <em>Shadows</em></a>
+  <ul class="nav">
+    <li><a href="index.html#omluvenky">Omluvenky</a></li>
+    <li><a href="sim.html" class="active">SimC</a></li>
+    <li><a href="loot.html">Simy</a></li>
+    <li><a href="raid.html">Raid taktiky</a></li>
+    <li><a href="flopik.html">Flopik</a></li>
+    <li class="ext"><a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Tabulka</a></li>
+    <li class="ext"><a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" target="_blank" rel="noopener">wowaudit</a></li>
+  </ul>
+</nav>
+</div>
+</header>
+
+<div class="container">
+<div class="page-content">
+<div class="heading-section">
+  <h4><em>Sim</em> pro loot</h4>
+</div>
+
+<div class="simcard">
+<p class="steps">Vlož sem celý text z <code>/simc</code>. Postavu poznáme automaticky (musí být v rosteru guildy), sim proběhne sám (raid i Mythic+ Droptimizer / QE Live, itemy jako plně upgradnuté Myth 6/6) a upgrady uvidíš na stránce <a href="loot.html">Simy</a>. Doporučení bonus rollu (počítá se proti HC raidu, max 334) uvidíš vždy; když před <code>/simc</code> otevřeš <b>Great Vault</b>, uvidíš i porovnání vaultu s bonus rollem. Export bez vaultu tvůj starý vault na stránce smaže. Každý spec (např. affliction / destruction) se drží zvlášť – sim jiného specu ten předchozí nepřepíše.</p>
+<textarea id="simc" placeholder="Sem vlož SimC string (Ctrl+V)…" spellcheck="false" autofocus></textarea>
+<div id="detected"></div>
+<button id="send" class="btn" type="button">Odeslat</button>
+<div id="status"></div>
+
+<div class="how"><b>Jak získat SimC string</b>
+<ol><li>Nainstaluj addon <b>SimulationCraft</b> (CurseForge / Wago).</li>
+<li>Otevři <b>Great Vault</b> (klikni na truhlu v hlavním městě) – export pak obsahuje i itemy, které ti vault nabízí (bez toho se starý vault smaže).</li>
+<li>Ve hře na postavě, se kterou raiduješ (v raidovém gearu), napiš <code>/simc</code>.</li>
+<li>V okně, které se otevře: <code>Ctrl+A</code>, <code>Ctrl+C</code> – a sem <code>Ctrl+V</code>.</li>
+<li>Po výměně gearu pošli nový string – starý nevyřízený se automaticky nahradí.</li></ol></div>
+
+<div class="queue" id="queue">
+  <div class="heading-section"><h4><em>Fronta</em> simů</h4></div>
+  <div class="meta" id="qmeta">Načítám…</div>
+  <table><thead><tr><th>Postava</th><th>Spec</th><th>Stav</th><th>Odesláno</th><th>Poznámka</th></tr></thead><tbody id="qbody"></tbody></table>
+</div>
+</div>
+
+</div><!-- /.page-content -->
+</div><!-- /.container -->
+
+<footer>
+  <p>Eternal Shadows · Burning Blade EU</p>
+  <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
+</footer>
+
+<script>
+(function () {
+  // Worker API: na workers.dev / vlastní doméně relativně, z GitHub Pages absolutně (CORS *)
+  var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
+  var $ = function (id) { return document.getElementById(id); };
+  var STATUS = { pending: "⏳ čeká na sim", running: "🔄 simuluje", done: "✅ hotovo", error: "⚠ chyba", dropped: "❌ zahozeno" };
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function show(ok, msg) { var s = $("status"); s.className = ok ? "ok" : "err"; s.textContent = msg; }
+  function fmt(iso) { var d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.getDate() + "." + (d.getMonth() + 1) + ". " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0") : ""; }
+
+  $("simc").addEventListener("input", function () {
+    var m = /^(deathknight|demonhunter|druid|evoker|hunter|mage|monk|paladin|priest|rogue|shaman|warlock|warrior)="([^"\n]+)"/mi.exec(this.value);
+    var sp = /^spec=([a-z_]+)/mi.exec(this.value);
+    var d = $("detected");
+    if (!m) { d.textContent = this.value.trim() ? "⚠ Nevypadá to jako export z /simc." : ""; return; }
+    var vb = /###\s*Weekly Reward Choices([\s\S]*?)(?:###\s*End of Weekly Reward Choices|$)/i.exec(this.value);
+    var vn = vb ? (vb[1].match(/^\s*#?\s*[a-z_0-9]+=,?id=\d+/gmi) || []).length : -1;
+    d.innerHTML = "Postava: <b>" + esc(m[2]) + "</b>" + (sp ? " · " + esc(sp[1]) : "") + " · " + esc(m[1]) +
+      (vn < 0 ? ' · <span class="warn">bez vaultu</span> (starý vault se smaže – otevři Great Vault a udělej /simc znovu)' : " · vault: " + vn + " itemů");
+  });
+
+  $("send").addEventListener("click", function () {
+    var simc = $("simc").value;
+    if (!simc.trim()) return show(false, "⚠ Vlož SimC string.");
+    $("send").disabled = true; show(true, "⏳ Odesílám…");
+    fetch(API_BASE + "/api/sims/submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ simc: simc }) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        show(!!res.ok, res.message || (res.ok ? "✅ Uloženo." : "⚠ " + (res.error || "chyba")));
+        if (res.ok) { $("simc").value = ""; $("detected").textContent = ""; loadQueue(); }
+      })
+      .catch(function (err) { show(false, "⚠ Chyba spojení: " + err.message); })
+      .then(function () { $("send").disabled = false; });
+  });
+
+  function loadQueue() {
+    fetch(API_BASE + "/api/sims/status", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "chyba");
+      var rows = (d.rows || []).slice(0, 25);
+      $("qmeta").textContent = d.pending + " čeká · " + d.running + " simuluje" + (d.lastDispatch ? " · runner naposledy spuštěn " + fmt(d.lastDispatch) : "") +
+        " · simy běží automaticky (po odeslání a každou hodinu)";
+      $("qbody").innerHTML = rows.map(function (r) {
+        var note = String(r.note || "").split(" | ").filter(function (n) { return !/^\S+ 🔄 https?:/.test(n.trim()); }).join(" · ");
+        return "<tr><td>" + esc(r.character) + "</td><td>" + esc(r.spec) + "</td><td class=\"st " + esc(r.status) + "\">" + esc(STATUS[r.status] || r.status) + "</td>" +
+          "<td>" + esc(fmt(r.created_at)) + "</td><td class=\"note\">" + esc(note) + "</td></tr>";
+      }).join("") || '<tr><td colspan="5" class="note">Fronta je prázdná.</td></tr>';
+    }).catch(function (err) { $("qmeta").textContent = "Stav fronty se nenačetl: " + err.message; });
+  }
+  loadQueue();
+  setInterval(loadQueue, 60000);
+})();
+</script>
+</body>
+</html>
