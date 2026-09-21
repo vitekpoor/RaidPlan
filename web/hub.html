@@ -2,7 +2,8 @@
 <!-- ZDROJ hlavní stránky (rozcestník). build.bat ji kopíruje do kořene repa jako
      index.html a přepíše cesty assets/ -> web/assets/. Vzhled: assets/css/site.css
      (odvozeno ze šablony TemplateMo 579 Cyborg Gaming). Formuláře Omluvenky a SimC
-     jsou vložené (iframe) z Apps Script web appu – ta má setXFrameOptionsMode(ALLOWALL). -->
+     jsou přímo tady a posílají data na Worker API (worker/absence.js, worker/queue.js),
+     který je ukládá do databáze D1 a u SimC spouští runner v GitHub Actions. -->
 <html lang="cs">
 <head>
 <meta charset="utf-8">
@@ -30,6 +31,36 @@
 .leader input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 9px 16px; font: inherit; width: 11rem; }
 .leader input:focus { border-color: var(--accent); outline: 0; }
 .leader .btn { padding: 9px 22px; }
+/* formuláře */
+.form { max-width: 760px; }
+.form .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 12px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.form input, .form select, .form textarea { background: var(--ground); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 12px; font: inherit; font-size: 14px; }
+.form input:focus, .form select:focus, .form textarea:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.form textarea { width: 100%; min-height: 14rem; font-size: 12.5px; font-family: Consolas, "Cascadia Mono", monospace; resize: vertical; margin-top: 8px; }
+.form .btn { margin-top: 12px; min-width: 180px; }
+.form .status { margin-top: 12px; font-weight: 600; min-height: 1.4em; white-space: pre-line; }
+.form .status.ok { color: var(--accent); } .form .status.err { color: var(--dps); }
+.form .detected { color: var(--muted); font-size: 13.5px; margin-top: 8px; min-height: 1.3em; }
+.form .detected b { color: var(--ink-strong); } .form .detected .warn { color: var(--dps); }
+.how { background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 16px; font-size: 14px; margin-top: 22px; }
+.how ol { margin: 6px 0 0; padding-left: 20px; } .how li { margin-bottom: 4px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg label { flex-direction: row; cursor: pointer; padding: 8px 14px; color: var(--muted); font-size: 14px; gap: 6px; align-items: center; }
+.seg label:has(input:checked) { background: var(--accent-soft); color: var(--ink-strong); }
+.seg input { display: none; }
+/* přehledy */
+.overview { margin-top: 26px; overflow-x: auto; }
+.overview table { border-collapse: collapse; font-size: 13.5px; }
+.overview th, .overview td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+.overview th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+.overview .meta { color: var(--muted); font-size: 12.5px; margin: 4px 0 10px; }
+.overview .note { color: var(--muted); font-size: 12.5px; white-space: normal; max-width: 420px; overflow-wrap: anywhere; }
+.mark { display: inline-block; padding: 1px 8px; border-radius: 4px; font-weight: 600; font-size: 12.5px; }
+.mark.absent { background: #E06666; color: #111; } .mark.late { background: #F6B26B; color: #111; }
+.mini { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 4px; padding: 2px 7px; cursor: pointer; font-size: 12px; }
+.mini:hover { color: var(--dps); border-color: var(--dps); }
+.st.pending { color: #e6c86e; } .st.running { color: var(--tank); } .st.done { color: var(--accent); } .st.error { color: var(--dps); }
 </style>
 </head>
 <body>
@@ -42,6 +73,7 @@
     <li><a href="#omluvenky" data-sec="omluvenky">Omluvenky</a></li>
     <li><a href="#simc" data-sec="simc">SimC</a></li>
     <li><a href="loot.html">Simy</a></li>
+    <li><a href="roster.html">Roster</a></li>
     <li><a href="raid.html">Raid taktiky</a></li>
     <li><a href="flopik.html">Flopik</a></li>
     <li class="ext"><a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Tabulka</a></li>
@@ -67,8 +99,9 @@
     <a class="tile" href="#omluvenky"><h4><span class="ico" aria-hidden="true">◷</span>Omluvenky</h4><p>Nahlásit absenci nebo pozdní příchod na raid.</p><span class="go">Vyplnit formulář →</span></a>
     <a class="tile" href="#simc"><h4><span class="ico" aria-hidden="true">⌁</span>SimC</h4><p>Poslat SimC string – Droptimizer proběhne sám.</p><span class="go">Poslat string →</span></a>
     <a class="tile" href="loot.html"><h4><span class="ico" aria-hidden="true">↗</span>Simy</h4><p>Upgrady podle hráče, bosse a itemu.</p><span class="go">Otevřít přehled →</span></a>
+    <a class="tile" href="roster.html"><h4><span class="ico" aria-hidden="true">☷</span>Roster</h4><p>Hráči, postavy, classy a role.</p><span class="go">Otevřít roster →</span></a>
     <a class="tile" href="raid.html"><h4><span class="ico" aria-hidden="true">✦</span>Raid taktiky</h4><p>Venomous Abyss a lair boss Nymrissa.</p><span class="go">Číst taktiky →</span></a>
-    <a class="tile" href="flopik.html"><h4><span class="ico" aria-hidden="true">☠</span>Flopik</h4><p>Kdo co flopnul – faily po pullech z Warcraft Logs.</p><span class="go">Otevřít Flopik →</span></a>
+    <a class="tile" href="flopik.html"><h4><span class="ico" aria-hidden="true">☠</span>Flopik</h4><p>Faily po pullech z Warcraft Logs.</p><span class="go">Otevřít Flopik →</span></a>
   </div>
 
   <div class="heading-section">
@@ -85,19 +118,48 @@
 <section class="section" id="sec-omluvenky">
   <div class="heading-section">
     <h4><em>Omluvenky</em></h4>
-    <p>Nahlas absenci nebo pozdní příchod – raid leader to vidí v tabulce v přehledu absencí.</p>
+    <p>Nahlas absenci nebo pozdní příchod na raid. Raid leader to vidí v přehledu níže a v boss sestavách.</p>
   </div>
-  <div class="frame"><iframe data-src="__WEBAPP__" title="Formulář absence" loading="lazy"></iframe></div>
-  <p class="framenote"><a href="__WEBAPP__" target="_blank" rel="noopener">Otevřít formulář ve vlastním okně ↗</a></p>
+  <div class="form" id="absform">
+    <div class="row">
+      <label>Hráč <select id="abs-player"><option value="">– vyber –</option></select></label>
+      <label>Od <input type="date" id="abs-from" required></label>
+      <label>Do (nepovinné) <input type="date" id="abs-to"></label>
+      <span class="seg"><label><input type="radio" name="abs-type" value="absent" checked> ✖ Nepřijdu</label><label><input type="radio" name="abs-type" value="late"> ⏰ Přijdu pozdě</label></span>
+    </div>
+    <button class="btn" id="abs-send" type="button">Odeslat</button>
+    <div class="status" id="abs-status"></div>
+    <p class="steps" style="margin-top:14px">Hlásit jde jen dnešek a budoucí dny, nejvýš 62 dní najednou. Špatný záznam ti smaže raid leader (přihlášený admin ho může odebrat v přehledu).</p>
+  </div>
+  <div class="overview" id="absview">
+    <div class="heading-section"><h4><em>Přehled</em> absencí</h4></div>
+    <div class="meta" id="abs-meta">Načítám…</div>
+    <table><thead><tr><th>Hráč</th><th>Den</th><th>Typ</th><th>Nahlášeno</th><th id="abs-acth" hidden></th></tr></thead><tbody id="abs-body"></tbody></table>
+  </div>
 </section>
 
 <section class="section" id="sec-simc">
   <div class="heading-section">
     <h4><em>SimC</em> string</h4>
   </div>
-  <p class="steps">Addon <a href="https://www.curseforge.com/wow/addons/simulationcraft" target="_blank" rel="noopener">SimulationCraft</a> → ve hře otevři <b>Great Vault</b>, pak <code>/simc</code> → <code>Ctrl+A</code>, <code>Ctrl+C</code> → vložit sem. Proběhne raidový i Mythic+ Droptimizer (Myth 6/6), výsledek je v <a href="loot.html">Simech</a> – i s doporučením, na kterého bosse se vyplatí bonus roll (počítá se proti HC raidu, kde bonus roll dá mythic item max 334), a s otevřeným vaultem i s porovnáním, jestli vzít item z vaultu, nebo si roll nechat. Export bez vaultu tvůj starý vault smaže. Každý spec (např. affliction / destruction) se drží zvlášť.</p>
-  <div class="frame"><iframe data-src="sim.html" title="Formulář SimC" loading="lazy"></iframe></div>
-  <p class="framenote"><a href="sim.html">Otevřít formulář ve vlastním okně ↗</a></p>
+  <div class="form" id="simform">
+    <p class="steps">Vlož sem celý text z <code>/simc</code>. Postavu poznáme automaticky (musí být v <a href="roster.html">rosteru</a>), sim proběhne sám (raid i Mythic+ Droptimizer / QE Live, itemy jako plně upgradnuté Myth 6/6) a upgrady uvidíš na stránce <a href="loot.html">Simy</a> – i s doporučením, na kterého bosse se vyplatí bonus roll (počítá se proti HC raidu, max 334). Když před <code>/simc</code> otevřeš <b>Great Vault</b>, uvidíš i porovnání vaultu s bonus rollem; export bez vaultu tvůj starý vault smaže. Každý spec (např. affliction / destruction) se drží zvlášť.</p>
+    <textarea id="simc" placeholder="Sem vlož SimC string (Ctrl+V)…" spellcheck="false"></textarea>
+    <div class="detected" id="detected"></div>
+    <button class="btn" id="send" type="button">Odeslat</button>
+    <div class="status" id="status"></div>
+    <div class="how"><b>Jak získat SimC string</b>
+    <ol><li>Nainstaluj addon <b>SimulationCraft</b> (CurseForge / Wago).</li>
+    <li>Otevři <b>Great Vault</b> (klikni na truhlu v hlavním městě) – export pak obsahuje i itemy, které ti vault nabízí (bez toho se starý vault smaže).</li>
+    <li>Ve hře na postavě, se kterou raiduješ (v raidovém gearu), napiš <code>/simc</code>.</li>
+    <li>V okně, které se otevře: <code>Ctrl+A</code>, <code>Ctrl+C</code> – a sem <code>Ctrl+V</code>.</li>
+    <li>Po výměně gearu pošli nový string – starý nevyřízený se automaticky nahradí.</li></ol></div>
+  </div>
+  <div class="overview" id="queue">
+    <div class="heading-section"><h4><em>Fronta</em> simů</h4></div>
+    <div class="meta" id="qmeta">Načítám…</div>
+    <table><thead><tr><th>Postava</th><th>Spec</th><th>Stav</th><th>Odesláno</th><th>Poznámka</th></tr></thead><tbody id="qbody"></tbody></table>
+  </div>
   <form class="leader" id="runsims">
     <span>Raid leader:</span>
     <input type="password" id="runpw" placeholder="heslo" autocomplete="current-password" required>
@@ -116,30 +178,114 @@
 
 <script>
 (function () {
-  var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";   // formulář absence (Apps Script)
-  // Worker API (fronta simů): na workers.dev / vlastní doméně relativně, z GitHub Pages absolutně
+  // Worker API (databáze guildy): na workers.dev / vlastní doméně relativně, z GitHub Pages absolutně (CORS *)
   var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
-  document.querySelectorAll("iframe[data-src], a[href^='__WEBAPP__']").forEach(function (el) {
-    var attr = el.tagName === "IFRAME" ? "data-src" : "href";
-    el.setAttribute(attr, el.getAttribute(attr).replace("__WEBAPP__", WEBAPP));
-  });
-  var nav = document.querySelectorAll(".main-nav a[data-sec]");
+  var $ = function (s) { return document.querySelector(s); };
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function fmt(iso) { var d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.getDate() + "." + (d.getMonth() + 1) + ". " + d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0") : ""; }
+  var CZ_DAYS = ["ne", "po", "út", "st", "čt", "pá", "so"];
+  function fmtDay(iso) { var d = new Date(iso + "T00:00:00"); return CZ_DAYS[d.getDay()] + " " + d.getDate() + "." + (d.getMonth() + 1) + "."; }
+  function postJson(path, body, headers) {
+    return fetch(API_BASE + path, { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, headers || {}), body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  var adminToken = null;
+  try { adminToken = localStorage.getItem("esAdminToken"); } catch (e) {}
+
+  // ---- routing between the three sections
+  var navLinks = document.querySelectorAll(".main-nav a[data-sec]");
   var secs = { home: "sec-home", omluvenky: "sec-omluvenky", simc: "sec-simc" };
   function route() {
     var h = location.hash.replace("#", "");
-    // staré odkazy na taktiky (…/RaidPlan/#boss-N) vedou na raid.html
-    if (/^boss-\d$/.test(h)) { location.replace("raid.html#" + h); return; }
+    if (/^boss-\d$/.test(h)) { location.replace("raid.html#" + h); return; }   // staré odkazy na taktiky
     if (!secs[h]) h = "home";
-    Object.keys(secs).forEach(function (k) {
-      var el = document.getElementById(secs[k]);
-      el.classList.toggle("show", k === h);
-      if (k === h) el.querySelectorAll("iframe[data-src]").forEach(function (f) { if (!f.src) f.src = f.getAttribute("data-src"); });
-    });
-    nav.forEach(function (a) { a.classList.toggle("active", a.getAttribute("data-sec") === h); });
+    Object.keys(secs).forEach(function (k) { document.getElementById(secs[k]).classList.toggle("show", k === h); });
+    navLinks.forEach(function (a) { a.classList.toggle("active", a.getAttribute("data-sec") === h); });
     if (h !== "home") window.scrollTo(0, 0);
+    if (h === "omluvenky") { loadRoster(); loadAbsence(); }
+    if (h === "simc") loadQueue();
   }
   window.addEventListener("hashchange", route);
-  route();
+
+  // ---- Omluvenky
+  var rosterLoaded = false;
+  function loadRoster() {
+    if (rosterLoaded) return;
+    fetch(API_BASE + "/api/roster", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      var sel = $("#abs-player"), remembered = "";
+      try { remembered = localStorage.getItem("absPlayer") || ""; } catch (e) {}
+      (d.players || []).forEach(function (p) { var o = document.createElement("option"); o.value = p.name; o.textContent = p.name + (p.bench ? " (lavička)" : ""); sel.appendChild(o); });
+      if (remembered) sel.value = remembered;
+      rosterLoaded = true;
+    }).catch(function () {});
+  }
+  function absStatus(ok, t) { var s = $("#abs-status"); s.className = "status " + (ok ? "ok" : "err"); s.textContent = t; }
+  var today = new Date(); var todayIso = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+  $("#abs-from").min = todayIso; $("#abs-to").min = todayIso;
+  $("#abs-send").addEventListener("click", function () {
+    var player = $("#abs-player").value, from = $("#abs-from").value, to = $("#abs-to").value, type = (document.querySelector("input[name=abs-type]:checked") || {}).value;
+    if (!player) return absStatus(false, "⚠ Vyber hráče.");
+    if (!from) return absStatus(false, "⚠ Vyber datum Od.");
+    $("#abs-send").disabled = true; absStatus(true, "⏳ Odesílám…");
+    postJson("/api/absence", { player: player, from: from, to: to || undefined, type: type }).then(function (res) {
+      absStatus(!!res.ok, res.message || (res.ok ? "✔ Uloženo." : "⚠ " + (res.error || "chyba")));
+      if (res.ok) { try { localStorage.setItem("absPlayer", player); } catch (e) {} $("#abs-from").value = ""; $("#abs-to").value = ""; loadAbsence(); }
+    }).catch(function (err) { absStatus(false, "⚠ Chyba spojení: " + err.message); }).then(function () { $("#abs-send").disabled = false; });
+  });
+  function loadAbsence() {
+    var to = new Date(today.getTime() + 60 * 86400000), toIso = to.toISOString().slice(0, 10);
+    fetch(API_BASE + "/api/absence?from=" + todayIso + "&to=" + toIso, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "chyba");
+      var marks = d.marks || [];
+      $("#abs-meta").textContent = marks.length ? marks.length + " záznamů od dneška do " + fmtDay(toIso) : "Žádné nahlášené absence od dneška do " + fmtDay(toIso) + ".";
+      $("#abs-acth").hidden = !adminToken;
+      $("#abs-body").innerHTML = marks.map(function (m) {
+        return "<tr><td><b>" + esc(m.player) + "</b></td><td>" + esc(fmtDay(m.date)) + "</td><td><span class=\"mark " + esc(m.type) + "\">" + (m.type === "late" ? "přijde pozdě" : "nepřijde") + "</span></td>" +
+          "<td class=\"note\">" + esc(fmt(m.createdAt)) + "</td>" + (adminToken ? "<td><button class=\"mini\" data-id=\"" + m.id + "\" title=\"smazat záznam\">✕</button></td>" : "") + "</tr>";
+      }).join("");
+    }).catch(function (err) { $("#abs-meta").textContent = "Přehled se nenačetl: " + err.message; });
+  }
+  $("#abs-body").addEventListener("click", function (ev) {
+    var b = ev.target.closest("button[data-id]"); if (!b || !adminToken) return;
+    if (!confirm("Smazat tento záznam?")) return;
+    fetch(API_BASE + "/api/absence?id=" + b.dataset.id, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
+      .then(function (r) { return r.json(); }).then(function (d) { if (!d.ok) throw new Error(d.error || "chyba"); loadAbsence(); })
+      .catch(function (err) { $("#abs-meta").textContent = "Smazání selhalo: " + err.message + (/unauthorized/.test(err.message) ? " – přihlas se znovu na stránce Roster" : ""); });
+  });
+
+  // ---- SimC
+  var STATUS = { pending: "⏳ čeká na sim", running: "🔄 simuluje", done: "✅ hotovo", error: "⚠ chyba", dropped: "❌ zahozeno" };
+  function show(ok, msg) { var s = $("#status"); s.className = "status " + (ok ? "ok" : "err"); s.textContent = msg; }
+  $("#simc").addEventListener("input", function () {
+    var m = /^(deathknight|demonhunter|druid|evoker|hunter|mage|monk|paladin|priest|rogue|shaman|warlock|warrior)="([^"\n]+)"/mi.exec(this.value);
+    var sp = /^spec=([a-z_]+)/mi.exec(this.value);
+    var d = $("#detected");
+    if (!m) { d.textContent = this.value.trim() ? "⚠ Nevypadá to jako export z /simc." : ""; return; }
+    var vb = /###\s*Weekly Reward Choices([\s\S]*?)(?:###\s*End of Weekly Reward Choices|$)/i.exec(this.value);
+    var vn = vb ? (vb[1].match(/^\s*#?\s*[a-z_0-9]+=,?id=\d+/gmi) || []).length : -1;
+    d.innerHTML = "Postava: <b>" + esc(m[2]) + "</b>" + (sp ? " · " + esc(sp[1]) : "") + " · " + esc(m[1]) +
+      (vn < 0 ? ' · <span class="warn">bez vaultu</span> (starý vault se smaže – otevři Great Vault a udělej /simc znovu)' : " · vault: " + vn + " itemů");
+  });
+  $("#send").addEventListener("click", function () {
+    var simc = $("#simc").value;
+    if (!simc.trim()) return show(false, "⚠ Vlož SimC string.");
+    $("#send").disabled = true; show(true, "⏳ Odesílám…");
+    postJson("/api/sims/submit", { simc: simc }).then(function (res) {
+      show(!!res.ok, res.message || (res.ok ? "✅ Uloženo." : "⚠ " + (res.error || "chyba")));
+      if (res.ok) { $("#simc").value = ""; $("#detected").textContent = ""; loadQueue(); }
+    }).catch(function (err) { show(false, "⚠ Chyba spojení: " + err.message); }).then(function () { $("#send").disabled = false; });
+  });
+  function loadQueue() {
+    fetch(API_BASE + "/api/sims/status", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "chyba");
+      var rows = (d.rows || []).slice(0, 25);
+      $("#qmeta").textContent = d.pending + " čeká · " + d.running + " simuluje" + (d.lastDispatch ? " · runner naposledy spuštěn " + fmt(d.lastDispatch) : "") + " · simy běží automaticky (po odeslání a každou hodinu)";
+      $("#qbody").innerHTML = rows.map(function (r) {
+        var note = String(r.note || "").split(" | ").filter(function (n) { return !/^\S+ 🔄 https?:/.test(n.trim()); }).join(" · ");
+        return "<tr><td>" + esc(r.character) + "</td><td>" + esc(r.spec) + "</td><td class=\"st " + esc(r.status) + "\">" + esc(STATUS[r.status] || r.status) + "</td><td>" + esc(fmt(r.created_at)) + "</td><td class=\"note\">" + esc(note) + "</td></tr>";
+      }).join("") || '<tr><td colspan="5" class="note">Fronta je prázdná.</td></tr>';
+    }).catch(function (err) { $("#qmeta").textContent = "Stav fronty se nenačetl: " + err.message; });
+  }
+  setInterval(function () { if (location.hash === "#simc") loadQueue(); if (location.hash === "#omluvenky") loadAbsence(); }, 60000);
 
   // raid leader: POST { pw } -> Worker /api/sims/run (secret RUN_PASSWORD) -> GitHub Actions workflow_dispatch
   var form = document.getElementById("runsims");
@@ -147,12 +293,13 @@
     ev.preventDefault();
     var btn = form.querySelector("button"), msg = document.getElementById("runmsg"), pw = document.getElementById("runpw");
     btn.disabled = true; msg.textContent = "Spouštím…";
-    fetch(API_BASE + "/api/sims/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pw: pw.value, reason: "hub" }) })
-      .then(function (r) { return r.json(); })
+    postJson("/api/sims/run", { pw: pw.value, reason: "hub" })
       .then(function (j) { msg.textContent = (j.ok ? "✅ " : "⚠ ") + (j.message || ""); if (j.ok) pw.value = ""; })
       .catch(function (err) { msg.textContent = "⚠ API neodpovědělo: " + err.message; })
       .then(function () { btn.disabled = false; });
   });
+
+  route();
 })();
 </script>
 </body>

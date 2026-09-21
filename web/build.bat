@@ -33,10 +33,10 @@ if exist loot.html (
   if errorlevel 1 (echo ERROR: failed to write ..\loot.html & exit /b 1)
 )
 
-rem sim.html (formulář SimC -> Worker API) is a standalone page
-if exist sim.html (
-  powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\sim.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0sim.html') -replace '(href|src)=\"assets/', '$1=\"web/assets/'), (New-Object System.Text.UTF8Encoding $false))"
-  if errorlevel 1 (echo ERROR: failed to write ..\sim.html & exit /b 1)
+rem roster.html (soupiska z databáze, admin editace) is a standalone page
+if exist roster.html (
+  powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\roster.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0roster.html') -replace '(href|src)=\"assets/', '$1=\"web/assets/'), (New-Object System.Text.UTF8Encoding $false))"
+  if errorlevel 1 (echo ERROR: failed to write ..\roster.html & exit /b 1)
 )
 
 rem flopik.html (Flopik - fails po pullech) is a standalone page reading the "Flopik" sheet tab
@@ -45,4 +45,4 @@ if exist flopik.html (
   if errorlevel 1 (echo ERROR: failed to write ..\flopik.html & exit /b 1)
 )
 
-echo Built venomous-abyss.html + ..\raid.html, ..\index.html (hub), ..\loot.html, ..\sim.html, ..\flopik.html.
+echo Built venomous-abyss.html + ..\raid.html, ..\index.html (hub), ..\loot.html, ..\roster.html, ..\flopik.html.

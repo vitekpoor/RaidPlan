@@ -5,7 +5,7 @@ export const ROSTER_CACHE_SECONDS = 600;
 
 export const CORS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+  "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
   "access-control-allow-headers": "authorization, content-type",
   "access-control-max-age": "86400",
 };
@@ -87,11 +87,18 @@ export function parseCsv(text) {
 }
 
 /**
- * Roster from the Google Sheet (gviz CSV, tab "Roster"; header-mapped like getRoster_ in Apps Script,
- * the live tab has an empty column between "Main role" and "Alt char"). Cached at the edge for 10 minutes.
- * → [{ player, main, mainClass, mainRole, alt, altClass, altRole }]
+ * Roster as a flat list [{ player, main, mainClass, mainRole, alt, altClass, altRole, ... }].
+ * Source = D1 tables roster_players / roster_characters (worker/roster.js). While those are empty
+ * (before the one-time import) it falls back to the Google Sheet "Roster" tab (gviz CSV, edge-cached 10 min).
  */
 export async function fetchRoster(env, ctx, origin) {
+  const { loadRoster, flatRoster } = await import("./roster.js");
+  const players = await loadRoster(env);
+  if (players.length) return flatRoster(players);
+  return fetchRosterSheet(env, ctx, origin);
+}
+
+export async function fetchRosterSheet(env, ctx, origin) {
   const cache = caches.default;
   const key = new Request(`${origin}/__cache/roster`, { method: "GET" });
   let res = await cache.match(key);
@@ -132,4 +139,52 @@ export function playerOf(roster, character) {
     if ((r.main && nameKey(r.main) === key) || (r.alt && nameKey(r.alt) === key)) return r.player;
   }
   return "";
+}
+
+/** One CSV line (RFC 4180 quoting). */
+export function csvLine(cells) {
+  return cells.map((c) => { const s = String(c == null ? "" : c); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(",");
+}
+
+/** Today's date "yyyy-mm-dd" in Europe/Prague. */
+export function todayPrague(d = new Date()) {
+  const p = {};
+  new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d).forEach((x) => { p[x.type] = x.value; });
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+export function addDays(iso, n) {
+  return new Date(Date.parse(iso + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+}
+
+// ---- admin login: token "<expiry ms>.<base64url hmac-sha256(expiry, ADMIN_PASSWORD)>", 30 days
+
+const ADMIN_TOKEN_DAYS = 30;
+
+async function hmac(secret, text) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text));
+  return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export async function adminLogin(request, env) {
+  if (!env.ADMIN_PASSWORD) return json({ ok: false, error: "ADMIN_PASSWORD secret is not configured on the Worker" }, 503);
+  let body = {};
+  try { body = await request.json(); } catch (e) { /* empty */ }
+  if (!timingSafeEqual(String(body.pw || ""), env.ADMIN_PASSWORD)) return json({ ok: false, error: "Špatné heslo." }, 401);
+  const exp = String(Date.now() + ADMIN_TOKEN_DAYS * 86400000);
+  return json({ ok: true, token: exp + "." + (await hmac(env.ADMIN_PASSWORD, exp)), expires: new Date(Number(exp)).toISOString() });
+}
+
+/** Admin = API_TOKEN bearer or a valid login token. Returns a Response when denied, null when allowed. */
+export async function requireAdmin(request, env) {
+  const m = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") || "");
+  const tok = m ? m[1].trim() : "";
+  if (!tok) return json({ ok: false, error: "unauthorized" }, 401);
+  if (env.API_TOKEN && timingSafeEqual(tok, env.API_TOKEN)) return null;
+  const parts = tok.split(".");
+  if (parts.length === 2 && env.ADMIN_PASSWORD && /^\d+$/.test(parts[0]) && Number(parts[0]) > Date.now()) {
+    if (timingSafeEqual(parts[1], await hmac(env.ADMIN_PASSWORD, parts[0]))) return null;
+  }
+  return json({ ok: false, error: "unauthorized" }, 401);
 }

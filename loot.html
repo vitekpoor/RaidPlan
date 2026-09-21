@@ -3,8 +3,8 @@
      (s cestami web/loot_items.json a web/assets/). Data čte živě z Google Sheets:
      databáze (Cloudflare D1 přes Worker API GET /api/sims/results – plní sim_runner.py / sim_results.py;
      Původ = Raid | M+ | Top Gear | Raid HC; list "Sim výsledky" v Sheets je jen záloha, když API neodpoví)
-     + GET /api/sims/extras (Great Vault, cresty, Discord místnosti – plní formulář sim.html přes Worker).
-     Roster se dál čte z Google Sheets (gviz CSV) – ten edituje raid leader ručně.
+     + GET /api/sims/extras (Great Vault, cresty, Discord místnosti – plní formulář SimC na hubu přes Worker).
+     Roster z GET /api/roster.csv (stejný tvar jako mívala tabulka; upravuje se na roster.html).
      "Raid HC" = raidový Droptimizer s obtížností "Heroic Vault" (Myth 1/6 → Myth 6/6 = všechno max 334): bonus roll
      na HC (a na mythic bossech, které zabíjíme) dá mythic item max 334, 344 base dropí jen poslední mythic bossové.
      Tyhle řádky nejdou do tabulek, slouží doporučení bonus rollu (vždy) a verdiktu "vzít z vaultu vs. nechat si bonus roll"
@@ -301,7 +301,7 @@ a.best:hover .open { color: var(--ink-strong); }
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: databáze simů (eternal-shadows Worker + D1: výsledky, Great Vault, cresty) a roster z guildovní tabulky · Raidbots Droptimizer (DPS, raid + Mythic+ a HC raid max 334 = základ pro bonus roll a srovnání s vaultem) a QE Live (healeři) · každý spec postavy zvlášť · itemy z Wowheadu.</p>
+  <p>Data: databáze guildy (eternal-shadows Worker + D1: výsledky simů, Great Vault, cresty, roster) · Raidbots Droptimizer (DPS, raid + Mythic+ a HC raid max 334 = základ pro bonus roll a srovnání s vaultem) a QE Live (healeři) · každý spec postavy zvlášť · itemy z Wowheadu.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
@@ -319,7 +319,8 @@ a.best:hover .open { color: var(--ink-strong); }
   var EXTRAS_URL = API_BASE + "/api/sims/extras";   // vault + cresty + Discord místnosti (záloha: listy Vault / Cresty / Discord přes gviz)
   var VAULT_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(VAULT_TAB);
   var ROSTER_TAB = "Roster";   // hlavní soupiska (řádky nad „LAVIČKA“) – hráči bez simu se ukážou v mřížce jako prázdné dlaždice
-  var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
+  var ROSTER_URL = API_BASE_EARLY() + "/api/roster.csv";   // roster z databáze ve stejném CSV tvaru, jaký měl list "Roster"
+  function API_BASE_EARLY() { return /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev"; }
   var CREST_TAB = "Cresty";    // Postava | Čas | Adventurer | Veteran | Champion | Hero | Myth – plní Apps Script z řádku upgrade_currencies v SimC exportu
   var CREST_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(CREST_TAB);
   var DISCORD_TAB = "Discord";  // Hráč | Kanál URL | Webhook URL | Discord user ID – místnosti hráčů (hráč = sloupec Hráč v Rosteru); stránka bere jen Kanál URL

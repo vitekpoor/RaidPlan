@@ -442,9 +442,11 @@ def load_roster_tab():
     """Roster tab -> {norm(player): (Player, class_key, role, spec)}.
     class_key matches CLASS_COLORS keys ('Death Knight' -> 'deathknight').
     spec comes from the OPTIONAL 'Main spec' column ('' when absent)."""
-    rows = gviz_rows(WISHLIST_ID, ROSTER_TAB)
+    # roster lives in the guild database now (Worker API, same CSV layout the sheet tab had; edited on roster.html)
+    roster_url = os.environ.get("ES_ROSTER_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/roster.csv")
+    rows = list(csv.reader(io.StringIO(http_bytes(roster_url).decode("utf-8", "replace"))))
     if not rows or len(rows) < 2:
-        sys.exit(f"Tab '{ROSTER_TAB}' is empty or missing in the wishlist sheet.")
+        sys.exit(f"Roster is empty or unreachable ({roster_url}).")
     header = [norm(h) for h in rows[0]]
 
     def col(name, required=True):

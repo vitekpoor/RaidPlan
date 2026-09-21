@@ -11,7 +11,11 @@ Configuration is via environment variables (GitHub Actions secrets/vars):
 
   DISCORD_WEBHOOK_URL   required unless --dry-run
   SHEET_ID              Google Sheet id (default: the guild wishlist sheet)
-  SHEET_GID             tab gid of the absence matrix (default 521369072)
+  ABSENCE_URL           CSV of the absence matrix; default = the guild Worker
+                        (https://eternal-shadows.vitek-poor.workers.dev/api/absence.csv,
+                        header "Hráč" + one yyyy-mm-dd column per day, cells X / pozdě).
+                        Set to "sheet" to read the old Google Sheet tab instead.
+  SHEET_GID             tab gid of the absence matrix in the sheet (default 521369072)
   RAID_WEEKDAYS         comma list, default "wed,thu,sun" (en or cs names)
   WEEK_START            first day of the raid week, default "wed" (WoW EU
                         weekly reset) — the report covers Wed..Tue
@@ -57,6 +61,7 @@ from zoneinfo import ZoneInfo
 
 DEFAULT_SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI"
 DEFAULT_SHEET_GID = "521369072"
+DEFAULT_ABSENCE_URL = "https://eternal-shadows.vitek-poor.workers.dev/api/absence.csv"
 DEFAULT_LINEUP_GID = "731845282"
 DEFAULT_TIMEZONE = "Europe/Prague"
 DEFAULT_RAID_WEEKDAYS = "wed,thu,sun"
@@ -296,6 +301,17 @@ def fetch_csv(sheet_id, gid):
                           "is not readable without signing in. Share it as "
                           "'Anyone with the link can view'.")
     return body.decode("utf-8-sig", "replace")
+
+
+def fetch_url(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "raid-attendance/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.read().decode("utf-8-sig", "replace")
+    except urllib.error.HTTPError as e:
+        raise ReportError(f"{url} returned HTTP {e.code}")
+    except urllib.error.URLError as e:
+        raise ReportError(f"Cannot reach {url}: {e.reason}")
 
 
 def parse_matrix(csv_text, reference):
@@ -610,9 +626,14 @@ def main(argv=None):
         if args.csv:
             with open(args.csv, encoding="utf-8-sig") as f:
                 csv_text = f.read()
-        else:
+        elif norm(env("ABSENCE_URL", DEFAULT_ABSENCE_URL)) == "sheet":
             csv_text = fetch_csv(env("SHEET_ID", DEFAULT_SHEET_ID),
                                  env("SHEET_GID", DEFAULT_SHEET_GID))
+        else:
+            # the Worker serves the matrix for a window around the reported week
+            base = env("ABSENCE_URL", DEFAULT_ABSENCE_URL)
+            sep = "&" if "?" in base else "?"
+            csv_text = fetch_url(f"{base}{sep}from={start - dt.timedelta(days=7)}&to={end + dt.timedelta(days=21)}")
         dates, players, warnings = parse_matrix(csv_text, reference=start)
         print(f"{len(players)} players, {len(dates)} date columns "
               f"({min(dates.values())} .. {max(dates.values())})")

@@ -757,16 +757,44 @@ function colorRosterNames_(rs) {
  * Načte Roster -> pole hráčů {player, main, mainClass, mainRole, alt,
  * altClass, altRole}. Vrací null, když list neexistuje.
  */
+// Databáze guildy (Cloudflare Worker + D1, repo worker/): roster a absence se od 2026-09-21 upravují na webu
+// (roster.html, formulář Omluvenky) – tabulka je jen záloha. Funkce níže je čtou z API; když API neodpoví, vezmou list.
+var ES_API = "https://eternal-shadows.vitek-poor.workers.dev";
+
+/** CSV rosteru z API (stejný tvar jako list "Roster") → 2D pole, nebo null. */
+function esRosterCsv_() {
+  try {
+    var resp = UrlFetchApp.fetch(ES_API + "/api/roster.csv", { muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) return null;
+    var rows = Utilities.parseCsv(resp.getContentText());
+    return rows && rows.length > 1 && /hráč/i.test(String(rows[0][0])) ? rows : null;
+  } catch (err) { return null; }
+}
+
+/** Absence z API pro interval: { "hráč|yyyy-MM-dd": "X" | "pozdě" }, nebo null když API neodpoví. */
+function esAbsenceMap_(fromIso, toIso) {
+  try {
+    var resp = UrlFetchApp.fetch(ES_API + "/api/absence?from=" + fromIso + "&to=" + toIso, { muteHttpExceptions: true });
+    if (resp.getResponseCode() !== 200) return null;
+    var d = JSON.parse(resp.getContentText());
+    if (!d || !d.ok) return null;
+    var out = {};
+    (d.marks || []).forEach(function (m) { out[String(m.player).trim().toLowerCase() + "|" + m.date] = m.mark; });
+    return out;
+  } catch (err) { return null; }
+}
+
 function getRoster_() {
+  var apiRows = esRosterCsv_();
   var rs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ROSTER_SHEET_NAME);
-  if (!rs || rs.getLastRow() < 2) return null;
-  var width = Math.max(rs.getLastColumn(), ROSTER_HEADER.length);
+  if (!apiRows && (!rs || rs.getLastRow() < 2)) return null;
+  var width = apiRows ? apiRows[0].length : Math.max(rs.getLastColumn(), ROSTER_HEADER.length);
   // sloupce podle hlavičky (v listu může být prázdný sloupec navíc, např. E před "Alt char");
   // když hlavička chybí, platí pořadí ROSTER_HEADER
-  var head = rs.getRange(1, 1, 1, width).getValues()[0].map(function (h) { return String(h || "").trim().toLowerCase(); });
+  var head = (apiRows ? apiRows[0] : rs.getRange(1, 1, 1, width).getValues()[0]).map(function (h) { return String(h || "").trim().toLowerCase(); });
   var col = {};
   ROSTER_HEADER.forEach(function (h, i) { var j = head.indexOf(h.toLowerCase()); col[h] = j >= 0 ? j : i; });
-  var vals = rs.getRange(2, 1, rs.getLastRow() - 1, width).getValues();
+  var vals = apiRows ? apiRows.slice(1) : rs.getRange(2, 1, rs.getLastRow() - 1, width).getValues();
   var players = [];
   vals.forEach(function (v) {
     var g = function (h) { return String(v[col[h]] == null ? "" : v[col[h]]).trim(); };
@@ -1542,9 +1570,11 @@ function recolorBossLineups_() {
   var colorOf = {};
   roster.forEach(function (p) { colorOf[p.player.toLowerCase()] = CLASS_COLOR[p.mainClass] || null; });
 
-  // absence: "hráč|yyyy-MM-dd" -> marker ("X" / "pozdě")
-  var absMap = {};
-  var ov = ss.getSheetByName(ABSENCE_LOG_SHEET_NAME);
+  // absence: "hráč|yyyy-MM-dd" -> marker ("X" / "pozdě") – primárně z API (databáze), jinak z listu
+  var absMap = esAbsenceMap_(Utilities.formatDate(new Date(Date.now() - 7 * 86400000), tz, "yyyy-MM-dd"),
+                             Utilities.formatDate(new Date(Date.now() + 90 * 86400000), tz, "yyyy-MM-dd"));
+  var ov = absMap ? null : ss.getSheetByName(ABSENCE_LOG_SHEET_NAME);
+  absMap = absMap || {};
   if (ov && ov.getLastRow() >= 2 && ov.getLastColumn() >= 2) {
     var heads = ov.getRange(1, 2, 1, ov.getLastColumn() - 1).getValues()[0];
     var body = ov.getRange(2, 1, ov.getLastRow() - 1, ov.getLastColumn()).getValues();
@@ -3857,6 +3887,12 @@ function recordAttendance_(text) {
  */
 function absenceMarksForDate_(date, tz) {
   var out = {};
+  var iso = Utilities.formatDate(date, tz, "yyyy-MM-dd");
+  var api = esAbsenceMap_(iso, iso);
+  if (api) {
+    Object.keys(api).forEach(function (k) { out[k.split("|")[0]] = api[k]; });
+    return out;
+  }
   var ov = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABSENCE_LOG_SHEET_NAME);
   if (!ov || ov.getLastRow() < 2 || ov.getLastColumn() < 2) return out;
   var key = Utilities.formatDate(date, tz, "yyyy-MM-dd");

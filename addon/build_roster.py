@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate ESAttendance/RosterData.lua from the "Roster" tab of the guild Wishlist sheet.
+"""Generate ESAttendance/RosterData.lua from the guild roster (Worker API /api/roster.csv, edited on roster.html).
 
     python build_roster.py             # write ESAttendance/RosterData.lua
     python build_roster.py --install   # ... and copy the addon into WoW's Interface/AddOns
@@ -23,8 +23,8 @@ import unicodedata
 import urllib.request
 
 WISHLIST_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI"
-ROSTER_URL = ("https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=Roster"
-              % WISHLIST_ID)
+# Roster z databáze guildy (Worker API, stejný CSV tvar jako mívala tabulka; upravuje se na roster.html)
+ROSTER_URL = os.environ.get("ES_ROSTER_URL", "%s/api/roster.csv" % os.environ.get("ES_API_URL", "https://eternal-shadows.vitek-poor.workers.dev").rstrip("/"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON_DIR = os.path.join(HERE, "ESAttendance")
 OUT_FILE = os.path.join(ADDON_DIR, "RosterData.lua")
