@@ -4231,12 +4231,17 @@ function flopikRefresh_(code, budgetMs) {
     var last = sh.getLastRow();
     // have[fight] = verze enginu bosse, se kterou je pull v listu (summary.ver v Data souhrnného řádku, starší řádky = 1);
     // pull spočítaný starší verzí (přidaná metrika, viz `ver` v FLOPIK_BOSSES) se přepočítá znovu
-    var have = {};
+    var have = {}, parseState = {};   // parseState[fight] = summary.parse killu v listu ("ok" | "pending" | "none" | undefined = ještě bez parse)
     if (last > 1) {
       sh.getRange(2, 8, last - 1, 6).getValues().forEach(function (r) {
         if (String(r[4]) !== code || r[5] === "") return;
         var fid = String(r[5]), ver = 1;
-        if (String(r[0]) === "") { try { ver = Number((JSON.parse(r[1] || "{}").summary || {}).ver) || 1; } catch (err) { ver = 1; } }
+        if (String(r[0]) === "") {
+          var sum = {};
+          try { sum = JSON.parse(r[1] || "{}").summary || {}; } catch (err) { sum = {}; }
+          ver = Number(sum.ver) || 1;
+          if (sum.parse) parseState[fid] = sum.parse;
+        }
         have[fid] = Math.max(have[fid] || 0, ver);
       });
     }
@@ -4254,11 +4259,21 @@ function flopikRefresh_(code, budgetMs) {
       res.start = Utilities.formatDate(new Date(res.startMs), tz, "HH:mm:ss");
       res.report = code; res.fight = f.id;
       if (flopikDmgAttach_(code, f, res, function () { return Date.now() - t0 < budgetMs; })) refsPending = true;
+      flopikParseAttach_(code, f, res);
+      parseState[String(f.id)] = "done";
       flopikRecordPull_(res);
       added++;
     }
+    // killy už v listu bez parse (starší výpočet, nebo WCL rankings tehdy ještě nebyly): doplní se jen rankings
+    var parsed = 0;
+    fights.forEach(function (f) {
+      if (!f.kill || !have[String(f.id)] || Date.now() - t0 > budgetMs) return;
+      var st = parseState[String(f.id)];
+      if (st === "ok" || st === "none" || st === "done") return;
+      parsed += flopikParsePatch_(sh, code, f, rep.startTime + f.endTime);   // po FLOPIK_PARSE_RETRY_MS bez rankings označí "none"
+    });
     // refsPending: na některý referenční (rank 1) log nezbyl čas – stránka zavolá refresh znovu a doplní se
-    return { ok: true, code: code, title: rep.title, fights: fights.length, cached: Object.keys(have).length + added, added: added,
+    return { ok: true, code: code, title: rep.title, fights: fights.length, cached: Object.keys(have).length + added, added: added, parsed: parsed,
       remaining: (todo.length - added) + (refsPending ? 1 : 0), refsPending: refsPending, points: null };
   } finally { lock.releaseLock(); }
 }
@@ -4284,6 +4299,74 @@ function flopikApiGet_(e) {
   } catch (err) {
     return simApiJson_({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+// ================== FLOPIK – Parse (percentil z Warcraft Logs rankings) ==================
+// U killů má každý hráč na WCL "parse" = rankPercent: percentil mezi všemi logy stejného specu na bossovi a obtížnosti
+// (DPS; healeři HPS). To je jiné číslo než sloupec "% top" (náš DPS v procentech rank 1 logu). Ukládá se hráči jako
+// `parse` = { pct, bracket, rank, n, metric, amount }. WCL rankings vznikají až po zpracování reportu – když ještě nejsou,
+// zkouší se znovu při dalším refreshi, nejdéle FLOPIK_PARSE_RETRY_MS po killu (pak summary.parse = "none").
+var FLOPIK_PARSE_RETRY_MS = 2 * 86400000;
+
+/** rankings killu podle jména hráče: healeři podle HPS, ostatní podle DPS. {} když WCL ještě rankings nemá. */
+function flopikRankings_(code, fightId) {
+  var out = {};
+  function load(metric) {
+    var d = wclGql_("query($c:String!,$f:[Int]!,$m:ReportRankingMetricType){ reportData { report(code:$c) { rankings(fightIDs:$f, playerMetric:$m) } } }",
+      { c: code, f: [fightId], m: metric });
+    var rk = d.reportData.report.rankings;
+    return ((rk && rk.data) || [])[0] || null;
+  }
+  var dps = load("dps");
+  if (!dps) return out;
+  var hps = ((dps.roles || {}).healers || {}).characters && dps.roles.healers.characters.length ? load("hps") : null;
+  function take(f, role, metric) {
+    ((((f || {}).roles || {})[role] || {}).characters || []).forEach(function (ch) {
+      out[ch.name] = { pct: Number(ch.rankPercent) || 0, bracket: Number(ch.bracketPercent) || 0, rank: ch.rank, n: ch.totalParses,
+        metric: metric, amount: Math.round(ch.amount || 0), spec: ch["class"] + "-" + ch.spec };
+    });
+  }
+  take(dps, "tanks", "dps"); take(dps, "dps", "dps"); take(hps, "healers", "hps");
+  return out;
+}
+
+/** Přidá hráčům killu `parse`; summary.parse = "ok" | "pending" (rankings ještě nejsou) | "none". Vrací počet hráčů s parse. */
+function flopikParseAttach_(code, fight, res) {
+  if (!fight.kill) return 0;
+  var n = 0;
+  try {
+    var rk = flopikRankings_(code, fight.id);
+    (res.players || []).forEach(function (p) { if (rk[p.name]) { p.parse = rk[p.name]; n++; } });
+    res.summary.parse = n ? "ok" : "pending";
+  } catch (err) { res.summary.parse = "pending"; res.summary.parseError = String(err && err.message || err); }
+  return n;
+}
+
+/**
+ * Doplní parse do killu, který už v listu je (spočítaný před přidáním parse, nebo WCL rankings tehdy ještě nebyly) –
+ * jen rankings, bez přepočtu pullu. endMs = absolutní konec fightu. Vrací počet doplněných hráčů.
+ */
+function flopikParsePatch_(sh, code, fight, endMs) {
+  var last = sh.getLastRow();
+  if (last < 2) return 0;
+  var vals = sh.getRange(2, 8, last - 1, 6).getValues();   // Hráč, Data, Boss klíč, Zapsáno, Report, Fight
+  var rows = [];
+  vals.forEach(function (r, i) { if (String(r[4]) === code && String(r[5]) === String(fight.id)) rows.push({ row: i + 2, name: String(r[0]), json: String(r[1] || "{}") }); });
+  if (!rows.length) return 0;
+  var rk = {}, n = 0, state = "pending", err = null;
+  try { rk = flopikRankings_(code, fight.id); } catch (e) { err = String(e && e.message || e); }
+  rows.forEach(function (x) {
+    var data; try { data = JSON.parse(x.json); } catch (e) { return; }
+    if (x.name === "") {
+      data.summary = data.summary || {};
+      if (Object.keys(rk).length) state = "ok"; else if (!err && Date.now() - endMs > FLOPIK_PARSE_RETRY_MS) state = "none";
+      data.summary.parse = state;
+      if (err) data.summary.parseError = err; else delete data.summary.parseError;
+    } else if (rk[x.name]) { data.parse = rk[x.name]; n++; }
+    else return;
+    sh.getRange(x.row, 9).setValue(JSON.stringify(data));
+  });
+  return n;
 }
 
 // ================== FLOPIK – Damage breakdown + srovnání s rank 1 logem ==================
