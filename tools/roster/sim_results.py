@@ -10,7 +10,7 @@ a pošlou na Worker (worker/index.js, POST /api/sims/results). Platí poslední 
 Použití (v tools/roster/):
   python sim_results.py store --character Akka --spec destruction --kind raid --url https://www.raidbots.com/simbot/report/<id>
         kind: raid | mplus | raidhc | topgear (Raidbots) | qe (QE Live = raid i M+ z jednoho reportu)
-  python sim_results.py rebuild [--character Akka]   # znovu stáhne a rozparsuje všechny uložené reporty
+  python sim_results.py rebuild [--character Akka] [--origin topgear]   # znovu stáhne a rozparsuje uložené reporty (čas simu zůstává)
   python sim_results.py import-sheet                 # jednorázově: list "Sim výsledky" (gviz CSV) → databáze
   python sim_results.py show [--character Akka]      # výpis, co v databázi je
   python sim_results.py migrate                      # založí tabulky (POST /api/admin/migrate)
@@ -410,9 +410,9 @@ def build_reports(character, spec, link, kinds, rows, now=None):
     return out
 
 
-def store_report(api, character, spec, url, kind, names=None):
+def store_report(api, character, spec, url, kind, names=None, simmed_at=None):
     """Stáhne report, rozparsuje a uloží do databáze. kind: raid | mplus | raidhc | topgear | qe.
-    Vrací {ok, message, counts}; nikdy nehází (volá se po hotovém simu)."""
+    simmed_at: ISO čas simu (rebuild zachová původní); výchozí teď. Vrací {ok, message, counts}; nikdy nehází."""
     try:
         link = parse_report_link(url)
         if not link:
@@ -431,7 +431,7 @@ def store_report(api, character, spec, url, kind, names=None):
                     if r["kind"] == "raid":
                         r["kind"] = "raidhc"
         rows = [r for r in rows if r["kind"] in kinds]
-        api.store(build_reports(character, spec, link, kinds, rows))
+        api.store(build_reports(character, spec, link, kinds, rows, simmed_at))
         counts = {k: sum(1 for r in rows if r["kind"] == k and not r.get("worn")) for k in kinds}
         if kind == "topgear":
             msg = (f"Top Gear {'+' if rows[0]['pct'] > 0 else ''}{rows[0]['pct']} % ({rows[0]['slot']} itemů)" if rows else "Top Gear bez výsledku")
@@ -444,7 +444,7 @@ def store_report(api, character, spec, url, kind, names=None):
 
 # ------------------------------------------------------------------- CLI ----
 
-def cmd_rebuild(api, character=None):
+def cmd_rebuild(api, character=None, origin=None):
     data = api.results(character)
     reports = data.get("reports") or []
     # QE report pokrývá raid i M+ v jednom – neparsovat dvakrát
@@ -454,13 +454,15 @@ def cmd_rebuild(api, character=None):
         if not link:
             failed.append(f"{p['character']} {p['origin']}: neplatný odkaz {p['report_url']}")
             continue
+        if origin and p["origin"] != origin:
+            continue
         kind = "qe" if link["kind"] == "qe" else p["origin"]
         key = (p["character_key"], p["spec_key"], link["id"], kind)
         if key in seen:
             continue
         seen.add(key)
         log(f"▶ {p['character']} ({p['spec']}) {KIND_LABEL.get(kind, kind)} {link['url']}")
-        res = store_report(api, p["character"], p["spec"], link["url"], kind)
+        res = store_report(api, p["character"], p["spec"], link["url"], kind, simmed_at=p.get("simmed_at"))
         log(f"   {'✅' if res['ok'] else '⚠'} {res['message']}")
         if res["ok"]:
             done += 1
@@ -550,7 +552,7 @@ def main():
     ap.add_argument("--spec")
     ap.add_argument("--url", help="(store) odkaz na Raidbots / QE Live report")
     ap.add_argument("--kind", default="raid", choices=["raid", "mplus", "raidhc", "topgear", "qe"])
-    ap.add_argument("--origin", choices=["raid", "mplus", "raidhc", "topgear"], help="(delete) jen tenhle původ")
+    ap.add_argument("--origin", choices=["raid", "mplus", "raidhc", "topgear"], help="(rebuild / delete) jen tenhle původ")
     ap.add_argument("--sheet-id", default=SHEET_ID)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -564,7 +566,7 @@ def main():
         print(("✅ " if res["ok"] else "⚠ ") + res["message"])
         sys.exit(0 if res["ok"] else 1)
     elif args.command == "rebuild":
-        cmd_rebuild(api, args.character)
+        cmd_rebuild(api, args.character, args.origin)
     elif args.command == "import-sheet":
         cmd_import_sheet(api, args.sheet_id, args.dry_run)
     elif args.command == "show":
