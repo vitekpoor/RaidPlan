@@ -56,9 +56,10 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink-strong); margin: 0; line-height: 1.25;
   background: var(--ground);
   border-bottom: 1px solid var(--line);
 }
+.site-header .container { position: relative; }
 .main-nav {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
-  min-height: 60px; padding: 8px 0;
+  min-height: 60px; padding: 8px 110px 8px 0; /* vpravo místo pro absolutně umístěné přihlášení */
 }
 .main-nav .logo {
   display: inline-flex; align-items: center; gap: 10px;
@@ -83,11 +84,6 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink-strong); margin: 0; line-height: 1.25;
 }
 .main-nav .nav a:hover { color: var(--ink-strong); background: var(--surface2); }
 .main-nav .nav a.active { color: var(--accent); }
-.main-nav .nav li.ext a {
-  color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; margin-left: 6px;
-}
-.main-nav .nav li.ext a::after { content: " ↗"; color: var(--accent); }
-.main-nav .nav li.ext a:hover { border-color: var(--accent); background: transparent; }
 
 /* druhý řádek hlavičky - bossové / přepínače pohledu */
 .sub-nav {
@@ -194,8 +190,10 @@ footer .credit { font-size: 12px; opacity: .8; }
 
 @media (max-width: 720px) {
   body { padding: 0 12px 30px; }
-  .main-nav .logo { margin-right: 0; flex-basis: 100%; }
+  .main-nav { padding-right: 0; }
+  .main-nav .logo { margin-right: 0; flex-basis: 100%; padding-right: 100px; }
   .main-nav .nav { margin-left: 0; }
+  .main-nav .es-auth { top: 10px; }
   .main-nav .nav a { padding: 6px 8px; font-size: 13px; }
   /* jeden posuvný řádek, aby přilepená hlavička nezabírala půl displeje */
   .sub-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -206,7 +204,7 @@ footer .credit { font-size: 12px; opacity: .8; }
 }
 
 /* Přihlášení admina v hlavičce (assets/js/es-auth.js) */
-.main-nav .es-auth { position: relative; margin-left: 12px; }
+.main-nav .es-auth { position: absolute; top: 14px; right: 0; z-index: 51; }
 .es-auth-btn { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; }
 .es-auth-btn:hover { color: var(--ink-strong); border-color: var(--accent); }
 .es-auth-btn.on { color: var(--accent); border-color: var(--accent); }
