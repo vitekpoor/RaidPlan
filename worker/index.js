@@ -186,7 +186,8 @@ function validateReport(rep) {
   if ((rep.rows || []).length > 2000) return "too many rows";
   for (const r of rep.rows || []) {
     if (!r || typeof r !== "object") return "row must be an object";
-    if (r.itemId == null || r.itemId === "") return "row.itemId is required";
+    // Top Gear summary rows imported from the sheet have no item ids (gviz drops "a|b" strings) – rebuild fills them
+    if ((r.itemId == null || r.itemId === "") && rep.origin !== "topgear") return "row.itemId is required";
   }
   return null;
 }
