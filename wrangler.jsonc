@@ -1,16 +1,28 @@
 {
-  // Cloudflare Workers config: serves the built site (repo root) as static assets.
-  // Deployed by Cloudflare's GitHub integration with `npx wrangler deploy`.
-  // Files listed in .assetsignore (sources, tools, git metadata) are not uploaded.
+  // Cloudflare Worker "eternal-shadows": serves the built site (repo root) as static
+  // assets and a JSON API (worker/index.js) backed by the D1 database "eternal-shadows".
+  // Deployed by Cloudflare's GitHub integration with `npx wrangler deploy`; the name
+  // below must match the Worker name in the dashboard. Files listed in .assetsignore
+  // (sources, tools, git metadata, worker/) are not uploaded as assets.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "raidplan",
+  "name": "eternal-shadows",
+  "main": "worker/index.js",
   "compatibility_date": "2026-09-18",
   "workers_dev": true,
   "preview_urls": false,
   "observability": { "enabled": true },
   "assets": {
     "directory": ".",
+    "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "none"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "eternal-shadows",
+      "database_id": "b755462b-aa07-4b94-8fd2-ef3a9f0d2c94",
+      "migrations_dir": "worker/migrations"
+    }
+  ]
 }
