@@ -11,6 +11,11 @@
   "workers_dev": true,
   "preview_urls": false,
   "observability": { "enabled": true },
+  // Plain vars (secrets API_TOKEN / GITHUB_TOKEN / RUN_PASSWORD live only in the dashboard). Vars set in the dashboard
+  // are replaced on every deploy, so keep them here.
+  "vars": {
+    "DISCORD_SIM_CHANNEL": "1549744240370782260"   // shared Discord channel (id) for sim notifications of players without a room
+  },
   // worker/migrations/*.sql are imported as text modules (POST /api/admin/migrate runs them)
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "assets": {
