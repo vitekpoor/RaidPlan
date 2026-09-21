@@ -1,0 +1,22 @@
+# Only the published site is uploaded to Cloudflare; everything else stays out.
+.git
+.github
+.gitignore
+.wrangler
+.assetsignore
+wrangler.jsonc
+node_modules
+addon
+tools
+web/parts
+web/bosses
+web/venomous-abyss.html
+web/hub.html
+web/loot.html
+web/flopik.html
+*.bat
+*.py
+*.gs
+*.md
+*.jsonl
+__pycache__

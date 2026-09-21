@@ -10,3 +10,7 @@ addon/es_attendance.config.json
 # Flopik: private config (web app token) + local per-pull log
 tools/flopik/flopik.config.json
 tools/flopik/pulls.jsonl
+
+# Cloudflare Wrangler local state
+.wrangler/
+node_modules/

@@ -1,0 +1,16 @@
+{
+  // Cloudflare Workers config: serves the built site (repo root) as static assets.
+  // Deployed by Cloudflare's GitHub integration with `npx wrangler deploy`.
+  // Files listed in .assetsignore (sources, tools, git metadata) are not uploaded.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "raidplan",
+  "compatibility_date": "2026-09-18",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": ".",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  }
+}
