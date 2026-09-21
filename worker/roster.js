@@ -4,7 +4,8 @@
 //                             "Alt role","Poznámka","Main spec","Alt spec" + a "LAVIČKA" separator row before bench players –
 //                             the same layout the Google Sheet "Roster" tab had, so loot.html, addon/build_roster.py,
 //                             tools/raidplan/raidplan.py and the Apps Script getRoster_ only needed a new URL.
-//   PUT  /api/roster          (admin) full replace: { players: [{ name, bench, note, characters: [{ name, class, role, spec, main }] }] }
+//   PUT  /api/roster          (admin) full replace: { players: [{ id?, name, bench, note, characters: [{ name, class, role, spec, main }] }] }
+//                             a player with id keeps that row (renames allowed); without id it is matched by name; player names are unique
 //   POST /api/admin/login     { pw } → { token } (secret ADMIN_PASSWORD); GET /api/admin/check (admin) → { ok }
 // Admin = "Authorization: Bearer <token>" where token is either the API_TOKEN or a login token
 // "<expiry>.<hmac-sha256(expiry, ADMIN_PASSWORD)>" valid for 30 days (see requireAdmin in lib.js).
@@ -95,17 +96,23 @@ export async function putRoster(request, env, ctx, url) {
     }
     if (cs.length && !cs.some((c) => c.main)) cs[0].main = true;
     if (cs.filter((c) => c.main).length > 1) return json({ ok: false, error: `${name}: only one main character` }, 400);
-    clean.push({ name, key, bench: p.bench ? 1 : 0, note: String(p.note || "").trim(), characters: cs });
+    const id = Number(p.id) > 0 ? Number(p.id) : null;
+    clean.push({ id, name, key, bench: p.bench ? 1 : 0, note: String(p.note || "").trim(), characters: cs });
   }
   const now = nowIso();
   const stmts = [];
-  if (clean.length) {
-    const ph = clean.map((_, i) => `?${i + 1}`).join(", ");
-    stmts.push(env.DB.prepare(`DELETE FROM roster_players WHERE name_key NOT IN (${ph})`).bind(...clean.map((p) => p.key)));
-  } else {
-    stmts.push(env.DB.prepare("DELETE FROM roster_players"));
-  }
+  // players not in the payload are removed (matched by id when the page sent one, else by name)
+  const keys = clean.map((p) => p.key), ids = clean.map((p) => p.id).filter(Boolean);
+  const cond = [];
+  if (keys.length) cond.push(`name_key NOT IN (${keys.map((_, i) => `?${i + 1}`).join(", ")})`);
+  if (ids.length) cond.push(`id NOT IN (${ids.map((_, i) => `?${keys.length + i + 1}`).join(", ")})`);
+  stmts.push(env.DB.prepare(`DELETE FROM roster_players${cond.length ? " WHERE " + cond.join(" AND ") : ""}`).bind(...keys, ...ids));
   clean.forEach((p, i) => {
+    if (p.id) {
+      // existing row: keep its id even when the player is renamed
+      stmts.push(env.DB.prepare("UPDATE roster_players SET name = ?2, name_key = ?3, sort_order = ?4, bench = ?5, note = ?6, updated_at = ?7 WHERE id = ?1")
+        .bind(p.id, p.name, p.key, i, p.bench, p.note, now));
+    }
     stmts.push(env.DB.prepare(
       `INSERT INTO roster_players (name, name_key, sort_order, bench, note, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
        ON CONFLICT(name_key) DO UPDATE SET name = excluded.name, sort_order = excluded.sort_order, bench = excluded.bench, note = excluded.note, updated_at = excluded.updated_at`
