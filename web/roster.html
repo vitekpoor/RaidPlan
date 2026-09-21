@@ -37,13 +37,16 @@
   .roster td.note { color: var(--muted); font-size: 13px; }
   .roster td.grab { width: 1.2rem; color: var(--line); cursor: grab; user-select: none; padding-right: 0; }
   .roster tr.dragging td { opacity: .35; }
-  .roster tr.over td { box-shadow: inset 0 2px 0 var(--accent); }
+  .roster tr.over td { background: var(--accent-soft) !important; }
   .roster tbody.over-empty { outline: 1px dashed var(--accent); min-height: 30px; }
-  .char { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; line-height: 1.5; }
-  .edit .char { flex-wrap: nowrap; gap: 2px 5px; font-size: 12.5px; }
+  .char { display: grid; grid-template-columns: 8.5rem 7.6rem 7rem 3.4rem; align-items: center; column-gap: 8px; line-height: 1.5; }
+  .char > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .char .add { justify-self: start; }
+  .edit .char { grid-template-columns: 1.1rem 7.6rem 7.6rem 7rem 3.4rem 1.2rem; column-gap: 5px; }
+  .edit .roster td { font-size: 12.5px; }
   .char + .char { margin-top: 2px; }
   .cname { font-weight: 600; }
-  .cinfo { color: var(--muted); font-size: 12.5px; }
+  .cinfo { color: var(--muted); font-size: 12.5px; } .cinfo.spec { color: var(--ink); opacity: .8; }
   .role { display: inline-block; font-size: 10.5px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; line-height: 1.5; }
   .role.tank { color: var(--tank); border-color: var(--tank); } .role.heal { color: var(--heal); border-color: var(--heal); } .role.dps { color: var(--dps); border-color: var(--dps); }
   .hint { color: var(--muted); font-size: 13px; margin: 16px 0 0; }
@@ -54,8 +57,8 @@
   .edit .roster select { cursor: pointer; appearance: none; -webkit-appearance: none; padding-right: 12px; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
                           background-position: right 5px top 55%, right 1px top 55%; background-size: 4px 4px; background-repeat: no-repeat; }
   .edit .roster select option { background: var(--surface2); color: var(--ink); }
-  .edit .roster input.pname { width: 8.5rem; font-weight: 700; } .edit .roster input.cname { width: 7rem; font-weight: 600; } .edit .roster input.note { width: 100%; min-width: 7rem; }
-  .edit .roster select.cls { width: 7.6rem; } .edit .roster select.spec { width: 6.8rem; color: var(--muted); font-size: 12px; }
+  .edit .roster input.pname { width: 8.5rem; font-weight: 700; } .edit .roster input.cname { width: 100%; font-weight: 600; } .edit .roster input.note { width: 100%; min-width: 7rem; }
+  .edit .roster select.cls, .edit .roster select.spec { width: 100%; } .edit .roster select.spec { color: var(--muted); font-size: 12px; }
   .edit .roster td.player { width: 11rem; } .edit .roster td.note { width: 11rem; }
   .mini { background: transparent; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 12.5px; padding: 0 4px; border-radius: 4px; line-height: 1.5; }
   .mini:hover { color: var(--ink-strong); background: var(--surface3); }
@@ -165,12 +168,12 @@
   function charView(c) {
     var role = roleOf(c);
     return '<div class="char"><span class="cname" style="color:' + color(c.class) + '">' + esc(c.name) + '</span>' +
-      '<span class="cinfo">' + esc(c.class) + (c.spec ? " · " + esc(specLabel(c.spec)) : "") + '</span><span class="role ' + role + '">' + role + '</span></div>';
+      '<span class="cinfo">' + esc(c.class) + '</span><span class="cinfo spec">' + esc(specLabel(c.spec)) + '</span><span class="role ' + role + '">' + role + '</span></div>';
   }
   function rowView(p) {
     var main = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0];
     var alts = p.characters.filter(function (c) { return c !== main; });
-    return '<tr class="' + (p.bench ? "bench" : "") + '"><td class="grab"></td><td class="player"><span class="pid" title="ID hráče v databázi">' + p.id + '</span>' + esc(p.name) + '</td><td>' + (main ? charView(main) : '<span class="cinfo">–</span>') +
+    return '<tr class="' + (p.bench ? "bench" : "") + '"><td class="grab"></td><td class="player"><span class="pid" title="ID hráče v databázi">' + p.id + '</span>' + esc(p.name) + '</td><td>' + (main ? charView(main) : '<div class="char"><span class="cinfo">–</span></div>') +
       '</td><td>' + alts.map(charView).join("") + '</td><td class="note">' + esc(p.note) + '</td><td class="act"></td></tr>';
   }
 
@@ -216,7 +219,7 @@
     $("#nMain").textContent = nm + " hráčů"; $("#nBench").textContent = (list.length - nm) + " hráčů";
     $("#loginbox").hidden = !!state.token; $("#adminbox").hidden = !state.token;
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
-    $("#hint").textContent = state.edit ? "Piš přímo do tabulky. Číslo vlevo je ID hráče v databázi (zůstává i po přejmenování; jména hráčů musí být jedinečná). Classa a spec jsou dropdowny (role se odvodí ze specu), ★ = main postava, řádky přetáhni pro pořadí nebo mezi rosterem a lavičkou. Nic se neuloží, dokud nedáš Uložit."
+    $("#hint").textContent = state.edit ? "Piš přímo do tabulky. Číslo vlevo je ID hráče v databázi (zůstává i po přejmenování; jména hráčů musí být jedinečná). Classa a spec jsou dropdowny (role se odvodí ze specu), ★ = main postava, přetažením řádku na jiného hráče si oba prohodí místo (i roster ↔ lavička), přetažením na volné místo tabulky se hráč zařadí na její konec. Nic se neuloží, dokud nedáš Uložit."
       : "Roster je zdroj pravdy pro formuláře (Omluvenky, SimC), stránku Simy, addon ES Attendance i RaidPlan sestavy. Spec se doplňuje automaticky z posledního simu, když chybí.";
   }
 
@@ -257,15 +260,17 @@
     var tb = ev.target.closest && ev.target.closest("tbody[data-bench]"); if (!tb) return;
     ev.preventDefault();
     var d = state.draft, tr = ev.target.closest("tr[data-p]");
-    var moving = d.splice(dragIdx, 1)[0];
-    moving.bench = tb.dataset.bench === "1";
+    var toBench = tb.dataset.bench === "1";
     if (tr && +tr.dataset.p !== dragIdx) {
-      var t = +tr.dataset.p; if (t > dragIdx) t--;   // indexes shifted by the removal
-      var rect = tr.getBoundingClientRect(), after = ev.clientY > rect.top + rect.height / 2;
-      d.splice(t + (after ? 1 : 0), 0, moving);
+      // dropped on a player: the two swap places (including roster ↔ lavička)
+      var t = +tr.dataset.p, a = d[dragIdx], b = d[t];
+      d[dragIdx] = b; d[t] = a;
+      var ab = a.bench; a.bench = b.bench; b.bench = ab;
     } else {
-      // dropped on the table itself (or on its own row): append to that group
-      var lastIdx = -1; d.forEach(function (x, i) { if (x.bench === moving.bench) lastIdx = i; });
+      // dropped on the table itself (or on its own row): move to the end of that group
+      var moving = d.splice(dragIdx, 1)[0];
+      moving.bench = toBench;
+      var lastIdx = -1; d.forEach(function (x, i) { if (x.bench === toBench) lastIdx = i; });
       d.splice(lastIdx + 1, 0, moving);
     }
     dragIdx = null; render();
