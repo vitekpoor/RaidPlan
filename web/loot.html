@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!-- ZDROJ stránky Loot simy. build.bat ji kopíruje do kořene repa jako loot.html
      (s cestami web/loot_items.json a web/assets/). Data čte živě z Google Sheets:
-     list "Sim výsledky" (raid + Mythic+ Droptimizer / QE Live, sloupec "Původ" = Raid | M+ | Top Gear | Raid HC)
-     a list "Vault" (Great Vault ze SimC exportu) – oba plní Apps Script, čte se přes gviz CSV.
+     databáze (Cloudflare D1 přes Worker API GET /api/sims/results – plní sim_runner.py / sim_results.py;
+     Původ = Raid | M+ | Top Gear | Raid HC; list "Sim výsledky" v Sheets je jen záloha, když API neodpoví)
+     a list "Vault" (Great Vault ze SimC exportu) – ten plní Apps Script, čte se přes gviz CSV.
      "Raid HC" = raidový Droptimizer s obtížností "Heroic Vault" (Myth 1/6 → Myth 6/6 = všechno max 334): bonus roll
      na HC (a na mythic bossech, které zabíjíme) dá mythic item max 334, 344 base dropí jen poslední mythic bossové.
      Tyhle řádky nejdou do tabulek, slouží doporučení bonus rollu (vždy) a verdiktu "vzít z vaultu vs. nechat si bonus roll"
@@ -299,7 +300,7 @@ a.best:hover .open { color: var(--ink-strong); }
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: listy „Sim výsledky“ a „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+ a HC raid max 334 = základ pro bonus roll a srovnání s vaultem) a QE Live (healeři) · každý spec postavy zvlášť · itemy z Wowheadu.</p>
+  <p>Data: databáze simů (eternal-shadows Worker + D1) a list „Vault“ v guildovní tabulce · Raidbots Droptimizer (DPS, raid + Mythic+ a HC raid max 334 = základ pro bonus roll a srovnání s vaultem) a QE Live (healeři) · každý spec postavy zvlášť · itemy z Wowheadu.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
@@ -310,6 +311,10 @@ a.best:hover .open { color: var(--ink-strong); }
   var SHEET_TAB = "Sim výsledky";
   var VAULT_TAB = "Vault";
   var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(SHEET_TAB);
+  // Výsledky simů: databáze (Worker API, worker/index.js). Na workers.dev / vlastní doméně relativně, z GitHub Pages absolutně (CORS *).
+  // Když API neodpoví, stránka spadne na list "Sim výsledky" (gviz CSV) – ten Apps Script zatím plní dál.
+  var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
+  var API_URL = API_BASE + "/api/sims/results";
   var VAULT_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(VAULT_TAB);
   var ROSTER_TAB = "Roster";   // hlavní soupiska (řádky nad „LAVIČKA“) – hráči bez simu se ukážou v mřížce jako prázdné dlaždice
   var ROSTER_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(ROSTER_TAB);
@@ -418,13 +423,26 @@ a.best:hover .open { color: var(--ink-strong); }
     return itemsLoaded;
   }
 
+  // výsledky simů: API (JSON) → { api: true, text }, jinak list "Sim výsledky" (CSV) → { api: false, text }
+  var apiFailed = false;
+  function loadResults() {
+    return fetch(API_URL, { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("API HTTP " + r.status); return r.text(); })
+      .then(function (t) { if (t.charAt(0) !== "{") throw new Error("API: ne JSON"); apiFailed = false; return { api: true, text: t }; })
+      .catch(function (err) {
+        if (!apiFailed) { apiFailed = true; console.warn("Simy: API neodpovědělo (" + err.message + "), beru list „" + SHEET_TAB + "“"); }
+        return fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); })
+          .then(function (t) { return { api: false, text: t }; });
+      });
+  }
+
   function refresh(manual) {
     if (refreshing) return;
     refreshing = true;
     var status = $("#status");
     if (manual) status.textContent = "Obnovuji…";
     Promise.all([
-      fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); }),
+      loadResults(),
       // list Vault je volitelný – bez něj stránka funguje, jen bez verdiktu
       fetch(VAULT_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; }),
       // list Roster je volitelný – bez něj se jen neukážou hráči bez simu
@@ -435,7 +453,7 @@ a.best:hover .open { color: var(--ink-strong); }
       // list Discord je volitelný – bez něj jen chybí ikonka místnosti hráče
       fetch(DISCORD_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).catch(function () { return ""; })
     ]).then(function (res) {
-      var combined = res[0] + "\n " + res[1] + "\n " + res[2] + "\n " + res[3] + "\n " + res[5];
+      var combined = res[0].text + "\n " + res[1] + "\n " + res[2] + "\n " + res[3] + "\n " + res[5];
       if (combined === lastCsv && !manual) { showStatus(); return; }   // nic nového – nepřekreslovat
       lastCsv = combined;
       applyData(res[0], res[1], res[4], res[2], res[3], res[5]);
@@ -444,7 +462,7 @@ a.best:hover .open { color: var(--ink-strong); }
     }).catch(function (err) {
       status.textContent = "Nepodařilo se načíst data: " + err.message;
       status.className = "status err";
-      if (!state.rows.length) $("#view").innerHTML = '<p class="empty">Zkontroluj, že list „' + esc(SHEET_TAB) + '“ existuje a tabulka je sdílená pro čtení.</p>';
+      if (!state.rows.length) $("#view").innerHTML = '<p class="empty">Databáze simů (' + esc(API_URL) + ') ani záložní list „' + esc(SHEET_TAB) + '“ neodpověděly.</p>';
     }).then(function () { refreshing = false; });
   }
 
@@ -455,7 +473,8 @@ a.best:hover .open { color: var(--ink-strong); }
     var status = $("#status");
     status.textContent = Object.keys(players).length + " postav · " + n.raid + " raid + " + n.mplus + " M+ řádků" + (vaults ? " · " + vaults + " vaultů" : "") +
       (nosim ? " · " + nosim + " z rosteru bez simu" : "") +
-      (latest ? " · poslední sim " + fmtDate(latest) : "") + " · načteno " + fmtDate(new Date()) + " (obnova každou minutu)";
+      (latest ? " · poslední sim " + fmtDate(latest) : "") + " · načteno " + fmtDate(new Date()) + " (obnova každou minutu)" +
+      (state.source === "sheet" ? " · ⚠ záložní zdroj: list Sheets (API neodpovědělo)" : "");
     status.className = "status";
   }
 
@@ -469,44 +488,71 @@ a.best:hover .open { color: var(--ink-strong); }
     state.rows.forEach(function (r) { if (!hit && nkey(r.player) === k) hit = r.player; });
     if (hit) { state.view = "players"; state.player = hit; }
   }
-  function applyData(csvText, vaultText, lib, rosterText, crestText, discordText) {
-      var table = parseCsv(csvText);
-      var head = table.shift() || [];
-      var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
-      if (idx["Postava"] == null || idx["Rozdíl %"] == null) throw new Error("list „" + SHEET_TAB + "“ nemá očekávané sloupce (existuje?)");
+  // Jeden záznam výsledku v neutrálním tvaru (z API i z CSV): { player, spec, src, origin (raid|mplus|topgear|raidhc|""),
+  // report, time (Date), bossId, boss, itemIdRaw, item, slot, ilvl, base, value, diff, pct, charIlvl, worn, catalystId, catalystFrom }
+  function recordsFromApi(text) {
+    var data = JSON.parse(text);
+    if (!data || !data.ok || !data.rows) throw new Error("API: " + ((data && data.error) || "neplatná odpověď"));
+    return data.rows.map(function (r) {
+      return { player: r.character, spec: r.spec, src: r.source, origin: r.origin, report: r.report, time: r.time ? new Date(r.time) : null,
+               bossId: r.bossId, boss: r.boss, itemIdRaw: r.itemId, item: r.item, slot: r.slot, ilvl: r.ilvl,
+               base: r.base, value: r.value, diff: r.diff, pct: r.pct, charIlvl: r.charIlvl, worn: !!r.worn,
+               catalystId: r.catalystId, catalystFrom: r.catalystFrom };
+    });
+  }
+  function recordsFromCsv(csvText) {
+    var table = parseCsv(csvText);
+    var head = table.shift() || [];
+    var idx = {}; head.forEach(function (h, i) { idx[h.trim()] = i; });
+    if (idx["Postava"] == null || idx["Rozdíl %"] == null) throw new Error("list „" + SHEET_TAB + "“ nemá očekávané sloupce (existuje?)");
+    var ORIGIN = { "Raid": "raid", "M+": "mplus", "Top Gear": "topgear", "Raid HC": "raidhc" };
+    return table.filter(function (r) { return r[idx["Postava"]]; }).map(function (r) {
+      // "Původ" = Raid | M+ | Top Gear | Raid HC (starší řádky bez sloupce = ""), Stav "nasazeno" = Raidbots nesimoval
+      var origin = idx["Původ"] != null ? String(r[idx["Původ"]] || "").trim() : "";
+      return { player: r[idx["Postava"]], spec: r[idx["Spec"]], src: r[idx["Zdroj"]], origin: ORIGIN[origin] || (origin ? "raid" : ""),
+               report: r[idx["Report"]], time: parseDate(r[idx["Čas"]]),
+               bossId: num(r[idx["Boss ID"]]), boss: r[idx["Boss"]], itemIdRaw: r[idx["Item ID"]], item: r[idx["Item"]], slot: r[idx["Slot"]],
+               ilvl: num(r[idx["ilvl"]]), base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]]),
+               charIlvl: idx["ilvl postavy"] != null ? num(r[idx["ilvl postavy"]]) : null,
+               worn: idx["Stav"] != null && /nasazeno/i.test(String(r[idx["Stav"]] || "")),
+               catalystId: idx["Katalyzátor ID"] != null ? num(r[idx["Katalyzátor ID"]]) : null,
+               catalystFrom: idx["Katalyzátor z"] != null ? r[idx["Katalyzátor z"]] : "" };
+    });
+  }
+  function applyData(results, vaultText, lib, rosterText, crestText, discordText) {
+      var records = results.api ? recordsFromApi(results.text) : recordsFromCsv(results.text);
+      state.source = results.api ? "api" : "sheet";
       var items = lib.items || {}, bosses = lib.bosses || [];
       var bossById = {}; bosses.forEach(function (b) { bossById[String(b.id)] = b; });
       state.items = items; state.bosses = bosses; state.bossById = bossById;
-      state.rows = table.filter(function (r) { return r[idx["Postava"]]; }).map(function (r) {
-        var itemIdRaw = String(r[idx["Item ID"]] || "").trim();
+      state.rows = records.map(function (f) {
+        var itemIdRaw = String(f.itemIdRaw == null ? "" : f.itemIdRaw).trim();
         var itemId = /\|/.test(itemIdRaw) ? itemIdRaw : String(num(itemIdRaw) || "");
         var lib = items[itemId] || {};
-        var bossId = num(r[idx["Boss ID"]]);
-        var spec = String(r[idx["Spec"]] || "").toLowerCase();
-        var src = String(r[idx["Zdroj"]] || "");
-        // "Původ" = Raid | M+ | Top Gear | Raid HC (starší řádky bez sloupce = raid); u QE řádků bez bosse rozhodne loot_items.json
-        var origin = idx["Původ"] != null ? String(r[idx["Původ"]] || "").trim() : "";
-        var kind = origin === "M+" ? "mplus" : origin === "Top Gear" ? "topgear" : origin === "Raid HC" ? "raidhc"
-                 : (origin ? "raid" : (lib.kind === "mplus" ? "mplus" : "raid"));
+        var bossId = f.bossId == null || f.bossId === "" ? null : Number(f.bossId);
+        var spec = String(f.spec || "").toLowerCase();
+        var src = String(f.src || "");
+        // původ prázdný (starší řádky) → raid; u QE řádků bez bosse rozhodne loot_items.json
+        var kind = f.origin || (lib.kind === "mplus" ? "mplus" : "raid");
         // M+ řádky ze staršího parseru mají Boss ID -1 ("Mythic+ Dungeons") – dungeon vezmeme z loot_items.json
-        var bossName = r[idx["Boss"]] || "";
+        var bossName = f.boss || "";
         if (kind === "mplus" && !(bossId > 0) && lib.bosses && lib.bosses.length) { bossId = null; bossName = ""; }
         var bossIds = bossId != null ? [bossId] : (lib.bosses || []);
-        // Katalyzátor: set kus vyrobený z ne-setového itemu (sloupce "Katalyzátor ID" / "Katalyzátor z") – padá
-        // zdrojový item (dropId), set kus s jeho staty je jiný item než ten ze set bosse
-        var catId = idx["Katalyzátor ID"] != null ? String(num(r[idx["Katalyzátor ID"]]) || "") : "";
-        var catFrom = catId ? (String(idx["Katalyzátor z"] != null ? r[idx["Katalyzátor z"]] || "" : "") || (items[catId] || {}).name || ("#" + catId)) : "";
+        // Katalyzátor: set kus vyrobený z ne-setového itemu – padá zdrojový item (dropId), set kus s jeho staty
+        // je jiný item než ten ze set bosse
+        var catId = String(num(f.catalystId) || "");
+        var catFrom = catId ? (String(f.catalystFrom || "") || (items[catId] || {}).name || ("#" + catId)) : "";
         return {
           catalystId: catId, catalystFrom: catFrom, dropId: catId || itemId,
-          player: r[idx["Postava"]], spec: spec, role: HEALER_SPECS[spec] ? "heal" : "dps",
+          player: f.player, spec: spec, role: HEALER_SPECS[spec] ? "heal" : "dps",
           src: src, unit: /QE/i.test(src) ? "HPS" : "DPS", kind: kind,
-          report: r[idx["Report"]], time: parseDate(r[idx["Čas"]]),
+          report: f.report, time: f.time,
           bossIds: bossIds, boss: bossName || (bossIds.length && bossById[String(bossIds[0])] ? bossById[String(bossIds[0])].name : ""),
-          itemId: itemId, item: r[idx["Item"]] || lib.name || ("#" + itemId), icon: lib.icon || "",
-          slot: r[idx["Slot"]] || lib.slot || "", ilvl: num(r[idx["ilvl"]]),
-          base: num(r[idx["Základ"]]), value: num(r[idx["S itemem"]]), diff: num(r[idx["Rozdíl"]]), pct: num(r[idx["Rozdíl %"]]),
-          charIlvl: idx["ilvl postavy"] != null ? num(r[idx["ilvl postavy"]]) : null,   // průměrný ilvl nasazeného gearu (z reportu)
-          worn: idx["Stav"] != null && /nasazeno/i.test(String(r[idx["Stav"]] || ""))   // Raidbots nesimoval: hráč item (nebo lepší) už má
+          itemId: itemId, item: f.item || lib.name || ("#" + itemId), icon: lib.icon || "",
+          slot: String(f.slot == null ? "" : f.slot) || lib.slot || "", ilvl: num(f.ilvl),
+          base: num(f.base), value: num(f.value), diff: num(f.diff), pct: num(f.pct),
+          charIlvl: num(f.charIlvl),   // průměrný ilvl nasazeného gearu (z reportu)
+          worn: !!f.worn              // Raidbots nesimoval: hráč item (nebo lepší) už má
         };
       });
       // postavy s víc simovanými specy (affliction + destruction…) – u nich se spec ukazuje i u chipů

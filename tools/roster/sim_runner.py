@@ -11,8 +11,9 @@ Co dělá (jeden spuštěný příkaz, pak se jen čeká):
      až `parallel` simů najednou (výchozí 10),
   3. hlídá všechny běžící reporty (…/simbot/report/<id>) a jak který doběhne,
   4. nahlásí ho zpět do Sheets (action=done&kind=raid|mplus) – Apps Script
-     zapíše výsledky do listu "Sim výsledky" (stránka Simy) a raidový report
-     zkusí nahrát do wowaudit,
+     zapíše výsledky do listu "Sim výsledky" a raidový report zkusí nahrát do
+     wowaudit – a zároveň report rozparsuje a uloží do databáze (Cloudflare D1
+     přes Worker API, sim_results.py; env ES_API_TOKEN) – z ní čte stránka Simy,
   5. když má postava hotový raid i M+ report, pustí třetí sim: Raidbots Top Gear
      (kind "topgear") – z obou Droptimizerů vezme pro každý slot nejlepší raidový
      a nejlepší M+ item (jen kladné upgrady, nejvýš `topgear_max_items`), přidá je
@@ -89,6 +90,8 @@ from datetime import datetime
 from pathlib import Path
 
 import requests
+
+import sim_results   # výsledky simů → databáze (Cloudflare D1 přes Worker API), tools/roster/sim_results.py
 
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "sim_runner.config.json"
@@ -356,6 +359,9 @@ def load_config():
         cfg.update(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
     cfg["webapp_url"] = os.environ.get("SIM_WEBAPP_URL", cfg["webapp_url"])
     cfg["token"] = os.environ.get("SIM_API_TOKEN", cfg["token"])
+    # databáze výsledků (Worker API): env ES_API_URL / ES_API_TOKEN, nebo klíče api_url / api_token v configu
+    cfg["api_url"] = os.environ.get("ES_API_URL", "").strip() or cfg.get("api_url") or sim_results.DEFAULT_API_URL
+    cfg["api_token"] = os.environ.get("ES_API_TOKEN", "").strip() or cfg.get("api_token") or ""
     if os.environ.get("SIM_PARALLEL", "").strip().isdigit():
         cfg["parallel"] = int(os.environ["SIM_PARALLEL"])
     if os.environ.get("SIM_UPGRADE", "").strip():
@@ -1199,6 +1205,31 @@ def rkey(row):
     return f"{row['character']} (ř.{row['row']})"
 
 
+_db_warned = False
+
+
+def store_db(cfg, row, url, kind):
+    """Po hotovém simu uložit výsledky i do databáze (Worker API, sim_results.py). Bez tokenu jen upozorní;
+    chyba nikdy nezastaví běh – Sheets zápis (api.done) proběhl nezávisle."""
+    global _db_warned
+    if not cfg.get("api_token"):
+        if not _db_warned:
+            log("   DB: ES_API_TOKEN / api_token není nastavený – výsledky jdou jen do Sheets")
+            _db_warned = True
+        return
+    es = sim_results.EsApi(cfg["api_url"], cfg["api_token"])
+    tag = f"{row['character']} [{kind_label(kind)}]"
+    if kind == "topgear-skip":
+        try:
+            es.delete(row["character"], row["spec"], "topgear")
+            log(f"   {tag}: DB – starý Top Gear řádek smazán (nic není upgrade)")
+        except Exception as err:  # noqa: BLE001
+            log(f"   ⚠ {tag}: DB smazání Top Gearu selhalo: {err}")
+        return
+    res = sim_results.store_report(es, row["character"], row["spec"], url, kind)
+    log(f"   {tag}: DB {'✅ ' + res['message'] if res['ok'] else '⚠ ' + res['message']}")
+
+
 def fail_row(api, row, msg):
     log(f"   ⚠ {row['character']}: {msg}")
     try:
@@ -1224,6 +1255,7 @@ def qe_row(rb, api, row, dry_run):
         log(f"   {character}: QE Live report {url}")
         res = api.done(row["row"], character, url, "qe")
         log(f"   {character}: {res.get('message') or res}")
+        store_db(rb.cfg, row, url, "qe")
         return "done" if res.get("ok") else "error"
     except Exception as err:  # noqa: BLE001
         rb.screenshot(page, f"error_qe_{strip_accents(character)}")
@@ -1285,6 +1317,7 @@ def submit_topgear(rb, api, row, reports, dry_run):
             log(f"   {tag}: {res.get('message') or res}")
         except Exception as err:  # noqa: BLE001
             log(f"   (poznámka se nezapsala: {err})")
+        store_db(rb.cfg, row, "", "topgear-skip")
         return None
     log(f"   {tag}: kandidáti: " + ", ".join(f"{c['name']} ({kind_label(c['kind'])} {c['gain']:+.2f}%{', zbraň' if c['protected'] else ''})" for c in cands if not c.get("companion")))
     page = rb.new_tab()
@@ -1328,6 +1361,7 @@ def finish_sim(rb, api, sim):
     except Exception as err:  # noqa: BLE001
         log(f"   ⚠ {character}: upload selhal: {err}")
         ok = False
+    store_db(rb.cfg, row, sim["url"], sim["kind"])
     sim["page"].close()
     return "done" if ok else "error"
 

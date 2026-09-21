@@ -11,6 +11,8 @@
   "workers_dev": true,
   "preview_urls": false,
   "observability": { "enabled": true },
+  // worker/migrations/*.sql are imported as text modules (POST /api/admin/migrate runs them)
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "assets": {
     "directory": ".",
     "binding": "ASSETS",

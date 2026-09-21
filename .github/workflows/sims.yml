@@ -8,6 +8,8 @@ name: Sim queue (Raidbots / QE Live)
 # Secrets (Settings -> Secrets and variables -> Actions):
 #   SIM_WEBAPP_URL          .../exec adresa Apps Script web appu
 #   SIM_API_TOKEN           token (menu Simy -> Token pro sim_runner.py…)
+#   ES_API_TOKEN            token Worker API (= secret API_TOKEN Workeru eternal-shadows) – výsledky simů
+#                           do databáze D1 (tools/roster/sim_results.py); bez něj jdou jen do Sheets
 #   RAIDBOTS_STORAGE_STATE  obsah souboru z `python sim_runner.py login --export`
 #                           (přihlášení do Raidbots Premium; bez něj běží jako free účet)
 #   RAIDBOTS_EMAIL          e-mail + heslo účtu Raidbots (https://www.raidbots.com/auth) –
@@ -54,6 +56,7 @@ jobs:
     env:
       SIM_WEBAPP_URL: ${{ secrets.SIM_WEBAPP_URL }}
       SIM_API_TOKEN: ${{ secrets.SIM_API_TOKEN }}
+      ES_API_TOKEN: ${{ secrets.ES_API_TOKEN }}
       PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
