@@ -18,7 +18,7 @@ import { json, nowIso, numOrNull } from "./lib.js";
 import { makeWcl, guildReports, reportCode, referenceWindow, GUILD } from "../tools/flopik/wcl_lib.js";
 
 const PULLS_CACHE_SECONDS = 30;
-const REPORTS_MAX_AGE_MS = 120000;
+const REPORTS_MAX_AGE_MS = 10 * 60000;   // re-check WCL at most every 10 min (each check that changes the list costs ~80 row writes)
 const REFWIN_MAX_AGE_MS = 6 * 3600000;
 const DISPATCH_DEDUPE_MS = 120000;
 const GITHUB_REPO_DEFAULT = "vitekpoor/RaidPlan";
@@ -55,7 +55,10 @@ export async function getReports(env, ctx, url) {
   if (gql && (!rows.length || Date.now() - Date.parse(newest || 0) > REPORTS_MAX_AGE_MS)) {
     try {
       const list = await guildReports(gql);
-      await storeReports(env, list);
+      // D1 free tier counts every row write (100k/day): persist the list only when a report appeared, vanished or grew
+      const same = list.length === rows.length && list.every((r) => rows.some((x) => x.code === r.code && Number(x.end_ms) === Number(r.end) && x.title === r.title));
+      if (!same) await storeReports(env, list);
+      else await env.DB.prepare("UPDATE flopik_reports SET fetched_at = ?1 WHERE code = (SELECT code FROM flopik_reports ORDER BY fetched_at DESC LIMIT 1)").bind(nowIso()).run();
       rows = list.map((r) => ({ code: r.code, title: r.title, start_ms: r.start, end_ms: r.end, zone: r.zone }));
       source = "wcl";
     } catch (e) { error = String((e && e.message) || e); }
