@@ -17,6 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="web/assets/css/site.css">
 <style>
+  :root { --wrap: 1500px; }   /* editace: postava = jeden řádek (jméno · classa · spec · role) */
   .bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 14px; font-size: 13.5px; color: var(--muted); }
   .bar .sp { flex: 1; }
   .bar input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font: inherit; width: 11rem; }
@@ -39,6 +40,7 @@
   .roster tr.over td { box-shadow: inset 0 2px 0 var(--accent); }
   .roster tbody.over-empty { outline: 1px dashed var(--accent); min-height: 30px; }
   .char { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; line-height: 1.5; }
+  .edit .char { flex-wrap: nowrap; gap: 2px 5px; font-size: 12.5px; }
   .char + .char { margin-top: 2px; }
   .cname { font-weight: 600; }
   .cinfo { color: var(--muted); font-size: 12.5px; }
@@ -52,8 +54,9 @@
   .edit .roster select { cursor: pointer; appearance: none; -webkit-appearance: none; padding-right: 12px; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
                           background-position: right 5px top 55%, right 1px top 55%; background-size: 4px 4px; background-repeat: no-repeat; }
   .edit .roster select option { background: var(--surface2); color: var(--ink); }
-  .edit .roster input.pname { width: 9.5rem; font-weight: 700; } .edit .roster input.cname { width: 8.5rem; font-weight: 600; } .edit .roster input.note { width: 100%; min-width: 8rem; }
-  .edit .roster select.cls { width: 8.6rem; } .edit .roster select.spec { width: 8rem; color: var(--muted); font-size: 12.5px; }
+  .edit .roster input.pname { width: 8.5rem; font-weight: 700; } .edit .roster input.cname { width: 7rem; font-weight: 600; } .edit .roster input.note { width: 100%; min-width: 7rem; }
+  .edit .roster select.cls { width: 7.6rem; } .edit .roster select.spec { width: 6.8rem; color: var(--muted); font-size: 12px; }
+  .edit .roster td.player { width: 11rem; } .edit .roster td.note { width: 11rem; }
   .mini { background: transparent; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 12.5px; padding: 0 4px; border-radius: 4px; line-height: 1.5; }
   .mini:hover { color: var(--ink-strong); background: var(--surface3); }
   .mini.del:hover { color: var(--dps); }
