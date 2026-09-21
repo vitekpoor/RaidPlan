@@ -48,10 +48,22 @@ def class_token(name):
     return CLASS_TOKEN.get(n, re.sub(r"\s+", "", n.upper()))
 
 
+def _ssl_context():
+    """Windows Store Python ships an old OpenSSL trust store that rejects some current certificates
+    ("certificate has expired"); prefer certifi's bundle when it is installed (pip install certifi)."""
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
 def load_roster():
     """-> list of {name, chars:[(char, classToken, role), ...]} in sheet order."""
     try:
-        text = urllib.request.urlopen(ROSTER_URL, timeout=30).read().decode("utf-8")
+        req = urllib.request.Request(ROSTER_URL, headers={"User-Agent": "es-build-roster/1.0"})   # bez UA vrací Cloudflare 403
+        text = urllib.request.urlopen(req, timeout=30, context=_ssl_context()).read().decode("utf-8")
     except Exception as e:  # noqa: BLE001
         sys.exit("Roster download failed (%s)." % e)
     rows = list(csv.reader(io.StringIO(text)))

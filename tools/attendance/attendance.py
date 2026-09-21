@@ -303,10 +303,21 @@ def fetch_csv(sheet_id, gid):
     return body.decode("utf-8-sig", "replace")
 
 
+def _ssl_context():
+    """Windows Store Python ships an old OpenSSL trust store that rejects some current certificates
+    ("certificate has expired"); prefer certifi's bundle when it is installed (pip install certifi)."""
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
 def fetch_url(url):
     req = urllib.request.Request(url, headers={"User-Agent": "raid-attendance/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as r:
             return r.read().decode("utf-8-sig", "replace")
     except urllib.error.HTTPError as e:
         raise ReportError(f"{url} returned HTTP {e.code}")

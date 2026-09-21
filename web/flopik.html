@@ -2,7 +2,7 @@
 <!-- ZDROJ stránky Flopik – fails po pullech. build.bat ji kopíruje do kořene repa jako flopik.html (s cestami
      web/assets/). Zdroj dat je Warcraft Logs: dropdown reportů guildy bere z Apps Script web appu (?p=flopik&action=reports),
      pro vybraný report si nechá dopočítat chybějící pully (action=refresh, Apps Script stáhne události fightu z WCL API,
-     spočítá je enginem z tools/flopik/engine.js a zapíše do listu „Flopik“) a list pak čte přes gviz CSV: jeden souhrnný
+     spočítá je enginem z tools/flopik/engine.js a zapíše do databáze) a stránka pak čte Worker API: jeden souhrnný
      řádek na pull (Hráč prázdný, Data = sloupce / statistiky / legenda) + řádek na hráče (Data = hodnoty metrik).
      Stejný list plní i lokální tools/flopik/flopik.py (řádky bez Reportu). Každou minutu se obnoví. Vzhled: site.css. -->
 <html lang="cs">
@@ -184,17 +184,15 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
 </div><!-- /.page-content -->
 
 <footer>
-  <p>Data: Warcraft Logs (reporty guildy) → Apps Script → list „Flopik“ v guildovní tabulce. Které faily se u kterého bosse počítají, je v <span class="chip">tools/flopik/engine.js</span>.</p>
+  <p>Data: Warcraft Logs (reporty guildy) → runner v GitHub Actions (<span class="chip">tools/flopik/wcl_refresh.mjs</span>) → databáze guildy (Worker + D1). Které faily se u kterého bosse počítají, je v <span class="chip">tools/flopik/engine.js</span>.</p>
   <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
 </footer>
 </div><!-- /.container -->
 
 <script>
 (function () {
-  var SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI", TAB = "Flopik";
-  var CSV_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(TAB);
-  var REF_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/gviz/tq?tqx=out:csv&headers=1&sheet=FlopikRef";   // rank 1 logy per boss|obtížnost|spec
-  var WEBAPP = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec";
+  // Worker API (databáze guildy): na workers.dev / vlastní doméně relativně, z GitHub Pages absolutně (CORS *)
+  var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
   var REFRESH_MS = 60000;
   var MIN_DUR = 30;   // s – kratší pully (omyl, reset, okamžitý wipe) se nezobrazují
   var MAX_AGE_MS = 14 * 86400000;   // v dropdownu jen logy z posledních dvou týdnů
@@ -227,38 +225,52 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     return rows;
   }
 
-  // Datum | Pull | Boss | Obtížnost | Start | Délka | Kill | Hráč | Data | Boss klíč | Zapsáno | Report | Fight
-  // -> nights keyed by WCL report code (or "d:YYYY-MM-DD" for pulls recorded from a local log without a report)
-  function build(text) {
-    var rows = parseCsv(text);
-    if (!rows.length || !/datum/i.test(rows[0][0] || "")) return null;   // gviz bez listu vrací default tab
+  // Pulls come from the Worker API. GET /api/flopik/pulls = light index of every pull (no players) → nights skeleton;
+  // the selected night is then loaded in full (meta + players) by loadNight(). Night key = WCL report code, or
+  // "d:YYYY-MM-DD" for pulls recorded from a local combat log without a report.
+  function pullObj(p) {
+    return { no: p.no, start: String(p.start), dur: Number(p.dur) || 0, kill: !!p.kill, difficulty: String(p.difficulty || ""), meta: p.meta || null, players: [], stub: !p.meta };
+  }
+  function finishNight(n) {
+    n.list = Object.keys(n.bosses).map(function (k) {
+      var b = n.bosses[k];
+      b.list = Object.keys(b.pulls).map(function (no) { return b.pulls[no]; }).sort(function (a, c) { return a.start < c.start ? -1 : a.start > c.start ? 1 : a.no - c.no; });
+      b.list.forEach(function (p) { if (!p.meta) p.meta = { cols: [], stats: [], legend: [], summary: {} }; });
+      b.first = b.list[0].start;
+      return b;
+    }).sort(function (a, c) { return a.first < c.first ? -1 : 1; });
+    n.pulls = n.list.reduce(function (s, b) { return s + b.list.length; }, 0);
+    n.stub = n.list.some(function (b) { return b.list.some(function (p) { return p.stub; }); });
+  }
+  function buildIndex(pulls) {
     var nights = {};
-    rows.slice(1).forEach(function (r) {
-      if (!r[0] || !r[9]) return;
-      var d = String(r[0]).trim(), key = String(r[9]).trim(), no = Number(r[1]) || 0, code = String(r[11] || "").trim();
-      if ((Number(r[5]) || 0) < MIN_DUR) return;
+    (pulls || []).forEach(function (p) {
+      if ((Number(p.dur) || 0) < MIN_DUR) return;
+      var d = String(p.date), key = String(p.bossKey), code = String(p.report || "");
       var nk = code || ("d:" + d);
-      var n = nights[nk] || (nights[nk] = { key: nk, code: code, date: d, bosses: {}, last: "" });
-      if (d + " " + r[4] > n.last) { n.last = d + " " + r[4]; n.date = d; }
-      var b = n.bosses[key] || (n.bosses[key] = { key: key, name: String(r[2]), pulls: {} });
-      var p = b.pulls[no] || (b.pulls[no] = { no: no, start: String(r[4]), dur: Number(r[5]) || 0, kill: String(r[6]) === "1", difficulty: String(r[3]), meta: null, players: [] });
-      var data = {};
-      try { data = JSON.parse(r[8] || "{}"); } catch (e) {}
-      if (!String(r[7]).trim()) p.meta = data;
-      else { data.name = String(r[7]).trim(); p.players.push(data); }
+      var n = nights[nk] || (nights[nk] = { key: nk, code: code, date: d, bosses: {}, last: "", stub: true });
+      if (d + " " + p.start > n.last) { n.last = d + " " + p.start; n.date = d; }
+      var b = n.bosses[key] || (n.bosses[key] = { key: key, name: String(p.boss), pulls: {} });
+      b.pulls[p.no] = pullObj(p);
     });
-    Object.keys(nights).forEach(function (nk) {
-      var n = nights[nk];
-      n.list = Object.keys(n.bosses).map(function (k) {
-        var b = n.bosses[k];
-        b.list = Object.keys(b.pulls).map(function (no) { return b.pulls[no]; }).sort(function (a, c) { return a.start < c.start ? -1 : a.start > c.start ? 1 : a.no - c.no; });
-        b.list.forEach(function (p) { if (!p.meta) p.meta = { cols: [], stats: [], legend: [], summary: {} }; });
-        b.first = b.list[0].start;
-        return b;
-      }).sort(function (a, c) { return a.first < c.first ? -1 : 1; });
-      n.pulls = n.list.reduce(function (s, b) { return s + b.list.length; }, 0);
-    });
+    Object.keys(nights).forEach(function (nk) { finishNight(nights[nk]); });
     return nights;
+  }
+  /** Full data of one night (report code or "d:date") → replaces the skeleton in NIGHTS. */
+  function applyNight(nk, pulls) {
+    var n = { key: nk, code: /^d:/.test(nk) ? "" : nk, date: "", bosses: {}, last: "", stub: false };
+    (pulls || []).forEach(function (p) {
+      if ((Number(p.dur) || 0) < MIN_DUR) return;
+      var d = String(p.date), key = String(p.bossKey);
+      if (d + " " + p.start > n.last) { n.last = d + " " + p.start; n.date = d; }
+      var b = n.bosses[key] || (n.bosses[key] = { key: key, name: String(p.boss), pulls: {} });
+      var o = pullObj(p); o.stub = false; o.players = (p.players || []).slice(); o.meta = p.meta || { cols: [], stats: [], legend: [], summary: {} };
+      b.pulls[p.no] = o;
+    });
+    NIGHTS = NIGHTS || {};
+    if (!n.last) { delete NIGHTS[nk]; return; }
+    finishNight(n); n.stub = false;
+    NIGHTS[nk] = n;
   }
 
   // --- options: WCL reports (from the web app) + local-log nights --------
@@ -367,7 +379,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     var k = key + "|" + endSec;
     if (REFWIN[k] || refwinPending[k]) return;
     refwinPending[k] = true;
-    fetch(WEBAPP + "?p=flopik&action=refwin&key=" + encodeURIComponent(key) + "&end=" + endSec, { redirect: "follow" })
+    fetch(API_BASE + "/api/flopik/refwin?key=" + encodeURIComponent(key) + "&end=" + endSec)
       .then(function (r) { return r.json(); })
       .then(function (j) { REFWIN[k] = j && j.ok ? j : { ok: false, error: (j && j.error) || "chyba" }; delete refwinPending[k]; render(); })
       .catch(function (e) { REFWIN[k] = { ok: false, error: e.message }; delete refwinPending[k]; render(); });
@@ -559,6 +571,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     var o = currentOption();
     $("pick").hidden = !o;
     var n = o && o.night;
+    if (n && n.stub && !nightLoading[o.key]) loadNight(o.key).then(function (ch) { if (ch) render(); });
     if (!n) {
       $("bosses").innerHTML = $("tabs").innerHTML = $("strip").innerHTML = $("legend").innerHTML = "";
       $("wrap").hidden = true;
@@ -567,7 +580,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
       $("loading").hidden = !computing; $("empty").hidden = computing;
       if (computing) { $("loadingMsg").textContent = "Načítám pully z Warcraft Logs"; $("loadingSub").textContent = o.title + " · první výsledky se objeví za chvíli"; }
       $("empty").innerHTML = NIGHTS === null && !REPORTS.length
-        ? "Data se nepodařilo načíst (list „Flopik“ zatím neexistuje, nebo Sheets / web app neodpověděly)."
+        ? "Data se nepodařilo načíst (API databáze neodpovědělo)."
         : o ? (refreshing === o.code ? "Načítám pully z Warcraft Logs (" + esc(o.title) + ")… první výsledky se objeví za chvíli."
               : "Tento report zatím nemá spočítané pully. " + (o.code ? "Načítání začne automaticky; pokud ne, zkus stránku obnovit." : ""))
           : "Zatím žádný pull. Reporty se berou z Warcraft Logs (guilda Eternal Shadows); lokálně jde použít <code>python tools\\flopik\\flopik.py</code>.";
@@ -750,13 +763,17 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
   function setLive(ok, msg) { $("live").className = "live" + (ok ? "" : " stale"); $("liveTxt").textContent = msg; }
   function stamp() { var now = new Date(); return now.getHours() + ":" + (now.getMinutes() < 10 ? "0" : "") + now.getMinutes(); }
 
-  function loadCsv() {
-    return fetch(CSV_URL, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("Sheets HTTP " + r.status); return r.text(); })
+  var lastIndex = null, lastNightJson = {}, nightLoading = {};
+  function loadIndex() {
+    return fetch(API_BASE + "/api/flopik/pulls", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("API HTTP " + r.status); return r.text(); })
       .then(function (text) {
-        if (text === lastText) return false;
+        if (text === lastIndex) return false;
+        lastIndex = text;
+        var fresh = buildIndex((JSON.parse(text) || {}).pulls || []);
+        // keep fully loaded nights whose pull set did not change
+        Object.keys(fresh).forEach(function (k) { var old = NIGHTS && NIGHTS[k]; if (old && !old.stub && old.pulls === fresh[k].pulls && old.last === fresh[k].last) fresh[k] = old; });
         var before = NIGHTS;
-        lastText = text;
-        NIGHTS = build(text) || {};
+        NIGHTS = fresh;
         // if the user was on the newest pull of this boss, follow the new one
         if (before && state.view !== "all") {
           var ob = before[state.night] && before[state.night].bosses[state.boss], nb = NIGHTS[state.night] && NIGHTS[state.night].bosses[state.boss];
@@ -765,23 +782,44 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
         return true;
       });
   }
+  function loadNight(nk) {
+    if (!nk || nightLoading[nk]) return Promise.resolve(false);
+    nightLoading[nk] = true;
+    return fetch(API_BASE + "/api/flopik/pulls?report=" + encodeURIComponent(nk), { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("API HTTP " + r.status); return r.text(); })
+      .then(function (text) {
+        delete nightLoading[nk];
+        if (lastNightJson[nk] === text) return false;
+        lastNightJson[nk] = text;
+        applyNight(nk, (JSON.parse(text) || {}).pulls || []);
+        return true;
+      })
+      .catch(function (e) { delete nightLoading[nk]; setLive(false, "API: " + e.message); return false; });
+  }
+  /** Index + the currently selected night (keeps the old call sites). Resolves true when something changed. */
+  function loadCsv() {
+    return loadIndex().then(function (a) {
+      var o = currentOption();
+      return (o && o.night && o.night.stub ? loadNight(o.key) : Promise.resolve(false)).then(function (b) { return a || b; });
+    });
+  }
   var lastRefText = null;
   function loadRefs() {
-    return fetch(REF_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; })
+    return fetch(API_BASE + "/api/flopik/refs", { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; })
       .then(function (text) {
         if (!text || text === lastRefText) return false;
-        var refs = parseRefs(text);   // null = the FlopikRef tab does not exist yet (gviz returns the default tab)
-        if (!refs) return false;
-        lastRefText = text; REFS = refs;
+        var j = JSON.parse(text);
+        if (!j || !j.ok) return false;
+        lastRefText = text; REFS = j.refs || {};
         return true;
       }).catch(function () { return false; });
   }
   function loadReports() {
-    return fetch(WEBAPP + "?p=flopik&action=reports", { redirect: "follow" }).then(function (r) { return r.json(); })
+    return fetch(API_BASE + "/api/flopik/reports", { cache: "no-store" }).then(function (r) { return r.json(); })
       .then(function (j) { if (j && j.ok && j.reports) REPORTS = j.reports; return REPORTS; })
       .catch(function () { return REPORTS; });
   }
-  /** Ask the web app to compute pulls of the current report that are not in the sheet yet; poll until done. */
+  /** Ask the Worker to run the GitHub Actions runner for the current report; poll the database until it is done. */
+  var pollTimer = null;
   function ensureLoaded(periodic) {
     var o = currentOption();
     if (!o || !o.code || refreshing) return;
@@ -790,27 +828,32 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     checked[o.code] = true;
     refreshing = o.code;
     setLive(true, "kontroluji nové pully v Warcraft Logs…");
-    fetch(WEBAPP + "?p=flopik&action=refresh&code=" + encodeURIComponent(o.code), { redirect: "follow" }).then(function (r) { return r.json(); })
+    fetch(API_BASE + "/api/flopik/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: o.code, reason: "page" }) })
+      .then(function (r) { return r.json(); })
       .then(function (j) {
-        refreshing = null;
-        if (!j || !j.ok) { setLive(false, "Warcraft Logs: " + (j && j.error || "chyba")); render(); return; }
-        var again = j.busy || j.remaining > 0;
-        // reload when pulls were added or when reference (rank 1) logs were being fetched in this or the previous call
-        var reload = j.added || j.parsed || j.refsPending || refsWerePending;
-        refsWerePending = !!j.refsPending;
-        var done = reload ? Promise.all([loadCsv(), loadRefs()]).then(function () { render(); }) : Promise.resolve();
-        done.then(function () {
-          if (again) {
-            checked[o.code] = false;
-            setLive(true, "načítám z Warcraft Logs… " + (j.cached || 0) + "/" + (j.fights || "?") + " pullů");
-            clearTimeout(refreshTimer); refreshTimer = setTimeout(function () { refreshing = null; ensureLoaded(false); }, j.busy ? 5000 : 800);
-          } else setLive(isLive(o), (isLive(o) ? "živý log · aktuální " : "log je kompletní · ") + stamp());
-        });
+        if (!j || !j.ok) { refreshing = null; setLive(false, "Warcraft Logs runner: " + (j && j.error || "chyba")); render(); return; }
+        setLive(true, j.dispatched ? "počítám nové pully v GitHub Actions… (1–3 min)" : "výpočet už běží…");
+        render();
+        var started = Date.now();
+        function poll() {
+          fetch(API_BASE + "/api/flopik/status?code=" + encodeURIComponent(o.code), { cache: "no-store" }).then(function (r) { return r.json(); })
+            .then(function (st) {
+              return Promise.all([loadCsv(), loadRefs()]).then(function (ch) {
+                if (ch[0] || ch[1]) render();
+                if (st && st.running && Date.now() - started < 12 * 60000) { pollTimer = setTimeout(poll, 10000); return; }
+                refreshing = null;
+                setLive(isLive(o), (isLive(o) ? "živý log · aktuální " : "log je kompletní · ") + stamp());
+                render();
+              });
+            })
+            .catch(function (e) { refreshing = null; setLive(false, "API neodpovědělo (" + e.message + ")"); render(); });
+        }
+        pollTimer = setTimeout(poll, 8000);
       })
-      .catch(function (e) { refreshing = null; setLive(false, "web app neodpověděl (" + e.message + ")"); render(); });
+      .catch(function (e) { refreshing = null; setLive(false, "API neodpovědělo (" + e.message + ")"); render(); });
   }
 
-  Promise.all([loadReports(), loadRefs(), loadCsv().catch(function (e) { setLive(false, "Sheets: " + e.message); return false; })]).then(function () {
+  Promise.all([loadReports(), loadRefs(), loadCsv().catch(function (e) { setLive(false, "API: " + e.message); return false; })]).then(function () {
     render();
     ensureLoaded();
     if (!refreshing) setLive(true, "načteno " + stamp());

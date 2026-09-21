@@ -182,28 +182,32 @@ def load_config(explicit_url, explicit_token):
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as f:
                 c = json.load(f)
-            for k in ("webapp_url", "token", "logs", "cutoff", "poll"):
+            for k in ("api_url", "api_token", "webapp_url", "token", "logs", "cutoff", "poll"):
                 if c.get(k) and not cfg.get(k):
                     cfg[k] = c[k]
     if explicit_url:
-        cfg["webapp_url"] = explicit_url
+        cfg["api_url"] = explicit_url
     if explicit_token:
-        cfg["token"] = explicit_token
+        cfg["api_token"] = explicit_token
+    cfg["api_url"] = os.environ.get("ES_API_URL", "").strip() or cfg.get("api_url") or "https://eternal-shadows.vitek-poor.workers.dev"
+    cfg["api_token"] = os.environ.get("ES_API_TOKEN", "").strip() or cfg.get("api_token") or ""
     return cfg
 
 
 def upload_pull(cfg, res, tries=4):
-    body = json.dumps({"p": "flopik", "token": cfg["token"], "action": "pull", "pull": res}, ensure_ascii=False).encode("utf-8")
+    """POST /api/flopik/pulls (Worker API, databáze) – stejný tvar pullu jako z Warcraft Logs runneru."""
+    body = json.dumps({"pull": res}, ensure_ascii=False).encode("utf-8")
     last = ""
     for attempt in range(tries):
         try:
-            req = urllib.request.Request(cfg["webapp_url"], data=body, headers={"Content-Type": "text/plain;charset=utf-8"})
-            with urllib.request.urlopen(req, timeout=60) as r:   # follows the 302 to googleusercontent
-                text = r.read().decode("utf-8", "replace")
-            if text.lstrip().startswith("<"):
-                last = "Google vrátil HTML místo JSON"
-            else:
-                return json.loads(text)
+            req = urllib.request.Request(cfg["api_url"].rstrip("/") + "/api/flopik/pulls", data=body,
+                                         headers={"Content-Type": "application/json", "Authorization": "Bearer " + cfg["api_token"], "User-Agent": "flopik/1.0"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            last = f"HTTP {e.code} {e.read().decode('utf-8', 'replace')[:160]}"
+            if 400 <= e.code < 500 and e.code != 429:
+                break
         except (urllib.error.URLError, ValueError, OSError) as e:
             last = str(e)
         time.sleep(2 + 3 * attempt)
@@ -328,8 +332,8 @@ def main():
     args = ap.parse_args()
 
     cfg = load_config(args.webapp_url, args.token)
-    if not args.no_upload and not (cfg.get("webapp_url") and cfg.get("token")):
-        sys.exit("Chybí webapp_url + token (tools/roster/sim_runner.config.json nebo tools/flopik/flopik.config.json), "
+    if not args.no_upload and not cfg.get("api_token"):
+        sys.exit("Chybí api_token (tools/roster/sim_runner.config.json nebo tools/flopik/flopik.config.json = secret API_TOKEN Workeru), "
                  "nebo použij --no-upload. Token: menu tabulky Simy → Token pro sim_runner.py…")
     default_cutoff = args.cutoff if args.cutoff is not None else int(cfg.get("cutoff", 0))
 

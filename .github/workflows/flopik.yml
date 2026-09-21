@@ -1,0 +1,56 @@
+name: Flopik (Warcraft Logs → databáze)
+
+# Dopočítá pully z Warcraft Logs (tools/flopik/wcl_refresh.mjs + engine.js) a uloží je přes Worker API do D1.
+# Spouští ho stránka flopik.html přes Worker (POST /api/flopik/refresh → workflow_dispatch s kódem reportu,
+# secret GITHUB_TOKEN ve Workeru) a cron během raidových večerů (--live = reporty, kde poslední fight skončil
+# před méně než 90 minutami).
+#
+# Secrets: WCL_CLIENT_ID + WCL_CLIENT_SECRET (https://www.warcraftlogs.com/api/clients), ES_API_TOKEN (Worker API_TOKEN).
+
+on:
+  schedule:
+    - cron: "*/20 16-23 * * *"      # 18:00–01:40 českého času, každých 20 minut
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Kód reportu Warcraft Logs (prázdné = všechny živé reporty)"
+        type: string
+        default: ""
+      reason:
+        description: "Kdo/co spustil (jen do logu)"
+        type: string
+        default: "manual"
+      all:
+        description: "Přepočítat všechny reporty guildy (backfill)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flopik
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      WCL_CLIENT_ID: ${{ secrets.WCL_CLIENT_ID }}
+      WCL_CLIENT_SECRET: ${{ secrets.WCL_CLIENT_SECRET }}
+      ES_API_TOKEN: ${{ secrets.ES_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Refresh pulls
+        run: |
+          if [ "${{ inputs.all }}" = "true" ]; then
+            node tools/flopik/wcl_refresh.mjs --all
+          elif [ -n "${{ inputs.code }}" ]; then
+            node tools/flopik/wcl_refresh.mjs --code "${{ inputs.code }}"
+          else
+            node tools/flopik/wcl_refresh.mjs --live
+          fi

@@ -5,6 +5,7 @@ es_import.py – jednorázové přenosy z guildovní Google tabulky do databáze
   python es_import.py roster          # list "Roster" (Hráč | Main char | Main classa | Main role | | Alt char | Alt classa | Alt role | Poznámka,
                                       #   řádek LAVIČKA = začátek lavičky) → PUT /api/roster; spec postav se doplní z posledních simů
   python es_import.py absence         # list "Absence přehled" (Hráč × datumy "čt 10.9.", buňky X / pozdě) → POST /api/absence/import
+  python es_import.py flopik          # listy "Flopik" (pully + hráči) a "FlopikRef" (rank 1 logy) → POST /api/flopik/pulls, /api/flopik/refs
   python es_import.py roster --dry-run
 
 Token: env ES_API_TOKEN nebo "api_token" v sim_runner.config.json (stejně jako sim_results.py).
@@ -132,15 +133,91 @@ def import_absence(api, sheet_id, dry_run):
     print(api._check(r, "absence import"))
 
 
+def prague_iso(text):
+    """"2026-09-19 18:11:49" (čas tabulky, Europe/Prague) → ISO UTC; None když nejde."""
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?", str(text or "").strip())
+    if not m:
+        return None
+    dt = datetime(*(int(x) for x in m.groups()[:5]), int(m.group(6) or 0), tzinfo=sr.SHEET_TZ)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def import_flopik(api, sheet_id, dry_run):
+    """Flopik: Datum | Pull | Boss | Obtížnost | Start | Délka (s) | Kill | Hráč | Data | Boss klíč | Zapsáno | Report | Fight
+    (souhrnný řádek s prázdným Hráčem = meta JSON, řádky hráčů = data JSON). FlopikRef: Klíč | Boss ID | Obtížnost | Spec |
+    Metrika | Hráč | Server | Guilda | Report | Fight | Délka (s) | Hodnota | Data | Načteno."""
+    rows = gviz_rows(sheet_id, "Flopik")
+    head = [h.strip() for h in rows[0]]
+    idx = {h: i for i, h in enumerate(head)}
+    need = ["Datum", "Pull", "Boss", "Obtížnost", "Start", "Délka (s)", "Kill", "Hráč", "Data", "Boss klíč", "Report", "Fight"]
+    for n in need:
+        if n not in idx:
+            sys.exit(f"List Flopik nemá sloupec '{n}' (má: {head})")
+    pulls = {}
+    for r in rows[1:]:
+        cell = lambda n: r[idx[n]].strip() if idx[n] < len(r) else ""
+        date, key, start = cell("Datum"), cell("Boss klíč"), cell("Start")
+        if not date or not key:
+            continue
+        report, fight = cell("Report"), cell("Fight")
+        pk = (report, fight) if report else (date, key, start)
+        p = pulls.setdefault(pk, {"date": date, "start": start, "boss": cell("Boss"), "bossKey": key, "difficulty": cell("Obtížnost"),
+                                  "dur": float(cell("Délka (s)").replace(",", ".") or 0), "kill": cell("Kill") == "1", "report": report,
+                                  "fight": int(fight) if fight.isdigit() else None, "players": []})
+        try:
+            data = sr.json.loads(cell("Data") or "{}")
+        except ValueError:
+            data = {}
+        if not cell("Hráč"):
+            p.update({k: data.get(k) for k in ("bossId", "deaths", "cutoff", "cols", "stats", "legend", "description", "summary", "deathList") if k in data})
+        else:
+            data["name"] = cell("Hráč")
+            p["players"].append(data)
+    sr.log(f"Flopik: {len(pulls)} pullů, {sum(len(p['players']) for p in pulls.values())} řádků hráčů")
+    refs_rows = gviz_rows(sheet_id, "FlopikRef")
+    rh = [h.strip() for h in refs_rows[0]]
+    refs = []
+    if rh and rh[0] == "Klíč":
+        ri = {h: i for i, h in enumerate(rh)}
+        for r in refs_rows[1:]:
+            cell = lambda n: r[ri[n]].strip() if n in ri and ri[n] < len(r) else ""
+            if not cell("Klíč"):
+                continue
+            try:
+                data = sr.json.loads(cell("Data") or "{}")
+            except ValueError:
+                data = {}
+            refs.append({"key": cell("Klíč"), "bossId": sr._num(cell("Boss ID")), "difficulty": cell("Obtížnost"), "spec": cell("Spec"), "metric": cell("Metrika") or "dps",
+                         "player": cell("Hráč"), "server": cell("Server"), "guild": cell("Guilda"), "report": cell("Report"), "fight": sr._num(cell("Fight")),
+                         "dur": sr._num(cell("Délka (s)")), "amount": sr._num(cell("Hodnota")), "data": data, "fetchedAt": prague_iso(cell("Načteno"))})
+    sr.log(f"FlopikRef: {len(refs)} referenčních logů")
+    if dry_run:
+        for p in list(pulls.values())[:5]:
+            print("  ", p["date"], p["start"], p["boss"], p["difficulty"], "kill" if p["kill"] else "wipe", p["report"], p["fight"], len(p["players"]), "hráčů")
+        return
+    api.require_token()
+    n = 0
+    for p in sorted(pulls.values(), key=lambda x: (x["date"], x["start"])):
+        r = requests.post(f"{api.url}/api/flopik/pulls", headers=api._headers(), data=sr.json.dumps({"pull": p}, ensure_ascii=False).encode("utf-8"), timeout=120)
+        api._check(r, "flopik pull")
+        n += 1
+    sr.log(f"  ✅ {n} pullů uloženo")
+    if refs:
+        r = requests.post(f"{api.url}/api/flopik/refs", headers=api._headers(), data=sr.json.dumps({"refs": refs}, ensure_ascii=False).encode("utf-8"), timeout=120)
+        print(api._check(r, "flopik refs"))
+
+
 def main():
     ap = argparse.ArgumentParser(description="Import z Google tabulky do databáze")
-    ap.add_argument("what", choices=["roster", "absence"])
+    ap.add_argument("what", choices=["roster", "absence", "flopik"])
     ap.add_argument("--sheet-id", default=sr.SHEET_ID)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     api = sr.EsApi.from_config()
     if args.what == "roster":
         import_roster(api, args.sheet_id, args.dry_run)
+    elif args.what == "flopik":
+        import_flopik(api, args.sheet_id, args.dry_run)
     else:
         import_absence(api, args.sheet_id, args.dry_run)
 

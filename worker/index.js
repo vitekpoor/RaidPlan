@@ -7,6 +7,7 @@
 //   sim queue    → worker/queue.js      /api/sims/submit, /status, /queue, /queue/status, /run, /extras, /notify-test, /api/discord/rooms
 //   roster       → worker/roster.js     /api/roster (+ .csv), PUT (admin), /api/admin/login, /api/admin/check
 //   absence      → worker/absence.js    /api/absence (+ .csv), DELETE (admin), /api/absence/import (admin)
+//   flopik       → worker/flopik.js     /api/flopik/reports, /pulls, /pulls/parse, /refs, /refwin, /refresh, /status
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -14,13 +15,15 @@
 import migration0001 from "./migrations/0001_sim_results.sql";
 import migration0002 from "./migrations/0002_sim_queue.sql";
 import migration0003 from "./migrations/0003_roster_absence.sql";
+import migration0004 from "./migrations/0004_flopik.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
+import * as flopik from "./flopik.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004]];
 
 export default {
   async fetch(request, env, ctx) {
@@ -100,6 +103,18 @@ async function route(request, env, ctx, url) {
   if (path === "/api/absence.csv" && method === "GET") return getAbsenceCsv(env, url);
   if (path === "/api/absence" && method === "DELETE") return admin(() => deleteAbsence(env, url));
   if (path === "/api/absence/import" && method === "POST") return admin(() => importAbsence(request, env));
+
+  // ---- Flopik (worker/flopik.js)
+  if (path === "/api/flopik/reports" && method === "GET") return flopik.getReports(env, ctx, url);
+  if (path === "/api/flopik/reports" && method === "POST") return auth() || flopik.postReports(request, env, ctx, url);
+  if (path === "/api/flopik/pulls" && method === "GET") return flopik.getPulls(env, ctx, url);
+  if (path === "/api/flopik/pulls" && method === "POST") return auth() || flopik.postPull(request, env, ctx, url);
+  if (path === "/api/flopik/pulls/parse" && method === "POST") return auth() || flopik.patchParse(request, env, ctx, url);
+  if (path === "/api/flopik/refs" && method === "GET") return flopik.getRefs(env);
+  if (path === "/api/flopik/refs" && method === "POST") return auth() || flopik.postRefs(request, env);
+  if (path === "/api/flopik/refwin" && method === "GET") return flopik.getRefWindow(env, url);
+  if (path === "/api/flopik/refresh" && method === "POST") return flopik.refresh(request, env);
+  if (path === "/api/flopik/status" && method === "GET") return flopik.status(env, url);
 
   return json({ ok: false, error: "not found" }, 404);
 }
