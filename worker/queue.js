@@ -6,17 +6,17 @@
 //   GET  /api/sims/status            (public) recent queue rows without the SimC string – shown on sim.html
 //   GET  /api/sims/extras            (public, edge-cached 60 s) { vault, crests, discord } – read by loot.html
 //   POST /api/sims/extras            (auth) one-time import of the Vault / Cresty / Discord sheet tabs
-//   POST /api/sims/run               { pw } (secret RUN_PASSWORD) or auth → dispatch the runner now
+//   POST /api/sims/run               (admin login token or API token) → dispatch the runner now
 //   GET  /api/sims/queue             (auth) rows for sim_runner.py: pending + running + errors written by the runner
 //   POST /api/sims/queue/status      (auth) { row, character, action: running|done|error|note|notified, kind, url, note, result }
 //   GET  /api/sims/notify-test?character=  (auth) Discord message payload for the runner's discord-test task
 //   POST /api/discord/rooms          (auth) { guild, me, channels } from the runner's discord-rooms task → discord_rooms
 //
 // Optional Worker vars/secrets: GITHUB_TOKEN (PAT with actions:write), GITHUB_REPO (default vitekpoor/RaidPlan),
-// RUN_PASSWORD (hub "Spustit simy" form), DISCORD_SIM_CHANNEL (shared channel id for players without a room),
+// DISCORD_SIM_CHANNEL (shared channel id for players without a room),
 // DISCORD_PLAYERS_CATEGORY ("TVOJE ROMKA, Players"), SIM_PAGE_URL (link in Discord messages), SHEET_ID.
 
-import { json, nameKey, specKey, numOrNull, nowIso, whenText, requireAuth, fetchRoster, playerOf } from "./lib.js";
+import { json, nameKey, specKey, numOrNull, nowIso, whenText, requireAuth, requireAdmin, fetchRoster, playerOf } from "./lib.js";
 import { simSummary } from "./results.js";
 
 const SIM_MAX_SIMC = 200000;
@@ -201,15 +201,12 @@ async function dispatchRunner(env, reason, inputs = {}) {
   }
 }
 
-/** POST /api/sims/run { pw } (hub form) or Bearer token. */
+/** POST /api/sims/run (hub button of a logged-in admin, or the API token). */
 export async function run(request, env, ctx, url) {
   let body = {};
   try { body = await request.json(); } catch (e) { /* no body */ }
-  const authed = env.API_TOKEN && !requireAuth(request, env);
-  if (!authed) {
-    if (!env.RUN_PASSWORD) return json({ ok: false, message: "Ruční spuštění není nastavené (Worker secret RUN_PASSWORD)." }, 503);
-    if (String(body.pw || "") !== env.RUN_PASSWORD) return json({ ok: false, message: "Špatné heslo." }, 401);
-  }
+  const denied = await requireAdmin(request, env);
+  if (denied) return json({ ok: false, message: "Ruční spuštění může jen přihlášený raid leader (přihlášení vpravo nahoře)." }, 401);
   const pending = await countPending(env);
   if (!pending) return json({ ok: true, message: "Fronta je prázdná – není co simovat." });
   const r = await dispatchRunner(env, body.reason || "hub");

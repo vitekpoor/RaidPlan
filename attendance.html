@@ -2,7 +2,7 @@
 <!--
   attendance.html - Docházka (záznamy z addonu ES Attendance, GET /api/attendance) a přehled absencí
   (GET /api/absence) jako matice hráči × dny – náhrada listů „Docházka“ a „Absence přehled“.
-  Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance (heslo RUN_PASSWORD, nebo přihlášený admin).
+  Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance (přihlášený admin – tlačítko vpravo nahoře).
   Přihlášený admin může smazat den docházky nebo jednotlivou absenci. build.bat kopíruje do kořene repa.
 -->
 <html lang="cs">
@@ -95,7 +95,7 @@
   <div class="heading-section"><h4><em>Zapsat</em> docházku</h4></div>
   <p class="steps">Ve hře <code>/esa</code> → <b>Zapsat docházku</b> → <code>Ctrl+C</code> a sem <code>Ctrl+V</code>. Druhý zápis ve stejný den ten první přepíše. Chybějící hráč, který ten den nahlásil omluvenku nebo pozdní příchod, se ukáže jako <span class="m omluvenka">omluvenka</span> / <span class="m pozdě">pozdě</span>.</p>
   <textarea id="rec" placeholder="ESA1;2026-09-16;20:05;Hráč=1:Postava;Hráč=0;…" spellcheck="false"></textarea>
-  <div class="row"><input type="password" id="recpw" placeholder="heslo (raid leader)" autocomplete="off"><button class="btn" id="send" type="button">Zapsat</button></div>
+  <div class="row"><button class="btn" id="send" type="button">Zapsat</button><span id="rechint" class="cnt" hidden>Zápis docházky vyžaduje přihlášení raid leadera (vpravo nahoře).</span></div>
   <div class="status" id="recstatus"></div>
 </div>
 </div>
@@ -185,7 +185,7 @@
   }
   function render() {
     document.querySelectorAll(".seg button").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); });
-    $("#recpw").hidden = !!state.token;
+    $("#send").hidden = !state.token; $("#rec").disabled = !state.token; $("#rechint").hidden = !!state.token;
     if (state.view === "abs") renderAbs(); else renderAtt();
   }
   document.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { state.view = b.dataset.view; try { localStorage.setItem("attView", state.view); } catch (e) {} render(); }); });
@@ -203,7 +203,7 @@
     var rec = $("#rec").value.trim(); if (!rec) return; var s = $("#recstatus");
     $("#send").disabled = true; s.className = "status"; s.textContent = "⏳ Zapisuji…";
     var headers = { "Content-Type": "application/json" }; if (state.token) headers["Authorization"] = "Bearer " + state.token;
-    fetch(API_BASE + "/api/attendance", { method: "POST", headers: headers, body: JSON.stringify({ record: rec, pw: $("#recpw").value }) }).then(function (r) { return r.json(); })
+    fetch(API_BASE + "/api/attendance", { method: "POST", headers: headers, body: JSON.stringify({ record: rec }) }).then(function (r) { return r.json(); })
       .then(function (d) { s.className = "status " + (d.ok ? "ok" : "err"); s.textContent = d.message || (d.ok ? "✔ Zapsáno." : "⚠ " + (d.error || "chyba")); if (d.ok) { $("#rec").value = ""; state.view = "att"; load(); } })
       .catch(function (err) { s.className = "status err"; s.textContent = "⚠ Chyba spojení: " + err.message; }).then(function () { $("#send").disabled = false; });
   });

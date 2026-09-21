@@ -167,9 +167,9 @@
   </div>
   <form class="leader" id="runsims">
     <span>Raid leader:</span>
-    <input type="password" id="runpw" placeholder="heslo" autocomplete="current-password" required>
-    <button type="submit" class="btn">Spustit simy teď</button>
+    <button type="submit" class="btn" id="runbtn">Spustit simy teď</button>
     <span id="runmsg"></span>
+    <span id="runhint" hidden>pro ruční spuštění se přihlas vpravo nahoře (simy se jinak spouští samy po odeslání a každou hodinu)</span>
   </form>
 </section>
 
@@ -292,14 +292,17 @@
   }
   setInterval(function () { if (location.hash === "#simc") loadQueue(); if (location.hash === "#omluvenky") loadAbsence(); }, 60000);
 
-  // raid leader: POST { pw } -> Worker /api/sims/run (secret RUN_PASSWORD) -> GitHub Actions workflow_dispatch
+  // raid leader (přihlášený vpravo nahoře): POST /api/sims/run -> GitHub Actions workflow_dispatch
   var form = document.getElementById("runsims");
+  function runUi() { var on = !!adminToken; $("#runbtn").hidden = !on; $("#runhint").hidden = on; }
+  runUi();
+  if (window.esAuth) esAuth.onChange(runUi);
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
-    var btn = form.querySelector("button"), msg = document.getElementById("runmsg"), pw = document.getElementById("runpw");
+    var btn = $("#runbtn"), msg = document.getElementById("runmsg");
     btn.disabled = true; msg.textContent = "Spouštím…";
-    postJson("/api/sims/run", { pw: pw.value, reason: "hub" })
-      .then(function (j) { msg.textContent = (j.ok ? "✅ " : "⚠ ") + (j.message || ""); if (j.ok) pw.value = ""; })
+    postJson("/api/sims/run", { reason: "hub" }, { "Authorization": "Bearer " + adminToken })
+      .then(function (j) { msg.textContent = (j.ok ? "✅ " : "⚠ ") + (j.message || j.error || ""); })
       .catch(function (err) { msg.textContent = "⚠ API neodpovědělo: " + err.message; })
       .then(function () { btn.disabled = false; });
   });

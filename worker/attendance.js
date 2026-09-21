@@ -1,7 +1,7 @@
 // Attendance (Docházka) from the ES Attendance addon – tables attendance_days + attendance (0005).
 //   POST /api/attendance             { record: "ESA1;2026-09-16;20:05;Hráč=1:Postava;Hráč=0;…;?=Neznámý", pw? }
-//                                    auth = Bearer API_TOKEN / admin login token, or pw = RUN_PASSWORD / ADMIN_PASSWORD
-//                                    (the in-game paste form). A second record for the same day overwrites the first.
+//                                    auth = Bearer API_TOKEN or the admin login token (paste form on attendance.html).
+//                                    A second record for the same day overwrites the first.
 //   GET  /api/attendance?from&to     { days: [{ date, time, unknown }], players: [...], marks: { date: { player: { state, char } } } }
 //                                    state = ano | ne | omluvenka (absent + absence X that day) | pozdě (absent + "přijdu pozdě")
 //   GET  /api/attendance.csv         the old sheet layout ("Hráč", "16.9.2026 (19:13)", … / ano, ne, omluvenka, pozdě)
@@ -9,7 +9,7 @@
 //   GET  /api/es?p=esroster[&raw=1]  roster text for the addon's /esa import (ESROSTER;version + Hráč;char;class;role;alt;class;role);
 //        /api/es?p=attendance        → the attendance page (the addon prints both URLs; set /esa url https://…/api/es in game)
 
-import { json, nameKey, nowIso, csvLine, CORS, todayPrague, addDays, timingSafeEqual, requireAdmin, whenText } from "./lib.js";
+import { json, nameKey, nowIso, csvLine, CORS, todayPrague, addDays, requireAdmin, whenText } from "./lib.js";
 import { loadRoster, flatRoster } from "./roster.js";
 
 const HEADER = "ESA1";
@@ -36,16 +36,14 @@ export function parseRecord(text) {
   return { date, time, players, unknown };
 }
 
-async function allowed(request, env, body) {
-  if (!(await requireAdmin(request, env))) return true;
-  const pw = String((body && body.pw) || "");
-  return !!pw && ((env.RUN_PASSWORD && timingSafeEqual(pw, env.RUN_PASSWORD)) || (env.ADMIN_PASSWORD && timingSafeEqual(pw, env.ADMIN_PASSWORD)));
+async function allowed(request, env) {
+  return !(await requireAdmin(request, env));
 }
 
 export async function postAttendance(request, env) {
   let body;
   try { body = await request.json(); } catch (e) { return json({ ok: false, message: "⚠ Tělo požadavku musí být JSON." }, 400); }
-  if (!(await allowed(request, env, body))) return json({ ok: false, message: "⚠ Špatné heslo (nebo chybí přihlášení)." }, 401);
+  if (!(await allowed(request, env))) return json({ ok: false, message: "⚠ Zápis docházky vyžaduje přihlášení raid leadera (vpravo nahoře)." }, 401);
   let rec;
   try { rec = parseRecord(body.record); } catch (e) { return json({ ok: false, message: "⚠ " + e.message }); }
   const roster = await loadRoster(env);
