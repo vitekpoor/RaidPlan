@@ -131,6 +131,13 @@ table.fails tr.groups th { position: static; cursor: default; text-align: center
 table.fails tr.groups th.perf { color: var(--accent); }
 table.fails tr.groups th:hover { color: var(--muted); } table.fails tr.groups th.perf:hover { color: var(--accent); }
 table.fails tbody tr:hover td.perf { background: rgba(255, 255, 255, .06); }
+/* fail columns: warm tint + warning-coloured headers, so the two blocks read as different things */
+table.fails th.fail, table.fails tr.groups th.fail { color: var(--warn); }
+table.fails th.fail { background: color-mix(in srgb, var(--surface), var(--warn) 5%); }
+table.fails th.fail[aria-sort] { color: var(--warn); text-decoration: underline; text-underline-offset: 3px; }
+table.fails th.fail:hover, table.fails tr.groups th.fail:hover { color: var(--warn); }
+table.fails td.fail:not(.hot):not(.hot2) { background: color-mix(in srgb, transparent, var(--warn) 4%); }
+table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(in srgb, transparent, var(--warn) 8%); }
 .bd .note a { color: var(--accent); }
 @media (max-width: 560px) { .stat .v { font-size: 22px; } .live { margin-left: 0; } }
 </style>
@@ -639,9 +646,9 @@ table.fails tbody tr:hover td.perf { background: rgba(255, 255, 255, .06); }
     var PERF = { parse: "perf", vstop: "perf last" };   // DPS/HPS block – visually separated from the fail columns
     var nPerf = cols.filter(function (c) { return PERF[c.k]; }).length, nFail = cols.length - 1 - nPerf;
     var th = '<tr class="groups"><th></th><th class="perf last" colspan="' + nPerf + '" title="výkon hráče (DPS / HPS) proti ostatním logům – nesouvisí s faily">Výkon</th>' +
-      '<th colspan="' + nFail + '" title="faily bosse v pullu">Faily</th></tr><tr>';
+      '<th class="fail" colspan="' + nFail + '" title="faily bosse v pullu (smrti, zásahy, stacky…)">Faily</th></tr><tr>';
     cols.forEach(function (c) {
-      var cls = [c.grp ? "grp" : "", PERF[c.k] || ""].filter(Boolean).join(" ");
+      var cls = [c.grp ? "grp" : "", PERF[c.k] || (c.k === "name" ? "" : "fail")].filter(Boolean).join(" ");
       th += "<th" + (cls ? ' class="' + cls + '"' : "") + ' data-k="' + c.k + '"' + (state.sort === c.k ? ' aria-sort="' + (state.dir < 0 ? "descending" : "ascending") + '"' : "") + ">" + esc(isAll && c.agg === "max" ? c.l + " (pull)" : c.l) + "</th>";
     });
     document.querySelector("#tbl thead").innerHTML = th + "</tr>";
@@ -666,7 +673,7 @@ table.fails tbody tr:hover td.perf { background: rgba(255, 255, 255, .06); }
             : '<td class="vstop perf last ' + vsTopClass(r.vstop) + '" title="' + (r.vstopExact ? "DPS/HPS v % rank 1 logu stejného specu ve stejném čase (není to percentil)" : "zatím proti celému killu rank 1 logu, stejný čas se načítá") + '">' + Math.round(r.vstop) + (r.vstopExact ? "" : "<small>~</small>") + "</td>";
           return;
         }
-        var val = r[c.k], cls = [];
+        var val = r[c.k], cls = ["fail"];
         if (c.grp) cls.push("grp"); if (c.cls) cls.push(c.cls); if (c.avoid) cls.push("avoid");
         var num = Number(val) || 0;
         if (val == null || num === 0) cls.push("zero");
@@ -706,9 +713,9 @@ table.fails tbody tr:hover td.perf { background: rgba(255, 255, 255, .06); }
         ft += avg == null ? '<td class="perf last"></td>' : '<td class="vstop perf last ' + vsTopClass(avg) + '" title="průměr hráčů s referencí">' + Math.round(avg) + "</td>";
         return;
       }
-      if (c.agg === "max") { ft += "<td" + (c.grp ? ' class="grp"' : "") + "></td>"; return; }
+      if (c.agg === "max") { ft += '<td class="fail' + (c.grp ? " grp" : "") + '"></td>'; return; }
       var sum = view.players.reduce(function (a, r) { return a + (Number(r[c.k]) || 0); }, 0);
-      ft += "<td" + (c.grp ? ' class="grp"' : "") + ">" + (c.signed && sum > 0 ? "+" + sum : c.neg && sum ? "−" + sum : sum) + "</td>";
+      ft += '<td class="fail' + (c.grp ? " grp" : "") + '">' + (c.signed && sum > 0 ? "+" + sum : c.neg && sum ? "−" + sum : sum) + "</td>";
     });
     document.querySelector("#tbl tfoot").innerHTML = ft + "</tr>";
 
