@@ -14,7 +14,8 @@
   // Plain vars (secrets API_TOKEN / GITHUB_TOKEN / RUN_PASSWORD live only in the dashboard). Vars set in the dashboard
   // are replaced on every deploy, so keep them here.
   "vars": {
-    "DISCORD_SIM_CHANNEL": "1549744240370782260"   // shared Discord channel (id) for sim notifications of players without a room
+    "DISCORD_SIM_CHANNEL": "1549744240370782260",  // shared Discord channel (id) for sim notifications of players without a room
+    "WCL_CLIENT_ID": "01a0b464-cd4e-7149-9abb-0a0888814556"   // Warcraft Logs API client (the secret WCL_CLIENT_SECRET stays in the dashboard)
   },
   // worker/migrations/*.sql are imported as text modules (POST /api/admin/migrate runs them)
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
