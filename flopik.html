@@ -618,11 +618,14 @@ table.fails td.vstop small, table.fails td.parse small { font-weight: 400; color
     });
     $("strip").innerHTML = s;
 
-    if (!state.sort || !cols.some(function (c) { return c.k === state.sort; })) { state.sort = cols[2] ? cols[2].k : "name"; state.dir = state.sort === "name" ? 1 : -1; }
+    if (!state.sort || !cols.some(function (c) { return c.k === state.sort; })) { state.sort = cols[3] ? cols[3].k : "name"; state.dir = state.sort === "name" ? 1 : -1; }
+    var bossId = lastMeta.bossId;
+    // "% top" = our DPS/HPS as % of the rank 1 log of the same spec in the same time window (see vsTop) – before sorting
+    view.players.forEach(function (r) { var v = vsTop(r, isAll, bossId, difficulty); r.vstop = v ? v.pct : null; r.vstopExact = v ? v.exact : false; });
+    function sortVal(r, k) { return k === "parse" ? (r.parse ? Number(r.parse.pct) || 0 : -1) : Number(r[k]) || 0; }   // players without a parse go last
     var rows = view.players.slice().sort(function (a, c) {
-      var x = a[state.sort], y = c[state.sort];
-      if (state.sort === "name") return state.dir * String(x).localeCompare(String(y), "cs");
-      x = Number(x) || 0; y = Number(y) || 0;
+      if (state.sort === "name") return state.dir * String(a.name).localeCompare(String(c.name), "cs");
+      var x = sortVal(a, state.sort), y = sortVal(c, state.sort);
       return state.dir * (x - y) || String(a.name).localeCompare(String(c.name), "cs");
     });
     var th = "<tr>";
@@ -631,9 +634,7 @@ table.fails td.vstop small, table.fails td.parse small { font-weight: 400; color
     Array.prototype.forEach.call(document.querySelectorAll("#tbl th"), function (h) {
       h.onclick = function () { var k = h.getAttribute("data-k"); if (state.sort === k) state.dir = -state.dir; else { state.sort = k; state.dir = k === "name" ? 1 : -1; } render(); };
     });
-    var body = "", bossId = lastMeta.bossId;
-    // "vs top" = our DPS/HPS as % of the rank 1 log of the same spec in the same time window (see vsTop)
-    view.players.forEach(function (r) { var v = vsTop(r, isAll, bossId, difficulty); r.vstop = v ? v.pct : null; r.vstopExact = v ? v.exact : false; });
+    var body = "";
     rows.forEach(function (r) {
       var isOpen = !!open[r.name];
       body += '<tr data-p="' + esc(r.name) + '"' + (isOpen ? ' class="open"' : "") + ">";
