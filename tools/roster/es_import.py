@@ -15,6 +15,7 @@ import csv
 import io
 import re
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 
 import requests
@@ -24,6 +25,19 @@ import sim_results as sr
 ROSTER_TAB = "Roster"
 ABSENCE_TAB = "Absence přehled"
 CZ_WEEKDAYS = "po|út|st|čt|pá|so|ne"
+
+
+def post_retry(api, path, body, what, tries=4):
+    """POST s opakováním – Cloudflare občas resetuje spojení uprostřed delší série požadavků."""
+    last = None
+    for attempt in range(tries):
+        try:
+            r = requests.post(f"{api.url}{path}", headers=api._headers(), data=sr.json.dumps(body, ensure_ascii=False).encode("utf-8"), timeout=120)
+            return api._check(r, what)
+        except (requests.ConnectionError, requests.Timeout) as err:
+            last = err
+            time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"{what}: {last}")
 
 
 def gviz_rows(sheet_id, tab):
@@ -129,8 +143,7 @@ def import_absence(api, sheet_id, dry_run):
     if dry_run:
         return
     api.require_token()
-    r = requests.post(f"{api.url}/api/absence/import", headers=api._headers(), data=sr.json.dumps({"marks": marks}).encode("utf-8"), timeout=120)
-    print(api._check(r, "absence import"))
+    print(post_retry(api, "/api/absence/import", {"marks": marks}, "absence import"))
 
 
 def prague_iso(text):
@@ -198,13 +211,11 @@ def import_flopik(api, sheet_id, dry_run):
     api.require_token()
     n = 0
     for p in sorted(pulls.values(), key=lambda x: (x["date"], x["start"])):
-        r = requests.post(f"{api.url}/api/flopik/pulls", headers=api._headers(), data=sr.json.dumps({"pull": p}, ensure_ascii=False).encode("utf-8"), timeout=120)
-        api._check(r, "flopik pull")
+        post_retry(api, "/api/flopik/pulls", {"pull": p}, "flopik pull")
         n += 1
     sr.log(f"  ✅ {n} pullů uloženo")
     if refs:
-        r = requests.post(f"{api.url}/api/flopik/refs", headers=api._headers(), data=sr.json.dumps({"refs": refs}, ensure_ascii=False).encode("utf-8"), timeout=120)
-        print(api._check(r, "flopik refs"))
+        print(post_retry(api, "/api/flopik/refs", {"refs": refs}, "flopik refs"))
 
 
 def main():
