@@ -1455,7 +1455,7 @@ var BOSS_PLANS = [
   ["08", "Ula'tek",      "https://raidplan.io/plan/v3u4qp9jugsdyzys", "boss-8"],
   ["09", "Nymrissa",     "https://raidplan.io/plan/g4skqtr53vrsx467", "boss-9"]
 ];
-var GUIDE_URL = "https://vitekpoor.github.io/RaidPlan/raid.html"; // taktiky; kořen webu je rozcestník (staré odkazy …/#boss-N přesměruje)
+var GUIDE_URL = "https://eternal-shadows.vitek-poor.workers.dev/raid"; // taktiky; kořen webu je rozcestník (staré odkazy …/#boss-N přesměruje)
 var LINEUP_ABSENT_BG = "#E06666";
 var LINEUP_LATE_BG = "#F6B26B";
 var LINEUP_UNKNOWN_BG = "#DDDDDD";
@@ -3178,7 +3178,7 @@ function discordFallback_(props) {
 var SIM_NOTIFY = true;                                             // false = žádné Discord zprávy
 var DISCORD_CREATE_ROOM_CHANNEL = "1544826757956247764";           // kanál s tlačítkem "Create Room" – hráčům bez místnosti se pošle odkaz
 var DISCORD_NO_ROOM_HINT = "ℹ️ Nemáš vlastní místnost – vytvoř si ji tlačítkem v <#" + DISCORD_CREATE_ROOM_CHANNEL + ">, příště ti přijde zpráva přímo tam.";
-var SIM_PAGE_URL = "https://vitekpoor.github.io/RaidPlan/loot.html";
+var SIM_PAGE_URL = "https://eternal-shadows.vitek-poor.workers.dev/loot";
 
 function discordSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();

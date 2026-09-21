@@ -1,40 +1,29 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
-rem parts\ and bosses\ are the master copies - build the single page
-rem (venomous-abyss.html + root index.html) from them before committing
-call build.bat
-if errorlevel 1 goto :end
-
-rem stage only the raid guide (this folder + the published root index.html);
-rem tools\ is managed separately and is never published by this script
-git add -A -- . ..\index.html ..\raid.html ..\loot.html ..\roster.html ..\attendance.html ..\lineups.html ..\flopik.html ..\.gitignore
-
-rem exit if there is nothing new to commit
+rem Commit + push everything changed. The site itself is built on Cloudflare from web/ (web/build.mjs -> dist/)
+rem on every push, so there is nothing to build or copy here any more.
+git add -A
 git diff --cached --quiet
 if %errorlevel%==0 (
     echo Nothing to publish - no changes since last commit.
     goto :end
 )
 
-rem commit message: everything passed as arguments, or a default
 set "msg=%*"
-if "%msg%"=="" set "msg=Update raid guide"
-
+if "%msg%"=="" set "msg=Update site"
 git commit -m "%msg%"
 if errorlevel 1 goto :end
-
 git push
 if errorlevel 1 (
     echo.
     echo PUSH FAILED - check your connection or credentials and run again.
     goto :end
 )
-
 echo.
-echo Published! Live in ~1 minute at:
-echo   https://vitekpoor.github.io/RaidPlan/
+echo Published! Cloudflare builds and deploys in ~1 minute:
+echo   https://eternal-shadows.vitek-poor.workers.dev/
 
 :end
 echo.

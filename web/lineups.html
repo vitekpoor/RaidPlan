@@ -3,7 +3,7 @@
   lineups.html - Boss sestavy: 20 hráčů na každého bosse (GET /api/lineups), náhrada listu „Boss sestavy“.
   Buňky mají barvu classy hlavní postavy z rosteru; hráč s absencí na datum bosse je červený (nepřijde) /
   oranžový (přijde pozdě), duplicita v sestavě má červené jméno, hráč mimo roster šedou. Přihlášený admin
-  upravuje přímo v tabulce (dropdown hráčů, datum) a ukládá PUT /api/lineups. build.bat kopíruje do kořene repa.
+  upravuje přímo v tabulce (dropdown hráčů, datum) a ukládá PUT /api/lineups. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
   Stejná data čte tools/raidplan/raidplan.py --boss (přes /api/lineups.csv) a bot docházky.
 -->
 <html lang="cs">

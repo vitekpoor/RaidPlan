@@ -14,3 +14,7 @@ tools/flopik/pulls.jsonl
 # Cloudflare Wrangler local state
 .wrangler/
 node_modules/
+
+# site build output (web/build.mjs → dist/, built on Cloudflare) + local raid preview
+dist/
+web/venomous-abyss.html

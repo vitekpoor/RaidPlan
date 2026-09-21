@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<!-- ZDROJ stránky Loot simy. build.bat ji kopíruje do kořene repa jako loot.html
-     (s cestami web/loot_items.json a web/assets/). Data čte živě z Google Sheets:
+<!-- ZDROJ stránky Loot simy. web/build.mjs (Cloudflare build → dist/) ji kopíruje do kořene repa jako loot.html
+     (s cestami web/loot_items.json a assets/). Data čte živě z Google Sheets:
      databáze (Cloudflare D1 přes Worker API GET /api/sims/results – plní sim_runner.py / sim_results.py;
      Původ = Raid | M+ | Top Gear | Raid HC; list "Sim výsledky" v Sheets je jen záloha, když API neodpoví)
      + GET /api/sims/extras (Great Vault, cresty, Discord místnosti – plní formulář SimC na hubu přes Worker).

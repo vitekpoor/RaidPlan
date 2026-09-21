@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<!-- ZDROJ stránky Flopik – fails po pullech. build.bat ji kopíruje do kořene repa jako flopik.html (s cestami
-     web/assets/). Zdroj dat je Warcraft Logs: dropdown reportů guildy bere z Apps Script web appu (?p=flopik&action=reports),
+<!-- ZDROJ stránky Flopik – fails po pullech. web/build.mjs (Cloudflare build → dist/) ji kopíruje do kořene repa jako flopik.html (s cestami
+     assets/). Zdroj dat je Warcraft Logs: dropdown reportů guildy bere z Apps Script web appu (?p=flopik&action=reports),
      pro vybraný report si nechá dopočítat chybějící pully (action=refresh, Apps Script stáhne události fightu z WCL API,
      spočítá je enginem z tools/flopik/engine.js a zapíše do databáze) a stránka pak čte Worker API: jeden souhrnný
      řádek na pull (Hráč prázdný, Data = sloupce / statistiky / legenda) + řádek na hráče (Data = hodnoty metrik).

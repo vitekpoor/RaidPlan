@@ -1,13 +1,13 @@
 {
-  // Cloudflare Worker "eternal-shadows": serves the built site (repo root) as static
-  // assets and a JSON API (worker/index.js) backed by the D1 database "eternal-shadows".
-  // Deployed by Cloudflare's GitHub integration with `npx wrangler deploy`; the name
-  // below must match the Worker name in the dashboard. Files listed in .assetsignore
-  // (sources, tools, git metadata, worker/) are not uploaded as assets.
+  // Cloudflare Worker "eternal-shadows": serves the site built from web/ into dist/ (build.command runs on
+  // Cloudflare before every deploy – nothing generated is committed) plus a JSON API (worker/index.js) backed
+  // by the D1 database "eternal-shadows". Deployed by Cloudflare's GitHub integration with `npx wrangler deploy`;
+  // the name below must match the Worker name in the dashboard.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "eternal-shadows",
   "main": "worker/index.js",
   "compatibility_date": "2026-09-18",
+  "build": { "command": "node web/build.mjs", "watch_dir": "web" },
   "workers_dev": true,
   "preview_urls": false,
   "observability": { "enabled": true },
@@ -20,7 +20,7 @@
   // worker/migrations/*.sql are imported as text modules (POST /api/admin/migrate runs them)
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "assets": {
-    "directory": ".",
+    "directory": "dist",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "none"
