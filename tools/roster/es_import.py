@@ -6,6 +6,8 @@ es_import.py – jednorázové přenosy z guildovní Google tabulky do databáze
                                       #   řádek LAVIČKA = začátek lavičky) → PUT /api/roster; spec postav se doplní z posledních simů
   python es_import.py absence         # list "Absence přehled" (Hráč × datumy "čt 10.9.", buňky X / pozdě) → POST /api/absence/import
   python es_import.py flopik          # listy "Flopik" (pully + hráči) a "FlopikRef" (rank 1 logy) → POST /api/flopik/pulls, /api/flopik/refs
+  python es_import.py attendance      # list "Docházka" (Hráč × "16.9.2026 (19:13)", ano/ne/omluvenka/pozdě) → POST /api/attendance
+  python es_import.py lineups         # list "Boss sestavy" (export CSV gid 731845282) → PUT /api/lineups
   python es_import.py roster --dry-run
 
 Token: env ES_API_TOKEN nebo "api_token" v sim_runner.config.json (stejně jako sim_results.py).
@@ -218,9 +220,67 @@ def import_flopik(api, sheet_id, dry_run):
         print(post_retry(api, "/api/flopik/refs", {"refs": refs}, "flopik refs"))
 
 
+def import_attendance(api, sheet_id, dry_run):
+    """Docházka: sloupec A = hráč, hlavička "16.9.2026 (19:13)", buňky ano / ne / omluvenka / pozdě
+    (omluvenka i pozdě = hráč chyběl; omluvenka/pozdě se odvodí z absencí znovu)."""
+    rows = gviz_rows(sheet_id, "Docházka")
+    head = rows[0]
+    days = []
+    for i, h in enumerate(head[1:], start=1):
+        m = re.match(r"^\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})(?:\s*\((\d{1,2}:\d{2})\))?", h.strip())
+        if m:
+            days.append((i, date(int(m.group(3)), int(m.group(2)), int(m.group(1))).isoformat(), m.group(4) or "20:00"))
+    records = []
+    for i, d, t in days:
+        parts = ["ESA1", d, t]
+        for r in rows[1:]:
+            player = (r[0] if r else "").strip()
+            v = (r[i].strip().lower() if i < len(r) else "")
+            if not player or not v:
+                continue
+            parts.append(f"{player}={'1' if v == 'ano' else '0'}")
+        if len(parts) > 3:
+            records.append(";".join(parts))
+    sr.log(f"Docházka: {len(days)} dnů, {len(records)} záznamů")
+    for rec in records:
+        print("  ", rec[:110] + ("…" if len(rec) > 110 else ""))
+    if dry_run:
+        return
+    api.require_token()
+    for rec in records:
+        print(post_retry(api, "/api/attendance", {"record": rec, "source": "sheet"}, "attendance").get("message"))
+
+
+def import_lineups(api, sheet_id, dry_run):
+    """Boss sestavy (export CSV): řádek 1 "NN Boss", řádek "Datum" (st 16.9.2026), řádky 1..20 = hráči."""
+    r = requests.get(f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=731845282", timeout=120, allow_redirects=True)
+    r.raise_for_status()
+    rows = list(csv.reader(io.StringIO(r.content.decode("utf-8-sig"))))
+    head = rows[0]
+    cols = [(i, re.match(r"^(\d{2})\s+(.*)$", h.strip())) for i, h in enumerate(head) if i > 0]
+    cols = [(i, m.group(1), m.group(2)) for i, m in cols if m]
+    date_row = next((r for r in rows[1:] if r and r[0].strip().lower() in ("datum", "date")), [])
+    slot_rows = {int(r[0]): r for r in rows[1:] if r and r[0].strip().isdigit()}
+    bosses = []
+    for i, no, name in cols:
+        d = ""
+        if i < len(date_row):
+            m = re.search(r"(\d{1,2})\.(\d{1,2})\.(\d{4})", date_row[i])
+            if m:
+                d = date(int(m.group(3)), int(m.group(2)), int(m.group(1))).isoformat()
+        slots = [(slot_rows[k][i].strip() if k in slot_rows and i < len(slot_rows[k]) else "") for k in range(1, 21)]
+        bosses.append({"no": no, "date": d, "slots": slots})
+        print(f"  {no} {name:<14} {d or '-':<11} {sum(1 for x in slots if x)}/20")
+    if dry_run:
+        return
+    api.require_token()
+    rr = requests.put(f"{api.url}/api/lineups", headers=api._headers(), data=sr.json.dumps({"bosses": bosses}, ensure_ascii=False).encode("utf-8"), timeout=120)
+    print(api._check(rr, "lineups"))
+
+
 def main():
     ap = argparse.ArgumentParser(description="Import z Google tabulky do databáze")
-    ap.add_argument("what", choices=["roster", "absence", "flopik"])
+    ap.add_argument("what", choices=["roster", "absence", "flopik", "attendance", "lineups"])
     ap.add_argument("--sheet-id", default=sr.SHEET_ID)
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -229,6 +289,10 @@ def main():
         import_roster(api, args.sheet_id, args.dry_run)
     elif args.what == "flopik":
         import_flopik(api, args.sheet_id, args.dry_run)
+    elif args.what == "attendance":
+        import_attendance(api, args.sheet_id, args.dry_run)
+    elif args.what == "lineups":
+        import_lineups(api, args.sheet_id, args.dry_run)
     else:
         import_absence(api, args.sheet_id, args.dry_run)
 

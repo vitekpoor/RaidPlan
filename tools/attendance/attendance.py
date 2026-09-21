@@ -33,6 +33,9 @@ Configuration is via environment variables (GitHub Actions secrets/vars):
                         (default), "none", or add "unconfirmed"
   REPORT_TITLE          default "DOCHÁZKA NA RAID" (cs) / "RAID AVAILABILITY" (en)
   REPORT_LANG           "cs" (default) or "en" — language of the Discord message
+  LINEUP_URL            CSV of the boss lineups; default = the guild Worker
+                        (https://eternal-shadows.vitek-poor.workers.dev/api/lineups.csv);
+                        "sheet" = read the old Google Sheet tab (LINEUP_GID), "none" = skip
   LINEUP_GID            tab gid of the "Boss sestavy" lineups (default
                         731845282); "none" disables the lineup lookup.
                         Unavailable/late players get a line saying whether
@@ -62,6 +65,7 @@ from zoneinfo import ZoneInfo
 DEFAULT_SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI"
 DEFAULT_SHEET_GID = "521369072"
 DEFAULT_ABSENCE_URL = "https://eternal-shadows.vitek-poor.workers.dev/api/absence.csv"
+DEFAULT_LINEUP_URL = "https://eternal-shadows.vitek-poor.workers.dev/api/lineups.csv"
 DEFAULT_LINEUP_GID = "731845282"
 DEFAULT_TIMEZONE = "Europe/Prague"
 DEFAULT_RAID_WEEKDAYS = "wed,thu,sun"
@@ -650,14 +654,17 @@ def main(argv=None):
               f"({min(dates.values())} .. {max(dates.values())})")
 
         lineup_gid = env("LINEUP_GID", DEFAULT_LINEUP_GID)
+        lineup_url = env("LINEUP_URL", DEFAULT_LINEUP_URL)
         lineups, bosses = {}, []
-        if args.lineups_csv or norm(lineup_gid) not in ("none", "off", "0", "false"):
+        if args.lineups_csv or norm(lineup_url) not in ("none", "off", "0", "false"):
             try:
                 if args.lineups_csv:
                     with open(args.lineups_csv, encoding="utf-8-sig") as f:
                         lu_text = f.read()
-                else:
+                elif norm(lineup_url) == "sheet":
                     lu_text = fetch_csv(env("SHEET_ID", DEFAULT_SHEET_ID), lineup_gid)
+                else:
+                    lu_text = fetch_url(lineup_url)
                 lu, lu_warn = parse_lineups(lu_text, reference=start)
                 warnings += lu_warn
                 lineups = lineups_by_player(lu)

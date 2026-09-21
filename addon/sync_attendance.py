@@ -9,9 +9,9 @@ The addon stores each record (one per day, later writes overwrite) in
 WTF/Account/<account>/SavedVariables/ESAttendance.lua as an ``export`` string
 ``ESA1;2026-09-16;20:05;Player=1:Char;Player=0;…;?=UnknownChar`` (older records used ``|``). WoW writes the file on
 logout or /reload, so run this after the raid (or /reload first). The string is POSTed to
-the Apps Script web app (doPost p=esattendance, same URL + token as sim_runner.py, taken
-from tools/roster/sim_runner.config.json or from es_attendance.config.json next to this
-script), which creates/overwrites the date column in the sheet.
+the guild Worker API (POST /api/attendance with the API token "api_token" from
+tools/roster/sim_runner.config.json or es_attendance.config.json next to this script,
+env ES_API_URL / ES_API_TOKEN override), which stores the day in the database (attendance.html).
 """
 import argparse
 import glob
@@ -38,10 +38,12 @@ def load_config():
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as f:
                 cfg = json.load(f)
-            if cfg.get("webapp_url") and cfg.get("token"):
-                return cfg
-    sys.exit("No config with webapp_url + token found (es_attendance.config.json or "
-             "tools/roster/sim_runner.config.json). Token: sheet menu Simy → Token pro sim_runner.py…")
+            token = os.environ.get("ES_API_TOKEN", "").strip() or cfg.get("api_token")
+            if token:
+                return {"api_url": (os.environ.get("ES_API_URL", "").strip() or cfg.get("api_url") or "https://eternal-shadows.vitek-poor.workers.dev").rstrip("/"),
+                        "api_token": token}
+    sys.exit("No api_token found (es_attendance.config.json or tools/roster/sim_runner.config.json, or env ES_API_TOKEN) "
+             "– it is the Worker secret API_TOKEN.")
 
 
 def saved_variables_files(explicit):
@@ -96,9 +98,10 @@ def save_state(state):
 
 
 def post(cfg, export, tries=4):
-    body = json.dumps({"p": "esattendance", "token": cfg["token"], "record": export}).encode("utf-8")
-    req = urllib.request.Request(cfg["webapp_url"], data=body,
-                                 headers={"Content-Type": "application/json"}, method="POST")
+    body = json.dumps({"record": export, "source": "sync_attendance.py"}).encode("utf-8")
+    req = urllib.request.Request(cfg["api_url"] + "/api/attendance", data=body,
+                                 headers={"Content-Type": "application/json", "Authorization": "Bearer " + cfg["api_token"],
+                                          "User-Agent": "es-sync-attendance/1.0"}, method="POST")
     last = None
     for attempt in range(tries):
         try:
@@ -108,7 +111,9 @@ def post(cfg, export, tries=4):
                 return json.loads(raw)
             last = "non-JSON answer (%s…)" % raw.strip()[:80]
         except urllib.error.HTTPError as e:
-            last = "HTTP %s" % e.code
+            last = "HTTP %s %s" % (e.code, e.read().decode("utf-8", "replace")[:120])
+            if 400 <= e.code < 500 and e.code != 429:
+                break
         except (urllib.error.URLError, OSError, ValueError) as e:  # noqa: PERF203
             last = str(e)
         time.sleep(2 * (attempt + 1))

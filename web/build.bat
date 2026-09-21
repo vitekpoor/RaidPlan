@@ -39,10 +39,22 @@ if exist roster.html (
   if errorlevel 1 (echo ERROR: failed to write ..\roster.html & exit /b 1)
 )
 
+rem attendance.html (docházka + absence z databáze) is a standalone page
+if exist attendance.html (
+  powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\attendance.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0attendance.html') -replace '(href|src)=\"assets/', '$1=\"web/assets/'), (New-Object System.Text.UTF8Encoding $false))"
+  if errorlevel 1 (echo ERROR: failed to write ..\attendance.html & exit /b 1)
+)
+
+rem lineups.html (boss sestavy z databáze) is a standalone page
+if exist lineups.html (
+  powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\lineups.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0lineups.html') -replace '(href|src)=\"assets/', '$1=\"web/assets/'), (New-Object System.Text.UTF8Encoding $false))"
+  if errorlevel 1 (echo ERROR: failed to write ..\lineups.html & exit /b 1)
+)
+
 rem flopik.html (Flopik - fails po pullech) is a standalone page reading the "Flopik" sheet tab
 if exist flopik.html (
   powershell -NoProfile -Command "[IO.File]::WriteAllText('%~dp0..\flopik.html', ((Get-Content -Raw -Encoding UTF8 '%~dp0flopik.html') -replace '(href|src)=\"assets/', '$1=\"web/assets/'), (New-Object System.Text.UTF8Encoding $false))"
   if errorlevel 1 (echo ERROR: failed to write ..\flopik.html & exit /b 1)
 )
 
-echo Built venomous-abyss.html + ..\raid.html, ..\index.html (hub), ..\loot.html, ..\roster.html, ..\flopik.html.
+echo Built venomous-abyss.html + ..\raid.html, ..\index.html (hub), ..\loot.html, ..\roster.html, ..\attendance.html, ..\lineups.html, ..\flopik.html.

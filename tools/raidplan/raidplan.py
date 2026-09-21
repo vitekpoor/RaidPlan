@@ -507,10 +507,11 @@ def load_plans_file(path):
 
 def load_lineups():
     """Boss sestavy tab -> {'01': {'header': ..., 'date': ..., 'players': [...]}}"""
-    rows = gviz_rows(WISHLIST_ID, LINEUP_TAB)
+    # lineups live in the guild database (Worker API, same layout the sheet tab had; edited on lineups.html)
+    lineups_url = os.environ.get("ES_LINEUPS_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/lineups.csv")
+    rows = list(csv.reader(io.StringIO(http_bytes(lineups_url).decode("utf-8", "replace"))))
     if not rows:
-        sys.exit(f"Tab '{LINEUP_TAB}' is missing — run buildBossLineups "
-                 f"in the wishlist sheet's Apps Script first.")
+        sys.exit(f"Lineups are empty or unreachable ({lineups_url}).")
     lineups = {}
     # Fixed row offsets are UNRELIABLE here: gviz drops fully-empty rows
     # (the spacer row vanishes) and coerces the mixed label column A to its

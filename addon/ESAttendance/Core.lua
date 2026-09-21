@@ -6,7 +6,7 @@ ESAttendance = ns
 local ROSTER_HEADER = "ESROSTER"
 -- Apps Script web app (same /exec URL as the absence / sim forms). ?p=esroster serves the roster
 -- import text. Override in game: /esa url <https://…/exec>
-local WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz8JO7l_qn1MHs2vh2bpDb6An6liA1Szw-0pL14u6ruQtlPHDZz-5fswblKIwWZigsP/exec"
+local WEBAPP_URL = "https://eternal-shadows.vitek-poor.workers.dev/api/es"   -- guild Worker: ?p=esroster (roster text), ?p=attendance (form)
 local ROSTER_MAX_AGE_DAYS = 7   -- older roster -> orange hint in the window
 local RECORD_HEADER = "ESA1"
 -- ";" and not "|": a WoW EditBox eats "|r" / "|n" (colour reset / newline escapes), so a "|"-separated

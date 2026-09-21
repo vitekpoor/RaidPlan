@@ -8,6 +8,8 @@
 //   roster       → worker/roster.js     /api/roster (+ .csv), PUT (admin), /api/admin/login, /api/admin/check
 //   absence      → worker/absence.js    /api/absence (+ .csv), DELETE (admin), /api/absence/import (admin)
 //   flopik       → worker/flopik.js     /api/flopik/reports, /pulls, /pulls/parse, /refs, /refwin, /refresh, /status
+//   attendance   → worker/attendance.js /api/attendance (+ .csv, DELETE admin), /api/es?p=esroster|attendance (addon)
+//   lineups      → worker/lineups.js    /api/lineups (+ .csv), PUT (admin)
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -16,14 +18,17 @@ import migration0001 from "./migrations/0001_sim_results.sql";
 import migration0002 from "./migrations/0002_sim_queue.sql";
 import migration0003 from "./migrations/0003_roster_absence.sql";
 import migration0004 from "./migrations/0004_flopik.sql";
+import migration0005 from "./migrations/0005_attendance_lineups.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
 import * as flopik from "./flopik.js";
+import { postAttendance, getAttendance, getAttendanceCsv, deleteAttendance, esEndpoint } from "./attendance.js";
+import { getLineups, putLineups, getLineupsCsv } from "./lineups.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005]];
 
 export default {
   async fetch(request, env, ctx) {
@@ -115,6 +120,18 @@ async function route(request, env, ctx, url) {
   if (path === "/api/flopik/refwin" && method === "GET") return flopik.getRefWindow(env, url);
   if (path === "/api/flopik/refresh" && method === "POST") return flopik.refresh(request, env);
   if (path === "/api/flopik/status" && method === "GET") return flopik.status(env, url);
+
+  // ---- attendance (worker/attendance.js) + addon endpoints
+  if (path === "/api/attendance" && method === "POST") return postAttendance(request, env);
+  if (path === "/api/attendance" && method === "GET") return getAttendance(env, url);
+  if (path === "/api/attendance.csv" && method === "GET") return getAttendanceCsv(env, url);
+  if (path === "/api/attendance" && method === "DELETE") return admin(() => deleteAttendance(env, url));
+  if (path === "/api/es" && method === "GET") return esEndpoint(env, url);
+
+  // ---- boss lineups (worker/lineups.js)
+  if (path === "/api/lineups" && method === "GET") return getLineups(env);
+  if (path === "/api/lineups.csv" && method === "GET") return getLineupsCsv(env);
+  if (path === "/api/lineups" && method === "PUT") return admin(() => putLineups(request, env));
 
   return json({ ok: false, error: "not found" }, 404);
 }

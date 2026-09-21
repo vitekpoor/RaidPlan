@@ -15,6 +15,8 @@ web/hub.html
 web/loot.html
 web/flopik.html
 web/roster.html
+web/attendance.html
+web/lineups.html
 *.bat
 *.py
 *.gs

@@ -74,6 +74,8 @@
     <li><a href="#simc" data-sec="simc">SimC</a></li>
     <li><a href="loot.html">Simy</a></li>
     <li><a href="roster.html">Roster</a></li>
+    <li><a href="attendance.html">Docházka</a></li>
+    <li><a href="lineups.html">Sestavy</a></li>
     <li><a href="raid.html">Raid taktiky</a></li>
     <li><a href="flopik.html">Flopik</a></li>
     <li class="ext"><a href="https://docs.google.com/spreadsheets/d/1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI/edit" target="_blank" rel="noopener">Tabulka</a></li>
@@ -82,6 +84,7 @@
 </nav>
 </div>
 </header>
+<script src="assets/js/es-auth.js"></script>
 
 <div class="container">
 <div class="page-content">
@@ -100,6 +103,8 @@
     <a class="tile" href="#simc"><h4><span class="ico" aria-hidden="true">⌁</span>SimC</h4><p>Poslat SimC string – Droptimizer proběhne sám.</p><span class="go">Poslat string →</span></a>
     <a class="tile" href="loot.html"><h4><span class="ico" aria-hidden="true">↗</span>Simy</h4><p>Upgrady podle hráče, bosse a itemu.</p><span class="go">Otevřít přehled →</span></a>
     <a class="tile" href="roster.html"><h4><span class="ico" aria-hidden="true">☷</span>Roster</h4><p>Hráči, postavy, classy a role.</p><span class="go">Otevřít roster →</span></a>
+    <a class="tile" href="attendance.html"><h4><span class="ico" aria-hidden="true">✓</span>Docházka</h4><p>Kdo na raidu byl (addon ES Attendance) a přehled omluvenek.</p><span class="go">Otevřít docházku →</span></a>
+    <a class="tile" href="lineups.html"><h4><span class="ico" aria-hidden="true">⚑</span>Sestavy</h4><p>20 hráčů na každého bosse, s omluvenkami na den raidu.</p><span class="go">Otevřít sestavy →</span></a>
     <a class="tile" href="raid.html"><h4><span class="ico" aria-hidden="true">✦</span>Raid taktiky</h4><p>Venomous Abyss a lair boss Nymrissa.</p><span class="go">Číst taktiky →</span></a>
     <a class="tile" href="flopik.html"><h4><span class="ico" aria-hidden="true">☠</span>Flopik</h4><p>Faily po pullech z Warcraft Logs.</p><span class="go">Otevřít Flopik →</span></a>
   </div>
@@ -129,7 +134,7 @@
     </div>
     <button class="btn" id="abs-send" type="button">Odeslat</button>
     <div class="status" id="abs-status"></div>
-    <p class="steps" style="margin-top:14px">Hlásit jde jen dnešek a budoucí dny, nejvýš 62 dní najednou. Špatný záznam ti smaže raid leader (přihlášený admin ho může odebrat v přehledu).</p>
+    <p class="steps" style="margin-top:14px">Hlásit jde jen dnešek a budoucí dny, nejvýš 62 dní najednou. Špatný záznam smaže raid leader – po přihlášení (vpravo nahoře) přímo v přehledu níže.</p>
   </div>
   <div class="overview" id="absview">
     <div class="heading-section"><h4><em>Přehled</em> absencí</h4></div>
@@ -188,8 +193,8 @@
   function postJson(path, body, headers) {
     return fetch(API_BASE + path, { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, headers || {}), body: JSON.stringify(body) }).then(function (r) { return r.json(); });
   }
-  var adminToken = null;
-  try { adminToken = localStorage.getItem("esAdminToken"); } catch (e) {}
+  var adminToken = window.esAuth ? esAuth.token() : null;
+  if (window.esAuth) esAuth.onChange(function (t) { adminToken = t; if (location.hash === "#omluvenky") loadAbsence(); });
 
   // ---- routing between the three sections
   var navLinks = document.querySelectorAll(".main-nav a[data-sec]");
@@ -245,11 +250,11 @@
     }).catch(function (err) { $("#abs-meta").textContent = "Přehled se nenačetl: " + err.message; });
   }
   $("#abs-body").addEventListener("click", function (ev) {
-    var b = ev.target.closest("button[data-id]"); if (!b || !adminToken) return;
+    var b = ev.target.closest("button.mini[data-id]"); if (!b || !adminToken) return;
     if (!confirm("Smazat tento záznam?")) return;
     fetch(API_BASE + "/api/absence?id=" + b.dataset.id, { method: "DELETE", headers: { "Authorization": "Bearer " + adminToken } })
       .then(function (r) { return r.json(); }).then(function (d) { if (!d.ok) throw new Error(d.error || "chyba"); loadAbsence(); })
-      .catch(function (err) { $("#abs-meta").textContent = "Smazání selhalo: " + err.message + (/unauthorized/.test(err.message) ? " – přihlas se znovu na stránce Roster" : ""); });
+      .catch(function (err) { $("#abs-meta").textContent = "Smazání selhalo: " + err.message + (/unauthorized/.test(err.message) ? " – přihlas se znovu (vpravo nahoře)" : ""); });
   });
 
   // ---- SimC

@@ -204,3 +204,18 @@ footer .credit { font-size: 12px; opacity: .8; }
   .sub-nav .status { white-space: nowrap; }
   .page-content { padding: 20px 16px; margin-top: 16px; }
 }
+
+/* Přihlášení admina v hlavičce (assets/js/es-auth.js) */
+.main-nav .es-auth { position: relative; margin-left: 12px; }
+.es-auth-btn { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+.es-auth-btn:hover { color: var(--ink-strong); border-color: var(--accent); }
+.es-auth-btn.on { color: var(--accent); border-color: var(--accent); }
+.es-auth-btn .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; vertical-align: 1px; }
+.es-auth-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; background: var(--surface2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; min-width: 15rem; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-size: 13px; color: var(--muted); }
+.es-auth-pop label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.es-auth-pop input { background: var(--ground); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 10px; font: inherit; }
+.es-auth-pop input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.es-auth-pop button { background: var(--accent); color: #07110c; border: 0; border-radius: 999px; padding: 7px 16px; font: inherit; font-weight: 700; cursor: pointer; }
+.es-auth-pop button:disabled { opacity: .6; }
+.es-auth-pop .es-auth-err { display: block; color: var(--dps); margin-top: 6px; min-height: 1.2em; }
+.es-auth-pop p { margin: 0 0 8px; }

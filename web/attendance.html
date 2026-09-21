@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<!--
+  attendance.html - Docházka (záznamy z addonu ES Attendance, GET /api/attendance) a přehled absencí
+  (GET /api/absence) jako matice hráči × dny – náhrada listů „Docházka“ a „Absence přehled“.
+  Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance (heslo RUN_PASSWORD, nebo přihlášený admin).
+  Přihlášený admin může smazat den docházky nebo jednotlivou absenci. build.bat kopíruje do kořene repa.
+-->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docházka – Eternal Shadows</title>
+<link rel="icon" href="assets/images/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<style>
+  :root { --wrap: 1500px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 14px; font-size: 13.5px; color: var(--muted); }
+  .bar .sp { flex: 1; }
+  .bar input, .bar select { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; }
+  .bar .btn, .bar .btn-outline { padding: 7px 16px; font-size: 13.5px; }
+  #msg { min-height: 1.2em; font-weight: 600; } #msg.ok { color: var(--accent); } #msg.err { color: var(--dps); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .seg button { background: transparent; border: 0; color: var(--muted); padding: 7px 16px; font: inherit; font-size: 13.5px; cursor: pointer; }
+  .seg button.active { background: var(--accent-soft); color: var(--ink-strong); }
+  .wrap { overflow-x: auto; }
+  table.mx { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  .mx th, .mx td { padding: 4px 8px; white-space: nowrap; text-align: center; }
+  .mx th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; vertical-align: bottom; }
+  .mx th small { display: block; font-size: 10.5px; text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 400; }
+  .mx th.raid { color: var(--ink); }
+  .mx td:first-child, .mx th:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); z-index: 1; font-weight: 600; }
+  .mx tbody tr:nth-child(odd) td { background: rgba(255,255,255,.025); }
+  .mx tbody tr:nth-child(odd) td:first-child { background: #131715; }
+  .mx tr.bench td { color: var(--muted); }
+  .mx tr.sep td { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding-top: 10px; background: transparent !important; text-align: left; }
+  .mx tfoot td { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
+  .m { display: inline-block; min-width: 3.4rem; padding: 1px 7px; border-radius: 4px; font-weight: 600; font-size: 12px; color: #111; }
+  .m.ano { background: #9bd9a8; } .m.ne { background: #e88b8b; } .m.omluvenka { background: #f2d488; } .m.pozdě { background: #f4b473; }
+  .m.absent { background: #e88b8b; } .m.late { background: #f4b473; }
+  .m.del { cursor: pointer; } .m.del:hover { outline: 2px solid var(--dps); }
+  .cnt { color: var(--muted); font-size: 12px; }
+  .form { max-width: 760px; margin-top: 26px; }
+  .form textarea { width: 100%; min-height: 6rem; background: var(--ground); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 12px; font: 12.5px Consolas, "Cascadia Mono", monospace; }
+  .form .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-top: 10px; }
+  .form input { background: var(--ground); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; font: inherit; }
+  .form .status { margin-top: 10px; font-weight: 600; min-height: 1.3em; } .form .status.ok { color: var(--accent); } .form .status.err { color: var(--dps); }
+  .hint { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
+  .x { color: var(--muted); cursor: pointer; font-size: 11px; margin-left: 4px; } .x:hover { color: var(--dps); }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+<div class="container">
+<nav class="main-nav">
+  <a href="index.html" class="logo"><span class="mark" aria-hidden="true"></span>Eternal <em>Shadows</em></a>
+  <ul class="nav">
+    <li><a href="index.html#omluvenky">Omluvenky</a></li>
+    <li><a href="index.html#simc">SimC</a></li>
+    <li><a href="loot.html">Simy</a></li>
+    <li><a href="roster.html">Roster</a></li>
+    <li><a href="attendance.html" class="active">Docházka</a></li>
+    <li><a href="lineups.html">Sestavy</a></li>
+    <li><a href="raid.html">Raid taktiky</a></li>
+    <li><a href="flopik.html">Flopik</a></li>
+  </ul>
+</nav>
+</div>
+</header>
+<script src="assets/js/es-auth.js"></script>
+
+<div class="container">
+<div class="page-content">
+<div class="heading-section">
+  <h4><em>Docházka</em> a absence</h4>
+</div>
+
+<div class="bar">
+  <span class="seg"><button data-view="att" class="active">Docházka</button><button data-view="abs">Absence</button></span>
+  <label>od <input type="date" id="from"></label>
+  <label>do <input type="date" id="to"></label>
+  <span id="status"></span>
+  <span class="sp"></span>
+  <span id="msg"></span>
+</div>
+
+<div class="wrap"><table class="mx" id="mx"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+<p class="hint" id="hint"></p>
+
+<div class="form" id="attform">
+  <div class="heading-section"><h4><em>Zapsat</em> docházku</h4></div>
+  <p class="steps">Ve hře <code>/esa</code> → <b>Zapsat docházku</b> → <code>Ctrl+C</code> a sem <code>Ctrl+V</code>. Druhý zápis ve stejný den ten první přepíše. Chybějící hráč, který ten den nahlásil omluvenku nebo pozdní příchod, se ukáže jako <span class="m omluvenka">omluvenka</span> / <span class="m pozdě">pozdě</span>.</p>
+  <textarea id="rec" placeholder="ESA1;2026-09-16;20:05;Hráč=1:Postava;Hráč=0;…" spellcheck="false"></textarea>
+  <div class="row"><input type="password" id="recpw" placeholder="heslo (raid leader)" autocomplete="off"><button class="btn" id="send" type="button">Zapsat</button></div>
+  <div class="status" id="recstatus"></div>
+</div>
+</div>
+</div>
+
+<footer>
+  <p>Eternal Shadows · Burning Blade EU</p>
+  <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
+</footer>
+
+<script>
+(function () {
+  var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
+  var CZ = ["ne", "po", "út", "st", "čt", "pá", "so"], RAID_DAYS = { 3: 1, 4: 1, 0: 1 };   // st, čt, ne
+  var CLASS_COLOR = { "death knight": "#C41E3A", "demon hunter": "#A330C9", druid: "#FF7C0A", evoker: "#33937F", hunter: "#AAD372", mage: "#3FC7EB",
+                      monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
+  var $ = function (s) { return document.querySelector(s); };
+  var state = { view: "att", token: window.esAuth ? esAuth.token() : null, roster: [], att: null, abs: null };
+  if (window.esAuth) esAuth.onChange(function (t) { state.token = t; render(); });
+  try { state.view = localStorage.getItem("attView") || "att"; } catch (e) {}
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
+  function iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function day(s) { var d = new Date(s + "T00:00:00"); return { wd: d.getDay(), txt: CZ[d.getDay()] + " " + d.getDate() + "." + (d.getMonth() + 1) + "." }; }
+  var today = new Date();
+  $("#from").value = iso(new Date(today.getTime() - 60 * 86400000)); $("#to").value = iso(new Date(today.getTime() + 60 * 86400000));
+  function mainClass(name) { var p = state.roster.filter(function (x) { return x.name === name; })[0]; var m = p && (p.characters.filter(function (c) { return c.main; })[0] || p.characters[0]); return m ? m.class : ""; }
+  function nameCell(name, bench) { return '<td style="color:' + (CLASS_COLOR[String(mainClass(name)).toLowerCase()] || "var(--ink)") + '">' + esc(name) + "</td>"; }
+
+  function load() {
+    var from = $("#from").value, to = $("#to").value;
+    $("#status").textContent = "načítám…";
+    return Promise.all([
+      fetch(API_BASE + "/api/roster", { cache: "no-store" }).then(function (r) { return r.json(); }),
+      fetch(API_BASE + "/api/attendance?from=" + from + "&to=" + to, { cache: "no-store" }).then(function (r) { return r.json(); }),
+      fetch(API_BASE + "/api/absence?from=" + from + "&to=" + to, { cache: "no-store" }).then(function (r) { return r.json(); })
+    ]).then(function (res) {
+      if (!res[0].ok || !res[1].ok || !res[2].ok) throw new Error((res[0].error || res[1].error || res[2].error || "chyba"));
+      state.roster = res[0].players || []; state.att = res[1]; state.abs = res[2];
+      $("#status").textContent = ""; render();
+    }).catch(function (err) { $("#status").textContent = "Data se nenačetla: " + err.message; });
+  }
+
+  function renderAtt() {
+    var a = state.att, days = a.days || [];
+    var head = "<tr><th>Hráč</th>" + days.map(function (d) { var dd = day(d.date); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "<small>" + esc(d.time) + (state.token ? ' <span class="x" data-del="' + d.date + '" title="smazat den">✕</span>' : "") + "</small></th>"; }).join("") + "</tr>";
+    var rows = [], counts = days.map(function () { return { ano: 0, ne: 0, omluvenka: 0, "pozdě": 0 }; });
+    var groups = [["Raid roster", state.roster.filter(function (p) { return !p.bench; })], ["Lavička", state.roster.filter(function (p) { return p.bench; })]];
+    if (a.extra && a.extra.length) groups.push(["Mimo roster", a.extra.map(function (n) { return { name: n }; })]);
+    groups.forEach(function (g) {
+      if (!g[1].length) return;
+      if (state.roster.some(function (p) { return p.bench; }) || g[0] === "Mimo roster") rows.push('<tr class="sep"><td colspan="' + (days.length + 1) + '">' + g[0] + "</td></tr>");
+      g[1].forEach(function (p) {
+        rows.push('<tr class="' + (p.bench ? "bench" : "") + '">' + nameCell(p.name) + days.map(function (d, i) {
+          var m = (a.marks[d.date] || {})[p.name];
+          if (!m) return "<td></td>";
+          counts[i][m.state] = (counts[i][m.state] || 0) + 1;
+          return '<td><span class="m ' + esc(m.state) + '" title="' + esc(m.char || "") + '">' + esc(m.state) + "</span></td>";
+        }).join("") + "</tr>");
+      });
+    });
+    var foot = "<tr><td>Přítomno / chybí</td>" + counts.map(function (c) { return "<td>" + c.ano + " / " + (c.ne + c.omluvenka + c["pozdě"]) + (c.omluvenka || c["pozdě"] ? ' <span class="cnt">(' + (c.omluvenka ? c.omluvenka + " oml." : "") + (c.omluvenka && c["pozdě"] ? ", " : "") + (c["pozdě"] ? c["pozdě"] + " pozdě" : "") + ")</span>" : "") + "</td>"; }).join("") + "</tr>";
+    $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (days.length + 1) + '" class="cnt">Žádné záznamy v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = days.length ? foot : "";
+    $("#hint").textContent = "Docházku zapisuje addon ES Attendance (řádek = hráč z rosteru, sloupec = raid). Najeď na buňku – ukáže se postava, se kterou hráč přišel. Sloupce st / čt / ne jsou raidové dny.";
+  }
+  function renderAbs() {
+    var a = state.abs, marks = a.marks || [];
+    var dates = []; marks.forEach(function (m) { if (dates.indexOf(m.date) < 0) dates.push(m.date); }); dates.sort();
+    var byKey = {}; marks.forEach(function (m) { byKey[m.player.toLowerCase() + "|" + m.date] = m; });
+    var head = "<tr><th>Hráč</th>" + dates.map(function (d) { var dd = day(d); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "</th>"; }).join("") + "</tr>";
+    var rows = [];
+    var groups = [["Raid roster", state.roster.filter(function (p) { return !p.bench; })], ["Lavička", state.roster.filter(function (p) { return p.bench; })]];
+    groups.forEach(function (g) {
+      if (!g[1].length) return;
+      if (state.roster.some(function (p) { return p.bench; })) rows.push('<tr class="sep"><td colspan="' + (dates.length + 1) + '">' + g[0] + "</td></tr>");
+      g[1].forEach(function (p) {
+        rows.push('<tr class="' + (p.bench ? "bench" : "") + '">' + nameCell(p.name) + dates.map(function (d) {
+          var m = byKey[p.name.toLowerCase() + "|" + d];
+          if (!m) return "<td></td>";
+          return '<td><span class="m ' + esc(m.type) + (state.token ? " del" : "") + '" data-id="' + m.id + '" title="nahlášeno ' + esc(new Date(m.createdAt).toLocaleString("cs-CZ")) + (state.token ? " · klik = smazat" : "") + '">' + (m.type === "late" ? "pozdě" : "X") + "</span></td>";
+        }).join("") + "</tr>");
+      });
+    });
+    var foot = "<tr><td>Chybí / pozdě</td>" + dates.map(function (d) { var n = marks.filter(function (m) { return m.date === d && m.type === "absent"; }).length, l = marks.filter(function (m) { return m.date === d && m.type === "late"; }).length; return "<td>" + n + (l ? " / " + l : "") + "</td>"; }).join("") + "</tr>";
+    $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (dates.length + 1) + '" class="cnt">Žádné nahlášené absence v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = dates.length ? foot : "";
+    $("#hint").textContent = "X = nepřijde, pozdě = přijde pozdě (nahlášeno formulářem Omluvenky). Zobrazují se jen dny, kdy někdo něco nahlásil." + (state.token ? " Kliknutím na značku ji smažeš." : " Špatný záznam smaže přihlášený raid leader.");
+  }
+  function render() {
+    document.querySelectorAll(".seg button").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); });
+    $("#recpw").hidden = !!state.token;
+    if (state.view === "abs") renderAbs(); else renderAtt();
+  }
+  document.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { state.view = b.dataset.view; try { localStorage.setItem("attView", state.view); } catch (e) {} render(); }); });
+  $("#from").addEventListener("change", load); $("#to").addEventListener("change", load);
+  $("#mx").addEventListener("click", function (ev) {
+    var del = ev.target.closest("[data-del]"), mark = ev.target.closest(".m.del");
+    if (!state.token || (!del && !mark)) return;
+    var url = del ? "/api/attendance?date=" + del.dataset.del : "/api/absence?id=" + mark.dataset.id;
+    if (!confirm(del ? "Smazat docházku za " + del.dataset.del + "?" : "Smazat tuhle absenci?")) return;
+    fetch(API_BASE + url, { method: "DELETE", headers: { "Authorization": "Bearer " + state.token } }).then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.ok) throw new Error(d.error || "chyba"); msg(true, "Smazáno."); load(); })
+      .catch(function (err) { msg(false, "Smazání selhalo: " + err.message); });
+  });
+  $("#send").addEventListener("click", function () {
+    var rec = $("#rec").value.trim(); if (!rec) return; var s = $("#recstatus");
+    $("#send").disabled = true; s.className = "status"; s.textContent = "⏳ Zapisuji…";
+    var headers = { "Content-Type": "application/json" }; if (state.token) headers["Authorization"] = "Bearer " + state.token;
+    fetch(API_BASE + "/api/attendance", { method: "POST", headers: headers, body: JSON.stringify({ record: rec, pw: $("#recpw").value }) }).then(function (r) { return r.json(); })
+      .then(function (d) { s.className = "status " + (d.ok ? "ok" : "err"); s.textContent = d.message || (d.ok ? "✔ Zapsáno." : "⚠ " + (d.error || "chyba")); if (d.ok) { $("#rec").value = ""; state.view = "att"; load(); } })
+      .catch(function (err) { s.className = "status err"; s.textContent = "⚠ Chyba spojení: " + err.message; }).then(function () { $("#send").disabled = false; });
+  });
+  if (location.hash === "#absence") state.view = "abs";
+  load();
+})();
+</script>
+</body>
+</html>

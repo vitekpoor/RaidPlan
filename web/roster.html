@@ -81,6 +81,8 @@
     <li><a href="index.html#simc">SimC</a></li>
     <li><a href="loot.html">Simy</a></li>
     <li><a href="roster.html" class="active">Roster</a></li>
+    <li><a href="attendance.html">Docházka</a></li>
+    <li><a href="lineups.html">Sestavy</a></li>
     <li><a href="raid.html">Raid taktiky</a></li>
     <li><a href="flopik.html">Flopik</a></li>
     <li class="ext"><a href="https://wowaudit.com/guild/eu/burning-blade/eternal-shadows/teams/eternal-shadows" target="_blank" rel="noopener">wowaudit</a></li>
@@ -88,6 +90,7 @@
 </nav>
 </div>
 </header>
+<script src="assets/js/es-auth.js"></script>
 
 <div class="container">
 <div class="page-content" id="page">
@@ -99,13 +102,12 @@
   <span id="status">Načítám…</span>
   <span class="sp"></span>
   <span id="msg"></span>
-  <span id="loginbox"><input type="password" id="pw" placeholder="heslo admina" autocomplete="current-password"> <button class="btn-outline" id="login" type="button">Přihlásit</button></span>
   <span id="adminbox" hidden>
     <button class="btn-outline" id="edit" type="button">Upravit</button>
     <button class="btn" id="save" type="button" hidden>Uložit</button>
     <button class="btn-outline" id="cancel" type="button" hidden>Zrušit</button>
-    <button class="btn-outline" id="logout" type="button">Odhlásit</button>
   </span>
+  <span id="loginhint" class="muted" hidden>Úpravy: přihlas se vpravo nahoře.</span>
 </div>
 
 <div class="grp"><h5>Raid roster · <span id="nMain"></span></h5>
@@ -146,8 +148,8 @@
   };
   var ROLES = ["tank", "heal", "dps"];
   var $ = function (s) { return document.querySelector(s); };
-  var state = { players: [], edit: false, draft: null, token: null };
-  try { state.token = localStorage.getItem("esAdminToken") || null; } catch (e) {}
+  var state = { players: [], edit: false, draft: null, token: window.esAuth ? esAuth.token() : null };
+  if (window.esAuth) esAuth.onChange(function (t) { state.token = t; if (!t) { state.edit = false; state.draft = null; } render(); });
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
   function color(cls) { return CLASS_COLOR[String(cls || "").toLowerCase()] || "var(--ink)"; }
@@ -217,7 +219,7 @@
     $("#bench").innerHTML = benchRows.join("") || '<tr><td></td><td colspan="5" class="note">nikdo</td></tr>';
     var nm = list.filter(function (p) { return !p.bench; }).length;
     $("#nMain").textContent = nm + " hráčů"; $("#nBench").textContent = (list.length - nm) + " hráčů";
-    $("#loginbox").hidden = !!state.token; $("#adminbox").hidden = !state.token;
+    $("#adminbox").hidden = !state.token; $("#loginhint").hidden = !!state.token;
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
     $("#hint").textContent = state.edit ? "Piš přímo do tabulky. Číslo vlevo je ID hráče v databázi (zůstává i po přejmenování; jména hráčů musí být jedinečná). Classa a spec jsou dropdowny (role se odvodí ze specu), ★ = main postava, přetažením řádku na jiného hráče si oba prohodí místo (i roster ↔ lavička), přetažením na volné místo tabulky se hráč zařadí na její konec. Nic se neuloží, dokud nedáš Uložit."
       : "Roster je zdroj pravdy pro formuláře (Omluvenky, SimC), stránku Simy, addon ES Attendance i RaidPlan sestavy. Spec se doplňuje automaticky z posledního simu, když chybí.";
@@ -278,17 +280,6 @@
   document.addEventListener("dragend", function () { dragIdx = null; document.querySelectorAll("tr.over, tr.dragging").forEach(function (x) { x.classList.remove("over", "dragging"); }); });
 
   // ---------------------------------------------------------------- auth + save
-  $("#login").addEventListener("click", function () {
-    var pw = $("#pw").value; if (!pw) return msg(false, "Zadej heslo.");
-    fetch(API_BASE + "/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pw: pw }) })
-      .then(function (r) { return r.json(); }).then(function (d) {
-        if (!d.ok) throw new Error(d.error || "přihlášení selhalo");
-        state.token = d.token; try { localStorage.setItem("esAdminToken", d.token); } catch (e) {}
-        $("#pw").value = ""; msg(true, "Přihlášeno."); render();
-      }).catch(function (err) { msg(false, err.message); });
-  });
-  $("#pw").addEventListener("keydown", function (ev) { if (ev.key === "Enter") $("#login").click(); });
-  $("#logout").addEventListener("click", function () { state.token = null; state.edit = false; try { localStorage.removeItem("esAdminToken"); } catch (e) {} msg(true, ""); render(); });
   $("#edit").addEventListener("click", function () { state.draft = JSON.parse(JSON.stringify(state.players)); state.edit = true; msg(true, ""); render(); });
   $("#cancel").addEventListener("click", function () { state.edit = false; state.draft = null; render(); });
   $("#save").addEventListener("click", function () {
@@ -299,18 +290,13 @@
     $("#save").disabled = true; msg(true, "Ukládám…");
     fetch(API_BASE + "/api/roster", { method: "PUT", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + state.token }, body: JSON.stringify({ players: players }) })
       .then(function (r) { return r.json().then(function (d) { d._status = r.status; return d; }); }).then(function (d) {
-        if (d._status === 401) { state.token = null; try { localStorage.removeItem("esAdminToken"); } catch (e) {} render(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); }
+        if (d._status === 401) { esAuth.logout(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); }
         if (!d.ok) throw new Error(d.error || "uložení selhalo");
         state.edit = false; state.draft = null; msg(true, "✔ Uloženo: " + d.players + " hráčů, " + d.characters + " postav."); return load();
       }).catch(function (err) { msg(false, "⚠ " + err.message); }).then(function () { $("#save").disabled = false; });
   });
   window.addEventListener("beforeunload", function (ev) { if (state.edit) { ev.preventDefault(); ev.returnValue = ""; } });
 
-  if (state.token) {
-    fetch(API_BASE + "/api/admin/check", { headers: { "Authorization": "Bearer " + state.token } }).then(function (r) {
-      if (r.status === 401) { state.token = null; try { localStorage.removeItem("esAdminToken"); } catch (e) {} render(); }
-    }).catch(function () {});
-  }
   load();
 })();
 </script>
