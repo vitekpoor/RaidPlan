@@ -30,6 +30,7 @@
   .lu th, .lu td { padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lu th { text-align: left; vertical-align: top; text-transform: none; letter-spacing: 0; line-height: 1.3; padding-bottom: 3px; }
   .lu th:first-child { width: 1.5rem; padding: 0; }
+  .edit .lu th { overflow: visible; }   /* datum: kalendář input nesmí být oříznutý */
   .lu th .boss { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink-strong); }
   .lu th .links a { color: var(--accent); text-decoration: none; font-size: 11px; font-weight: 400; margin-right: 7px; }
   .lu th .meta { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
@@ -43,7 +44,7 @@
   .lu td.slot.dup { color: #b00000 !important; }
   .edit .lu td.slot select, .edit .lu th input[type=date] { width: 100%; background: transparent; color: inherit; border: 0; border-bottom: 1px dashed rgba(0,0,0,.35); font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
   .edit .lu td.slot.empty select { color: var(--muted); border-bottom-color: var(--line); }
-  .edit .lu th input[type=date] { color: var(--ink); border-bottom-color: var(--line); font-weight: 400; font-size: 11px; width: 100%; }
+  .edit .lu th input[type=date] { display: block; color: var(--ink); border-bottom-color: var(--line); font-weight: 400; font-size: 11px; width: 100%; margin-top: 1px; }
   .lu select option { background: var(--surface2); color: var(--ink); }
   .mini { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 4px; padding: 0 6px; cursor: pointer; font: inherit; font-size: 10.5px; margin-top: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .mini:hover { color: var(--ink-strong); border-color: var(--accent); }
@@ -138,7 +139,8 @@
     }).catch(function (err) { $("#status").textContent = "Data se nenačetla: " + err.message; });
   }
 
-  function render() {
+  // bodyOnly = jen řádky (změna data v hlavičce nesmí překreslit <input type=date>, jinak se při psaní ztratí fokus)
+  function render(bodyOnly) {
     var list = state.edit ? state.draft : state.bosses;
     $("#page").classList.toggle("edit", state.edit);
     var head = "<tr><th></th>" + list.map(function (b, bi) {
@@ -166,7 +168,8 @@
         return '<td class="slot ' + cls.join(" ") + '" style="' + style + '"' + (why ? ' title="' + esc(why) + '"' : "") + ">" + inner + "</td>";
       }).join("") + "</tr>");
     }
-    $("#lu thead").innerHTML = head; $("#lu tbody").innerHTML = rows.join("");
+    if (!bodyOnly) $("#lu thead").innerHTML = head;
+    $("#lu tbody").innerHTML = rows.join("");
     $("#adminbox").hidden = !state.token; $("#loginhint").hidden = !!state.token;
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
     $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown), nastav datum raidu u bosse, nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit."
@@ -186,8 +189,8 @@
   document.addEventListener("change", function (ev) {
     var t = ev.target; if (!state.edit) return;
     var b = state.draft[+t.dataset.b]; if (!b) return;
-    if (t.dataset.f === "date") b.date = t.value; else if (t.dataset.s != null) b.slots[+t.dataset.s] = t.value;
-    render();
+    if (t.dataset.f === "date") { b.date = t.value; render(true); }      // absence ve sloupci podle nového data
+    else if (t.dataset.s != null) { b.slots[+t.dataset.s] = t.value; render(); }
   });
   document.addEventListener("click", function (ev) {
     var btn = ev.target.closest("button[data-act=copyprev]"); if (!btn || !state.edit) return;
