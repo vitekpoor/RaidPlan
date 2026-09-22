@@ -52,14 +52,18 @@
   .dist .pct { width: 6rem; text-align: right; }
   h5.sec { font-size: 14px; font-weight: 700; color: var(--ink-strong); margin: 18px 0 6px; }
   h5.sec span { color: var(--muted); font-weight: 400; font-size: 12.5px; margin-left: 8px; }
-  table.specs { width: auto; min-width: 60%; font-size: 12.5px; border-collapse: collapse; }
-  .specs th { text-align: left; padding: 3px 10px 3px 0; color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line); }
-  .specs td { padding: 2px 10px 2px 0; border-bottom: 1px solid rgba(255,255,255,.04); white-space: nowrap; vertical-align: middle; }
+  /* specy: tři sloupce vedle sebe (tanky | healeři | DPS), malé řádky – celý přehled na jednu obrazovku */
+  .specgrid { display: grid; grid-template-columns: auto auto 1fr; gap: 0 22px; align-items: start; }
+  @media (max-width: 1100px) { .specgrid { grid-template-columns: 1fr; } }
+  table.specs { width: auto; font-size: 11px; border-collapse: collapse; }
+  .specs th { text-align: left; padding: 1px 6px 2px 0; color: var(--muted); font-weight: 600; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line); }
+  .specs th.rname { font-size: 10.5px; letter-spacing: .08em; } .specs.tank th.rname { color: var(--tank); } .specs.healer th.rname { color: var(--heal); } .specs.dps th.rname { color: var(--dps); }
+  .specs td { padding: 0 6px 0 0; border-bottom: 1px solid rgba(255,255,255,.04); white-space: nowrap; vertical-align: middle; line-height: 1.55; }
+  .specs td .chip { font-size: 10.5px; padding: 0 5px; line-height: 1.5; border-radius: 3px; }
   .specs td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .specs td.pbar { min-width: 120px; } .specs td.pbar i { display: inline-block; height: 7px; background: var(--accent); border-radius: 3px; vertical-align: middle; margin-right: 6px; opacity: .8; }
-  .specs tr.rsep td { border-top: 2px solid var(--line); }
-  .specs td.ours { color: var(--muted); white-space: normal; max-width: 22rem; } .specs td.ours b { color: var(--ink); font-weight: 600; }
-  .specs tr.inbest td:first-child { color: var(--ink-strong); }
+  .specs td.pbar { min-width: 84px; } .specs td.pbar i { display: inline-block; height: 5px; background: var(--accent); border-radius: 3px; vertical-align: middle; margin-right: 5px; opacity: .8; }
+  .specs td.ours { color: var(--muted); white-space: normal; max-width: 16rem; font-size: 10.5px; } .specs td.ours b { color: var(--ink); font-weight: 600; }
+  .specs tr.dim td { opacity: .55; }
   details.kills { margin-top: 18px; }
   details.kills summary { cursor: pointer; font-size: 14px; font-weight: 700; color: var(--ink-strong); }
   details.kills summary span { color: var(--muted); font-weight: 400; font-size: 12.5px; margin-left: 8px; }
@@ -105,7 +109,7 @@
 
 <div id="content"></div>
 
-<p class="hint">Data: <a href="https://raider.io/" target="_blank" rel="noopener">raider.io</a> – žebříček bosse (Mythic, celý svět) a sestava PRVNÍHO killu každé guildy (20 postav se specem). Guildy bez nahraného logu nebo se skrytou sestavou sestavu nemají a do výpočtu nevstupují.
+<p class="hint">Data: <a href="https://raider.io/" target="_blank" rel="noopener">raider.io</a> – žebříček bosse (Mythic, celý svět) a sestava PRVNÍHO killu každé guildy (20 postav se specem). Guildy bez nahraného logu nebo se skrytou sestavou a killy s neúplnou sestavou (méně než 20 postav) se vynechávají.
 Nejlepší sestava: nejčastější rozložení rolí (tank / heal / DPS) mezi vybranými killy, sloty každé role obsazené podle průměrného počtu specu na kill (metoda největšího zbytku). Alternativa: skutečná sestava guildy s nejmenším rozdílem od nejlepší (nejméně vyměněných slotů), která není totožná.
 Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skript <code>tools/raidplan/rio_comps.mjs</code>), admin může spustit ručně. Naše sestavy: <a href="lineups.html">Boss sestavy</a>.</p>
 </div>
@@ -206,8 +210,10 @@ Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skr
   }
 
   // ---------------------------------------------------------------- aggregation
+  var RAID_SIZE = 20;
+  function complete(k) { return k.roster && k.roster.length === RAID_SIZE; }   // jen killy s celou 20členou sestavou
   function selectedKills() {
-    var kills = (state.data.boss.kills || []).filter(function (k) { return k.roster && k.roster.length; });
+    var kills = (state.data.boss.kills || []).filter(complete);
     if (state.region) kills = kills.filter(function (k) { return k.region === state.region; });
     kills.sort(function (a, b) { return a.rank - b.rank; });
     return kills.slice(0, state.topn);
@@ -264,7 +270,7 @@ Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skr
     $("#status").innerHTML = esc(b.name) + " · data z raider.io " + esc(new Date(b.fetchedAt).toLocaleString("cs-CZ")) + " · <a href=\"" + rankingUrl() + "\" target=\"_blank\" rel=\"noopener\">žebříček ↗</a>";
     $("#adminbox").hidden = !state.token;
     var kills = selectedKills();
-    if (!kills.length) { $("#content").innerHTML = '<p class="hint">Pro tento výběr není žádný kill se známou sestavou.</p>'; return; }
+    if (!kills.length) { $("#content").innerHTML = '<p class="hint">Pro tento výběr není žádný kill s úplnou 20člennou sestavou.</p>'; return; }
     var a = analyze(kills), best = a.best, mode = a.splits[0];
     var altHtml = "";
     if (a.alt) {
@@ -284,29 +290,29 @@ Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skr
     var bestHtml = '<div class="card"><h5>Nejlepší sestava <em>' + a.n + " killů</em></h5><p class=\"sub\">Nejčastější rozložení rolí " + mode.parts[0] + " / " + mode.parts[1] + " / " + mode.parts[2] + " (" + Math.round(mode.n / a.n * 100) + " % killů), DPS " + melee + " melee + " + ranged + " ranged; sloty obsazené podle průměrného počtu specu na kill." +
       (a.exact.length ? " Přesně takto hrálo " + a.exact.length + (a.exact.length === 1 ? " guilda" : a.exact.length < 5 ? " guildy" : " guild") + " (" + a.exact.slice(0, 3).map(function (k) { return esc(k.guild); }).join(", ") + (a.exact.length > 3 ? "…" : "") + ")." : " Přesně takto nehrála žádná guilda.") + "</p>" +
       rosterBlock(best, a.specs) + '<div class="dist"><b>Rozložení rolí:</b>' + splitHtml + "</div></div>";
-    // spec table
-    var specList = Object.keys(a.specs).map(function (k) { return a.specs[k]; }).sort(function (x, y) { return ROLES.indexOf(x.role) - ROLES.indexOf(y.role) || y.avg - x.avg || y.pct - x.pct; });
-    var lastRole = null;
-    var specRows = specList.map(function (s) {
-      var sep = lastRole !== null && lastRole !== s.role; lastRole = s.role;
-      var ours = (state.ours[s.key] || []).slice().sort(function (x, y) { return (x.bench - y.bench) || (y.main - x.main); });
-      var oursHtml = ours.map(function (o) { return (o.bench ? '<span title="lavička">' : "<b>") + esc(o.player) + (o.main ? "" : " (alt)") + (o.bench ? "</span>" : "</b>"); }).join(", ");
-      return '<tr class="' + (sep ? "rsep " : "") + (best[s.key] ? "inbest" : "") + '"><td>' + chip(s.key, null, false) + "</td><td>" + (s.role === "dps" ? (s.melee ? "melee" : "ranged") : ROLE_CZ[s.role].toLowerCase()) + '</td><td class="num">' + s.avg.toFixed(2) +
-        '</td><td class="pbar"><i style="width:' + Math.round(s.pct * 80) + 'px"></i>' + Math.round(s.pct * 100) + ' %</td><td class="num">' + s.max + '</td><td class="num">' + (best[s.key] ? best[s.key] : "–") + '</td><td class="ours">' + (oursHtml || '<span style="opacity:.5">–</span>') + "</td></tr>";
-    }).join("");
-    var specHtml = '<h5 class="sec">Specy<span>průměr na kill, podíl killů se specem, max v jednom killu, sloty v nejlepší sestavě, kdo z nás spec hraje (roster: main / alt / lavička)</span></h5>' +
-      '<table class="specs"><thead><tr><th>Spec</th><th>Role</th><th>Ø / kill</th><th>Killů se specem</th><th>Max</th><th>Nejlepší</th><th>U nás</th></tr></thead><tbody>' + specRows + "</tbody></table>";
+    // spec table: one small table per role, side by side; specs seen in < 3 % of kills are dimmed
+    var specList = Object.keys(a.specs).map(function (k) { return a.specs[k]; }).sort(function (x, y) { return y.avg - x.avg || y.pct - x.pct; });
+    var specHtml = '<h5 class="sec">Specy<span>Ø na kill · podíl killů se specem · max v jednom killu · sloty v nejlepší sestavě · kdo z nás spec hraje (main / alt / <span style="opacity:.6">lavička</span>)</span></h5><div class="specgrid">' + ROLES.map(function (role) {
+      var rows = specList.filter(function (s) { return s.role === role; }).map(function (s) {
+        var ours = (state.ours[s.key] || []).slice().sort(function (x, y) { return (x.bench - y.bench) || (y.main - x.main); });
+        var oursHtml = ours.map(function (o) { return (o.bench ? '<span title="lavička" style="opacity:.6">' : "<b>") + esc(o.player) + (o.main ? "" : " (alt)") + (o.bench ? "</span>" : "</b>"); }).join(", ");
+        return '<tr class="' + (s.pct < 0.03 && !best[s.key] ? "dim" : "") + '"><td>' + chip(s.key, null, false) + "</td>" + (role === "dps" ? "<td>" + (s.melee ? "melee" : "ranged") + "</td>" : "") + '<td class="num">' + s.avg.toFixed(2) +
+          '</td><td class="pbar"><i style="width:' + Math.round(s.pct * 60) + 'px"></i>' + Math.round(s.pct * 100) + ' %</td><td class="num">' + s.max + '</td><td class="num">' + (best[s.key] ? "<b>" + best[s.key] + "</b>" : "–") + '</td><td class="ours">' + (oursHtml || '<span style="opacity:.4">–</span>') + "</td></tr>";
+      }).join("");
+      return '<table class="specs ' + role + '"><thead><tr><th class="rname">' + ROLE_CZ[role] + "</th>" + (role === "dps" ? "<th></th>" : "") + '<th>Ø</th><th>Killů</th><th>Max</th><th>Nejl.</th><th>U nás</th></tr></thead><tbody>' + rows + "</tbody></table>";
+    }).join("") + "</div>";
     // kills
-    var allKills = (b.kills || []).slice().sort(function (x, y) { return x.rank - y.rank; });
+    var allKills = (b.kills || []).filter(complete).sort(function (x, y) { return x.rank - y.rank; });
+    var dropped = (b.kills || []).length - allKills.length;
     var killRows = allKills.map(function (k) {
       var inSel = kills.indexOf(k) >= 0;
-      var ro = k.roster && k.roster.length ? k.roster.slice().sort(function (x, y) { return ROLES.indexOf(x.role) - ROLES.indexOf(y.role) || (y.melee - x.melee) || keyOf(x).localeCompare(keyOf(y)); }) : null;
-      var chips = "";
-      if (ro) { var lr = null; chips = ro.map(function (m) { var s = (lr !== null && lr !== m.role) ? '<span class="sepc"></span>' : ""; lr = m.role; return s + chip(keyOf(m), null, true, label(keyOf(m)) + " – " + m.name + (m.ilvl ? " (" + m.ilvl + ")" : "")); }).join(""); }
+      var ro = k.roster.slice().sort(function (x, y) { return ROLES.indexOf(x.role) - ROLES.indexOf(y.role) || (y.melee - x.melee) || keyOf(x).localeCompare(keyOf(y)); });
+      var chips = "", lr = null;
+      { chips = ro.map(function (m) { var s = (lr !== null && lr !== m.role) ? '<span class="sepc"></span>' : ""; lr = m.role; return s + chip(keyOf(m), null, true, label(keyOf(m)) + " – " + m.name + (m.ilvl ? " (" + m.ilvl + ")" : "")); }).join(""); }
       return '<tr style="' + (inSel ? "" : "opacity:.45") + '"><td class="num">' + k.rank + '</td><td class="g"><a href="' + guildUrl(k) + '" target="_blank" rel="noopener">' + esc(k.guild) + "</a><small>" + esc(REGION_CZ[k.region] || k.region.toUpperCase()) + " · " + esc(k.realm) + '</small></td><td class="num">' + fmtDate(k.defeatedAt) + '</td><td class="num">' + (k.ilvlAvg || "") + '</td><td class="num">' + fmtDur(k.durationMs) +
-        '</td><td class="' + (ro ? "ro" : "none") + '">' + (ro ? '<div class="chips">' + chips + "</div>" : (k.compsHidden ? "sestava skrytá" : k.error ? esc(k.error) : "bez logu / sestava neznámá")) + "</td></tr>";
+        '</td><td class="ro"><div class="chips">' + chips + "</div></td></tr>";
     }).join("");
-    var killsHtml = '<details class="kills"><summary>Všechny killy<span>' + allKills.length + " killů, " + allKills.filter(function (k) { return k.roster && k.roster.length; }).length + " se sestavou; zesvětlené řádky nejsou ve výběru</span></summary>" +
+    var killsHtml = '<details class="kills" open><summary>Všechny killy<span>' + allKills.length + " killů s úplnou sestavou" + (dropped ? " (" + dropped + " bez ní / neúplných vynecháno)" : "") + "; zesvětlené řádky nejsou ve výběru</span></summary>" +
       '<table class="kt"><thead><tr><th>#</th><th>Guilda</th><th>Kill</th><th>ilvl</th><th>Čas</th><th>Sestava (tank · heal · melee · ranged)</th></tr></thead><tbody>' + killRows + "</tbody></table></details>";
     $("#content").innerHTML = '<div class="cards">' + bestHtml + altHtml + "</div>" + specHtml + killsHtml;
   }
