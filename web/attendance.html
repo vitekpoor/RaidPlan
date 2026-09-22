@@ -5,7 +5,7 @@
   Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance (přihlášený admin – tlačítko vpravo nahoře).
   Přihlášený admin může docházku upravovat (Upravit → buňky jako dropdown ano/ne/omluvenka/pozdě → Uložit = PATCH /api/attendance),
   smazat den docházky nebo jednotlivou absenci. Dny jsou od nejnovějšího; sloupce Absence / Bez oml. = podíl raidů, kde hráč chyběl
-  (vůbec / bez omluvenky) z raidů, kde je v záznamu. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
+  (vůbec / bez omluvenky) z raidů, kde je v záznamu, jako skóre od 100 %. Absence: nejnovější datum vlevo. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
 -->
 <html lang="cs">
 <head>
@@ -29,8 +29,11 @@
   .seg button { background: transparent; border: 0; color: var(--muted); padding: 7px 16px; font: inherit; font-size: 13.5px; cursor: pointer; }
   .seg button.active { background: var(--accent-soft); color: var(--ink-strong); }
   .wrap { overflow-x: auto; }
-  table.mx { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  table.mx { border-collapse: separate; border-spacing: 0; font-size: 13px; width: 100%; }
   .mx th, .mx td { padding: 4px 8px; white-space: nowrap; text-align: center; }
+  .mx th.pct, .mx td.pct, .mx td:first-child, .mx th:first-child { width: 1%; }   /* jméno + % těsně u sebe, dny roztažené do šířky */
+  .mx td.pct:last-of-type, .mx th.pct:last-of-type { border-right: 1px solid var(--line); padding-right: 12px; }
+  .mx td.pct + td, .mx th.pct + th { padding-left: 12px; }
   .mx th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; vertical-align: bottom; }
   .mx th small { display: block; font-size: 10.5px; text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 400; }
   .mx th.raid { color: var(--ink); }
@@ -38,7 +41,7 @@
   .mx tbody tr:nth-child(odd) td { background: rgba(255,255,255,.025); }
   .mx tbody tr:nth-child(odd) td:first-child { background: #131715; }
   .mx td.pct { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .mx td.pct.bad { color: var(--dps); }
+  .mx td.pct.full { color: var(--accent); } .mx td.pct.bad { color: var(--dps); }
   .mx th.pct { font-size: 10.5px; }
   select.cell { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font: inherit; font-size: 12px; min-width: 6rem; cursor: pointer; }
   select.cell.ano { background: #9bd9a8; color: #111; } select.cell.ne { background: #e88b8b; color: #111; } select.cell.omluvenka { background: #f2d488; color: #111; } select.cell.pozdě { background: #f4b473; color: #111; }
@@ -155,8 +158,8 @@
     var a = state.att, edit = state.edit && !!state.token;
     var days = (a.days || []).slice().sort(function (x, y) { return x.date < y.date ? 1 : x.date > y.date ? -1 : 0; });   // nejnovější první
     var head = "<tr><th>Hráč</th>" +
-      '<th class="pct" title="podíl raidů, kde hráč chyběl (ne + omluvenka + pozdě), z raidů, kde je v záznamu">Absence</th>' +
-      '<th class="pct" title="podíl raidů, kde hráč chyběl bez omluvenky (ne)">Bez oml.</th>' +
+      '<th class="pct" title="každý začíná na 100 %, každá absence (ne, omluvenka, pozdě) ubírá – podíl raidů, kde hráč byl, z raidů, kde je v záznamu">Účast</th>' +
+      '<th class="pct" title="100 % minus jen neomluvené absence (ne) – omluvenka a pozdě neubírají">Bez oml.</th>' +
       days.map(function (d) { var dd = day(d.date); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "<small>" + esc(d.time) + (edit ? ' <span class="x" data-del="' + d.date + '" title="smazat den">✕</span>' : "") + "</small></th>"; }).join("") + "</tr>";
     var rows = [], counts = days.map(function () { return { ano: 0, ne: 0, omluvenka: 0, "pozdě": 0 }; });
     var people = state.roster.map(function (p) { return p.name; }).concat(a.extra || []);
@@ -170,18 +173,19 @@
           [""].concat(STATES).map(function (x) { return '<option value="' + esc(x) + '"' + (x === st ? " selected" : "") + ">" + (x || "–") + "</option>"; }).join("") + "</select></td>";
         return st ? '<td><span class="m ' + esc(st) + '" title="' + esc(m && m.char || "") + '">' + esc(st) + "</span></td>" : "<td></td>";
       }).join("");
-      var pct = function (x) { return n ? Math.round(100 * x / n) + " %" : "–"; };
-      rows.push("<tr>" + nameCell(name) + '<td class="pct" title="chyběl ' + abs + " z " + n + '">' + pct(abs) + '</td><td class="pct' + (bad ? " bad" : "") + '" title="bez omluvenky ' + bad + " z " + n + '">' + pct(bad) + "</td>" + cells + "</tr>");
+      var score = function (x) { return n ? Math.round(100 * (n - x) / n) : 100; };
+      var cls = function (v, badWhenLow) { return v === 100 ? " full" : badWhenLow && v < 100 ? " bad" : ""; };
+      rows.push("<tr>" + nameCell(name) + '<td class="pct' + cls(score(abs)) + '" title="chyběl ' + abs + " z " + n + ' raidů">' + score(abs) + ' %</td><td class="pct' + cls(score(bad), true) + '" title="bez omluvenky ' + bad + " z " + n + ' raidů">' + score(bad) + " %</td>" + cells + "</tr>");
     });
     var foot = "<tr><td>Přítomno / chybí</td><td></td><td></td>" + counts.map(function (c) { return "<td>" + c.ano + " / " + (c.ne + c.omluvenka + c["pozdě"]) + (c.omluvenka || c["pozdě"] ? ' <span class="cnt">(' + (c.omluvenka ? c.omluvenka + " oml." : "") + (c.omluvenka && c["pozdě"] ? ", " : "") + (c["pozdě"] ? c["pozdě"] + " pozdě" : "") + ")</span>" : "") + "</td>"; }).join("") + "</tr>";
     $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (days.length + 3) + '" class="cnt">Žádné záznamy v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = days.length ? foot : "";
     $("#hint").textContent = edit
       ? "Vyber v buňce ano / ne / omluvenka / pozdě („–“ = hráč v ten den v záznamu nebude). Omluvenka a pozdě zapíšou hráči i absenci na ten den, „ne“ ji smaže. ✕ u dne smaže celý den. Nic se neuloží, dokud nedáš Uložit."
-      : "Docházku zapisuje addon ES Attendance (řádek = hráč z rosteru, sloupec = raid, nejnovější vlevo). Absence = podíl raidů, kde hráč chyběl (včetně omluvenek a pozdních příchodů), Bez oml. = chyběl bez omluvenky; počítá se z raidů, kde je hráč v záznamu. Najeď na buňku – ukáže se postava, se kterou hráč přišel. Sloupce st / čt / ne jsou raidové dny.";
+      : "Docházku zapisuje addon ES Attendance (řádek = hráč z rosteru, sloupec = raid, nejnovější vlevo). Účast = každý začíná na 100 %, každá absence (i omluvenka nebo pozdní příchod) ubírá; Bez oml. = ubírají jen neomluvené absence. Počítá se z raidů, kde je hráč v záznamu. Najeď na buňku – ukáže se postava, se kterou hráč přišel. Sloupce st / čt / ne jsou raidové dny.";
   }
   function renderAbs() {
     var a = state.abs, marks = a.marks || [];
-    var dates = []; marks.forEach(function (m) { if (dates.indexOf(m.date) < 0) dates.push(m.date); }); dates.sort();
+    var dates = []; marks.forEach(function (m) { if (dates.indexOf(m.date) < 0) dates.push(m.date); }); dates.sort().reverse();   // nejnovější vlevo
     var byKey = {}; marks.forEach(function (m) { byKey[m.player.toLowerCase() + "|" + m.date] = m; });
     var head = "<tr><th>Hráč</th>" + dates.map(function (d) { var dd = day(d); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "</th>"; }).join("") + "</tr>";
     var rows = [];
