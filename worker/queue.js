@@ -14,7 +14,7 @@
 //
 // Optional Worker vars/secrets: GITHUB_TOKEN (PAT with actions:write), GITHUB_REPO (default vitekpoor/RaidPlan),
 // DISCORD_SIM_CHANNEL (shared channel id for players without a room),
-// DISCORD_PLAYERS_CATEGORY ("TVOJE ROMKA, Players"), SIM_PAGE_URL (link in Discord messages), SHEET_ID.
+// DISCORD_PLAYERS_CATEGORY ("TVOJE ROMKA, Players"), SIM_PAGE_URL (link in Discord messages).
 
 import { json, nameKey, specKey, numOrNull, nowIso, whenText, requireAuth, requireAdmin, fetchRoster, playerOf } from "./lib.js";
 import { simSummary } from "./results.js";

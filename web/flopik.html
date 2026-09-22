@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <!-- ZDROJ stránky Flopik – fails po pullech. web/build.mjs (Cloudflare build → dist/) ji kopíruje do kořene repa jako flopik.html (s cestami
-     assets/). Zdroj dat je Warcraft Logs: dropdown reportů guildy bere z Apps Script web appu (?p=flopik&action=reports),
-     pro vybraný report si nechá dopočítat chybějící pully (action=refresh, Apps Script stáhne události fightu z WCL API,
-     spočítá je enginem z tools/flopik/engine.js a zapíše do databáze) a stránka pak čte Worker API: jeden souhrnný
-     řádek na pull (Hráč prázdný, Data = sloupce / statistiky / legenda) + řádek na hráče (Data = hodnoty metrik).
-     Stejný list plní i lokální tools/flopik/flopik.py (řádky bez Reportu). Každou minutu se obnoví. Vzhled: site.css. -->
+     assets/). Zdroj dat je Warcraft Logs přes Worker API (worker/flopik.js): dropdown reportů guildy z GET /api/flopik/reports,
+     pro vybraný report si nechá dopočítat chybějící pully (POST /api/flopik/refresh → GitHub Actions runner
+     tools/flopik/wcl_refresh.mjs stáhne události fightu z WCL API, spočítá je enginem tools/flopik/engine.js a uloží do D1)
+     a čte GET /api/flopik/pulls: souhrn pullu (sloupce / statistiky / legenda) + hodnoty metrik na hráče.
+     Pully bez reportu posílá lokální tools/flopik/flopik.py. Každou minutu se obnoví. Vzhled: site.css. -->
 <html lang="cs">
 <head>
 <meta charset="utf-8">
@@ -427,7 +427,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
   /** Detail row for one player: our breakdown (this pull or all pulls) next to the rank 1 log of the same spec. */
   function detailHtml(r, isAll, bossId, difficulty) {
     var d = r.dmg;
-    if (!d) return '<div class="bd"><div class="note">Pro tohoto hráče není rozpad damage k dispozici (pull byl spočítaný před přidáním modulu – v Google tabulce smaž řádky pullu a stránka ho načte z Warcraft Logs znovu).</div></div>';
+    if (!d) return '<div class="bd"><div class="note">Pro tohoto hráče není rozpad damage k dispozici (pull byl spočítaný před přidáním modulu – po smazání pullu z databáze ho stránka načte z Warcraft Logs znovu).</div></div>';
     var R = refFor(d, isAll, bossId, difficulty), ref = R.ref, rd = R.rd, winTxt = R.winTxt, winNote = R.winNote;
     var min = (d.dur || 1) / 60000, rmin = rd ? (rd.dur || ref.dur * 1000 || 1) / 60000 : 0;
     var unit = d.metric === "hps" ? "HPS" : "DPS";
@@ -863,7 +863,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
   setInterval(function () {
     if (document.hidden) return;
     var o = currentOption();
-    if (!o || !isLive(o)) return;                 // only a running raid night polls Sheets / WCL
+    if (!o || !isLive(o)) return;                 // only a running raid night polls the API / WCL
     loadReports().then(function () { return Promise.all([loadCsv(), loadRefs()]); }).then(function (ch) { if (ch[0] || ch[1]) render(); ensureLoaded(true); }).catch(function () {});
   }, REFRESH_MS);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) loadCsv().then(function (c) { if (c) render(); ensureLoaded(true); }).catch(function () {}); });

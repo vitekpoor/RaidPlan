@@ -1,14 +1,14 @@
 # ES Attendance – WoW addon
 
-In-game roster check for the raid leader. The addon knows every player from the
-**Roster** tab of the guild sheet (player → main + alt characters), compares that with the
-group you are in, lets you invite the missing people (one click per player or all at once)
-and writes an attendance record that ends up as a new column in the **Docházka** sheet tab.
+In-game roster check for the raid leader. The addon knows every player from the guild
+**roster** (database behind the guild site, edited on roster.html: player → main + alt characters),
+compares that with the group you are in, lets you invite the missing people (one click per player
+or all at once) and writes an attendance record that ends up as a new day on the **Docházka** page.
 
 ```
-Roster sheet ──build_roster.py──▶ ESAttendance/RosterData.lua ──▶ in game: /esa
-                                                                     │
-        Docházka sheet ◀── Apps Script (p=attendance form / p=esattendance API) ◀── export string
+/api/roster.csv ──build_roster.py──▶ ESAttendance/RosterData.lua ──▶ in game: /esa
+                                                                        │
+   D1 attendance ◀── Worker POST /api/attendance (attendance.html paste form / sync_attendance.py) ◀── export string
 ```
 
 A WoW addon cannot talk to the internet, so both directions go through a copy step:
@@ -20,9 +20,9 @@ short text you copy out of the game (Ctrl+C) or push with `sync_attendance.py`.
 | File | Purpose |
 |---|---|
 | `ESAttendance/` | the addon itself (`ESAttendance.toc`, `Core.lua`, `UI.lua`, generated `RosterData.lua`) |
-| `build_roster.py`, `update_roster.bat` | Roster tab → `RosterData.lua`, `--install` copies the addon into `_retail_\Interface\AddOns` |
-| `sync_attendance.py`, `sync_attendance.bat` | SavedVariables → Docházka tab through the Apps Script web app |
-| `tools/roster/class_loot_dropdowns.gs` | section **DOCHÁZKA (addon ES Attendance)**: sheet tab, paste form, API, roster text |
+| `build_roster.py`, `update_roster.bat` | Worker `/api/roster.csv` → `RosterData.lua`, `--install` copies the addon into `_retail_\Interface\AddOns` |
+| `sync_attendance.py`, `sync_attendance.bat` | SavedVariables → Worker `POST /api/attendance` (D1) |
+| `worker/attendance.js` | Worker side: attendance records, `/api/es?p=esroster` roster text, `/attendance` page redirect |
 
 ## Install / update
 
@@ -30,20 +30,20 @@ short text you copy out of the game (Ctrl+C) or push with `sync_attendance.py`.
 addon\update_roster.bat
 ```
 
-runs `python build_roster.py --install`: downloads the Roster tab (public gviz CSV export, no
+runs `python build_roster.py --install`: downloads the roster from the Worker (`/api/roster.csv`, no
 credentials), writes `ESAttendance/RosterData.lua` and copies the addon into
 `G:\World of Warcraft\_retail_\Interface\AddOns\ESAttendance` (auto-detected next to the repo;
-`--wow PATH` or `WOW_ADDONS` override). Then `/reload` in game. Re-run after every Roster change.
+`--wow PATH` or `WOW_ADDONS` override). Then `/reload` in game. Re-run after every roster change.
 
 **Without the script, from inside the game (two shortcuts):** `/esa` → **Import rosteru**.
-The dialog opens with the ready-made roster URL preselected in its URL box (the web app
-`/exec` address is compiled into `Core.lua`, `/esa url <…/exec>` overrides it). Ctrl+C,
-Alt-Tab, Ctrl+V into the browser address bar: the page `…/exec?p=esroster` copies the current
+The dialog opens with the ready-made roster URL preselected in its URL box (the Worker
+address `…/api/es` is compiled into `Core.lua`, `/esa url <…>` overrides it). Ctrl+C,
+Alt-Tab, Ctrl+V into the browser address bar: the page `…/api/es?p=esroster` copies the current
 roster to the clipboard by itself. Back in game Ctrl+V into the dialog: a pasted roster loads
 immediately, no button. The imported roster is kept in SavedVariables; a newer `RosterData.lua`
 wins again automatically, `/esa roster reset` drops the import. The window shows an orange
 "N dní starý – Import rosteru" hint when the active roster is older than 7 days.
-`…/exec?p=esroster&raw=1` returns the plain text for scripts. The addon itself cannot fetch it:
+`…/api/es?p=esroster&raw=1` returns the plain text for scripts. The addon itself cannot fetch it:
 WoW addons have no network, file or process access, so a copy step is unavoidable.
 
 ## In game
@@ -60,7 +60,7 @@ drag = move it along the rim, `/esa minimap` hides/shows it. Every roster player
   0.6 s; when you start alone the addon sends four party invites, waits for the first accept,
   converts to raid and continues. You must be leader or assist. **Zrušit** empties the queue.
 - Invites use the guild list to get the realm-qualified `Name-Realm` for every guild member,
-  online or offline. The roster sheet has no realms, so a character that is not in the guild is
+  online or offline. The roster has no realms, so a character that is not in the guild is
   invited by plain name, which only works on the leader's own realm. Every invite is echoed in
   chat with its target; `/esa debug [player]` prints what the addon knows (guild lookup, online
   state, chosen invite target, group state) when something does not arrive.
@@ -83,26 +83,17 @@ ESA1;2026-09-16;20:05;Ahaaferos=1:Ähaferös;Glasolo=0;Anál=1:Papathyr;…;?=Ra
 
 (`=1` present, `=0` missing, `:Char` which character, `?=` group member outside the roster).
 
-Getting it into the sheet, two ways:
+Getting it into the database, two ways:
 
-1. **Paste form** – Ctrl+C in game, open `…/exec?p=attendance`, Ctrl+V, *Zapsat do listu
-   Docházka*. If the sim web button password is set (`SIM_RUN_PASSWORD`), the form asks for it.
+1. **Paste form** – Ctrl+C in game, open `…/attendance` (or `…/api/es?p=attendance`), log in with the
+   admin button top right, Ctrl+V into the form, *Zapsat*.
 2. **Script** – after the raid `/reload` or log out (WoW writes SavedVariables only then), run
    `addon\sync_attendance.bat`. It reads every record from the SavedVariables file and POSTs
-   the new/changed ones (state in `addon/.synced.json`, `--all` resends) to the web app with
+   the new/changed ones (state in `addon/.synced.json`, `--all` resends) to the Worker with
    the `sim_runner.py` token from `tools/roster/sim_runner.config.json` (or
-   `addon/es_attendance.config.json` with `webapp_url` + `token`). `--dry-run` only prints.
+   `addon/es_attendance.config.json` with `api_url` + `api_token`). `--dry-run` only prints.
 
-### Sheet side (one-time, owner, Apps Script editor)
-
-1. Paste the current `class_loot_dropdowns.gs`, **redeploy** the web app (Manage deployments →
-   New version) so `p=attendance`, `p=esroster` and the `esattendance` POST exist.
-2. Menu **Docházka → Vytvořit / doplnit list Docházka** (optional – the first record creates
-   the tab too). The tab is protected; only the script writes it.
-
-Tab layout: column A = player names (class colored, roster order, new players appended),
-one column per record with header `16.9.2026 (20:05)`, cells `ano` (green, character name as a
-cell note), `omluvenka` (yellow: missing, but the player has an `X` for that day in the
-"Absence přehled" tab), `pozdě` (orange: missing, reported "přijdu pozdě" for that day) or `ne`
-(red), unknown group members as a note on the header cell. Columns stay sorted by date; a record
-for an existing date replaces that column.
+Page layout (attendance.html): one row per roster player, one column per record with header
+`16.9.2026 (19:13)`, cells `ano` (green, character name as a tooltip), `omluvenka` (yellow: missing, but the
+player has an absence for that day), `pozdě` (orange: missing, reported "přijdu pozdě" for that day) or `ne`
+(red); unknown group members are listed under the day header. A record for an existing date replaces that day.

@@ -4,8 +4,7 @@ local ADDON, ns = ...
 ESAttendance = ns
 
 local ROSTER_HEADER = "ESROSTER"
--- Apps Script web app (same /exec URL as the absence / sim forms). ?p=esroster serves the roster
--- import text. Override in game: /esa url <https://…/exec>
+-- Guild Worker base URL for the two addon pages. Override in game: /esa url <https://…/api/es>
 local WEBAPP_URL = "https://eternal-shadows.vitek-poor.workers.dev/api/es"   -- guild Worker: ?p=esroster (roster text), ?p=attendance (form)
 local ROSTER_MAX_AGE_DAYS = 7   -- older roster -> orange hint in the window
 local RECORD_HEADER = "ESA1"
@@ -483,7 +482,7 @@ SlashCmdList.ESATTENDANCE = function(msg)
       ESAttendanceDB.webappUrl = nil
       ns.Print("web app URL vrácena na výchozí")
     else
-      ns.Print("roster: " .. ns.RosterUrl() .. "  |  docházka: " .. ns.AttendanceUrl() .. "  (/esa url <https://…/exec> | /esa url reset)")
+      ns.Print("roster: " .. ns.RosterUrl() .. "  |  docházka: " .. ns.AttendanceUrl() .. "  (/esa url <https://…/api/es> | /esa url reset)")
     end
   elseif cmd == "roster" then
     if rest == "reset" then ns.ResetRoster(); ns.Print("importovaný roster smazán, platí RosterData.lua")

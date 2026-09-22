@@ -4,8 +4,8 @@ Venomous Abyss – generátor 2 split run.
 
 Vstup:
   - živý Wishlist sheet (CSV export, anonymní link-access)
-  - list "Roster" v témže spreadsheetu -> hráči, main/alt chary, classy, role
-    (zdroj pravdy; vytvoří ho buildRosterSheet v class_loot_dropdowns.gs)
+  - roster z databáze guildy (Worker API /api/roster.csv, upravuje se na roster.html)
+    -> hráči, main/alt chary, classy, role
   - class_loot_dropdowns.gs  -> item DB (kontrola názvů) + armor mapping
 
 Model splitů (odpovídá stávajícímu split sheetu):
@@ -38,6 +38,7 @@ SKIP_PLAYERS níže)
 import argparse
 import csv
 import io
+import os
 import random
 import re
 import subprocess
@@ -53,6 +54,8 @@ OUT_FILE = HERE / "splits_proposal.txt"
 
 WISHLIST_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI"
 WISHLIST_GID = "0"
+# roster z databáze guildy (stejný CSV tvar, jaký měl list "Roster")
+ROSTER_URL = os.environ.get("ES_ROSTER_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/roster.csv")
 
 MIN_TANKS = 2
 MIN_HEALS = 4
@@ -67,7 +70,7 @@ SKIP_BOSSES = []    # bossové, jejichž loot se nepočítá, např. ["Dimensius
 SKIP_PLAYERS = []   # chybějící hráči, např. ["Schizoid"]
 
 # ---------------------------------------------------------------- PLAYERS --
-# Hráči se načítají z listu "Roster" ve wishlist spreadsheetu (zdroj pravdy):
+# Hráči se načítají z rosteru guildy (Worker API, zdroj pravdy):
 # hráč, main/alt char, classa a role obou charů. Naplní se v main().
 PLAYERS = []     # [(hráč, main char, alt char, main role), ...]
 CHAR_CLASS = {}  # char -> classa (z Rosteru)
@@ -146,16 +149,23 @@ def load_wishlist():
 
 
 # -------------------------------------------------------------- roster ----
-def load_roster():
-    """Načte list Roster -> (PLAYERS, CHAR_CLASS, CHAR_ROLE)."""
-    url = ("https://docs.google.com/spreadsheets/d/%s/gviz/tq"
-           "?tqx=out:csv&sheet=Roster" % WISHLIST_ID)
+def _ssl_context():
+    """Windows Store Python má starý OpenSSL trust store ("certificate has expired") – použij certifi, když je."""
+    import ssl
     try:
-        text = urllib.request.urlopen(url, timeout=30).read().decode("utf-8")
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+def load_roster():
+    """Načte roster z Worker API -> (PLAYERS, CHAR_CLASS, CHAR_ROLE)."""
+    try:
+        req = urllib.request.Request(ROSTER_URL, headers={"User-Agent": "es-make-splits/1.0"})   # bez UA vrací Cloudflare 403
+        text = urllib.request.urlopen(req, timeout=30, context=_ssl_context()).read().decode("utf-8")
     except Exception as e:
-        sys.exit("Roster se nepodařilo stáhnout (%s).\nExistuje ve wishlist "
-                 "spreadsheetu list 'Roster'? Vytvoří ho funkce "
-                 "buildRosterSheet v class_loot_dropdowns.gs." % e)
+        sys.exit("Roster se nepodařilo stáhnout z %s (%s)." % (ROSTER_URL, e))
 
     rows = list(csv.reader(io.StringIO(text)))
     if not rows or len(rows) < 2:

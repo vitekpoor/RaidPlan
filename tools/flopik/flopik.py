@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Flopik – live "fails" breakdown after every raid pull, from the WoW combat log into Google Sheets.
+"""Flopik – live "fails" breakdown after every raid pull, from the WoW combat log into the guild database.
 
     python flopik.py                     # follow the newest WoWCombatLog*.txt, upload every finished pull
     python flopik.py --from-start        # also process pulls already in the current log file (started mid-raid)
     python flopik.py --replay FILE       # process a whole log (backfill an older raid night), then exit
-    python flopik.py --no-upload         # console + local JSONL only (no Sheets)
+    python flopik.py --no-upload         # console + local JSONL only (no upload)
     python flopik.py --boss 3421         # only this encounter ID (default: every boss)
 
 Follows the active combat log (WoW opens a new ``Logs/WoWCombatLog-MMDDYY_HHMMSS.txt`` per
 session, so the tool always switches to the newest file), buffers the events of the running
 encounter and on ENCOUNTER_END evaluates the boss's metrics from bosses.py (per-player deaths
 for every boss, Tempest hits on Sszorak, Eternal Venom stacks vs. orbs on Twin Fangs, …).
-The result is printed, appended to ``pulls.jsonl`` and POSTed to the Apps Script web app
-(doPost p=flopik, same URL + token as sim_runner.py: tools/roster/sim_runner.config.json or
-flopik.config.json next to this script), which writes it into the "Flopik" sheet tab – one
-row per player plus one summary row per pull. web/flopik.html reads that tab (gviz CSV).
+The result is printed, appended to ``pulls.jsonl`` and POSTed to the guild Worker
+(POST /api/flopik/pulls, same api_url + api_token as sim_runner.py: tools/roster/sim_runner.config.json
+or flopik.config.json next to this script), which stores it in D1 – web/flopik.html shows it
+under "lokální combat log" (pulls without a Warcraft Logs report). Normally the WCL runner
+(wcl_refresh.mjs in GitHub Actions) does this from the live log upload; this tool is the offline fallback.
 
-Config keys (flopik.config.json): webapp_url, token, logs (Logs folder), cutoff (default death cutoff
+Config keys (flopik.config.json): api_url, api_token, logs (Logs folder), cutoff (default death cutoff
 for bosses without their own), poll (seconds, default 1).
 """
 import argparse
@@ -325,7 +326,7 @@ def main():
     ap.add_argument("--from-start", action="store_true", help="live mode: also process pulls already in the current file")
     ap.add_argument("--boss", type=int, default=0, help="only this encounter ID (default: every boss)")
     ap.add_argument("--cutoff", type=int, help="default death cutoff for bosses without their own (default 0 = whole pull)")
-    ap.add_argument("--no-upload", action="store_true", help="do not send to Google Sheets")
+    ap.add_argument("--no-upload", action="store_true", help="do not upload to the guild database")
     ap.add_argument("--min-dur", type=int, default=30, help="pulls shorter than this (s) are printed but not uploaded (default 30)")
     ap.add_argument("--webapp-url")
     ap.add_argument("--token")

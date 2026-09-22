@@ -2,7 +2,7 @@
 ## Title: ES Attendance
 ## Notes: Eternal Shadows – roster vs. raid group, invites, attendance record
 ## Author: Eternal Shadows
-## Version: 1.0.1
+## Version: 1.0.2
 ## SavedVariables: ESAttendanceDB
 ## IconTexture: Interface\AddOns\ESAttendance\icon.tga
 ## X-Website: https://vitekpoor.github.io/RaidPlan/

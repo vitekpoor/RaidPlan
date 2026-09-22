@@ -1,8 +1,5 @@
 // Shared helpers for the Eternal Shadows Worker.
 
-export const SHEET_ID = "1CUG3oyufoNs5CrY68WMJVVHLJz-52uFQMuOtv5q3ECI";   // guild Google Sheet (Roster tab is still human-edited there)
-export const ROSTER_CACHE_SECONDS = 600;
-
 export const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -87,49 +84,15 @@ export function parseCsv(text) {
 }
 
 /**
- * Roster as a flat list [{ player, main, mainClass, mainRole, alt, altClass, altRole, ... }].
- * Source = D1 tables roster_players / roster_characters (worker/roster.js). While those are empty
- * (before the one-time import) it falls back to the Google Sheet "Roster" tab (gviz CSV, edge-cached 10 min).
+ * Roster as a flat list [{ player, main, mainClass, mainRole, alt, altClass, altRole, ... }]
+ * from the D1 tables roster_players / roster_characters (worker/roster.js, edited on roster.html).
+ * The Google Sheet "Roster" tab is history since 2026-09-21 – no fallback.
  */
 export async function fetchRoster(env, ctx, origin) {
   const { loadRoster, flatRoster } = await import("./roster.js");
   const players = await loadRoster(env);
-  if (players.length) return flatRoster(players);
-  return fetchRosterSheet(env, ctx, origin);
-}
-
-export async function fetchRosterSheet(env, ctx, origin) {
-  const cache = caches.default;
-  const key = new Request(`${origin}/__cache/roster`, { method: "GET" });
-  let res = await cache.match(key);
-  if (!res) {
-    const sheet = env.SHEET_ID || SHEET_ID;
-    const url = `https://docs.google.com/spreadsheets/d/${sheet}/gviz/tq?tqx=out:csv&headers=1&sheet=Roster`;
-    const r = await fetch(url, { headers: { "user-agent": "eternal-shadows-worker" } });
-    if (!r.ok) throw new Error(`Roster sheet HTTP ${r.status}`);
-    const text = await r.text();
-    if (!/^"?Hráč/i.test(text.trim())) throw new Error("Roster sheet: unexpected header");
-    res = new Response(text, { headers: { "content-type": "text/csv; charset=utf-8", "cache-control": `public, s-maxage=${ROSTER_CACHE_SECONDS}` } });
-    if (ctx) ctx.waitUntil(cache.put(key, res.clone()));
-  }
-  return rosterFromCsv(await res.text());
-}
-
-export function rosterFromCsv(text) {
-  const table = parseCsv(text);
-  const head = (table.shift() || []).map((h) => String(h || "").trim().toLowerCase());
-  const HEAD = ["Hráč", "Main char", "Main classa", "Main role", "Alt char", "Alt classa", "Alt role"];
-  const col = {};
-  HEAD.forEach((h, i) => { const j = head.indexOf(h.toLowerCase()); col[h] = j >= 0 ? j : i; });
-  const out = [];
-  for (const v of table) {
-    const g = (h) => String(v[col[h]] == null ? "" : v[col[h]]).trim();
-    const player = g("Hráč"), main = g("Main char");
-    if (!player || !main) continue;
-    const mainRole = g("Main role").toLowerCase();
-    out.push({ player, main, mainClass: g("Main classa"), mainRole, alt: g("Alt char"), altClass: g("Alt classa"), altRole: g("Alt role").toLowerCase() || mainRole });
-  }
-  return out;
+  if (!players.length) throw new Error("roster is empty");
+  return flatRoster(players);
 }
 
 /** Character → roster player name (main or alt), "" when unknown. */
