@@ -19,36 +19,37 @@
 <link rel="stylesheet" href="assets/css/site.css">
 <style>
   :root { --wrap: 1700px; }
-  .bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0 0 14px; font-size: 13.5px; color: var(--muted); }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
   .bar .sp { flex: 1; }
   .bar input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font: inherit; width: 11rem; }
   .bar .btn, .bar .btn-outline { padding: 7px 16px; font-size: 13.5px; }
   #msg { min-height: 1.2em; font-weight: 600; } #msg.ok { color: var(--accent); } #msg.err { color: var(--dps); }
+  /* všech 9 bossů na jednu obrazovku: pevné sloupce přes celou šířku, těsné buňky, hlavička na 3 krátké řádky */
   .wrap { overflow-x: auto; }
-  table.lu { border-collapse: separate; border-spacing: 2px 1px; font-size: 13px; }
-  .lu th, .lu td { padding: 3px 6px; white-space: nowrap; }
-  .lu th { text-align: left; vertical-align: top; }
-  .lu th .boss { font-size: 13.5px; font-weight: 700; color: var(--ink-strong); }
-  .lu th .links a { color: var(--accent); text-decoration: none; font-size: 11.5px; font-weight: 400; margin-right: 8px; }
-  .lu th .date, .lu th .cnt { display: block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
-  .lu th .cnt.full { color: var(--accent); }
-  .lu td.no { color: var(--muted); font-size: 11.5px; text-align: right; width: 1.6rem; }
-  .lu td.slot { min-width: 8.5rem; border-radius: 3px; color: #111; font-weight: 600; }
+  table.lu { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 1px 1px; font-size: 12px; }
+  .lu th, .lu td { padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lu th { text-align: left; vertical-align: top; text-transform: none; letter-spacing: 0; line-height: 1.3; padding-bottom: 3px; }
+  .lu th:first-child { width: 1.5rem; padding: 0; }
+  .lu th .boss { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink-strong); }
+  .lu th .links a { color: var(--accent); text-decoration: none; font-size: 11px; font-weight: 400; margin-right: 7px; }
+  .lu th .meta { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+  .lu th .meta .cnt.full { color: var(--accent); }
+  .lu td.no { color: var(--muted); font-size: 10.5px; text-align: right; padding: 0 3px 0 0; }
+  .lu td.slot { border-radius: 3px; color: #111; font-weight: 600; line-height: 1.4; }
   .lu td.slot.empty { background: rgba(255,255,255,.04); color: var(--muted); font-weight: 400; }
   .lu td.slot.absent { background: #E06666 !important; text-decoration: line-through; }
   .lu td.slot.late { background: #F6B26B !important; }
   .lu td.slot.unknown { background: #666 !important; color: #eee; }
   .lu td.slot.dup { color: #b00000 !important; }
-  .lu td.slot .why { font-weight: 400; font-size: 11px; color: #111; opacity: .8; margin-left: 4px; }
   .edit .lu td.slot select, .edit .lu th input[type=date] { width: 100%; background: transparent; color: inherit; border: 0; border-bottom: 1px dashed rgba(0,0,0,.35); font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
   .edit .lu td.slot.empty select { color: var(--muted); border-bottom-color: var(--line); }
-  .edit .lu th input[type=date] { color: var(--ink); border-bottom-color: var(--line); font-weight: 400; font-size: 12px; width: 9.5rem; }
+  .edit .lu th input[type=date] { color: var(--ink); border-bottom-color: var(--line); font-weight: 400; font-size: 11px; width: 100%; }
   .lu select option { background: var(--surface2); color: var(--ink); }
-  .mini { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 4px; padding: 1px 7px; cursor: pointer; font: inherit; font-size: 11px; margin-top: 3px; }
+  .mini { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 4px; padding: 0 6px; cursor: pointer; font: inherit; font-size: 10.5px; margin-top: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .mini:hover { color: var(--ink-strong); border-color: var(--accent); }
-  .legend { color: var(--muted); font-size: 12.5px; margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .legend { color: var(--muted); font-size: 12px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
   .legend span i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
-  .hint { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
 </style>
 </head>
 <body>
@@ -144,8 +145,8 @@
       var n = b.slots.filter(Boolean).length;
       return "<th><span class=\"boss\">" + esc(b.no + " " + b.name) + "</span><span class=\"links\"><a href=\"" + esc(b.planView) + "\" target=\"_blank\" rel=\"noopener\">Plán ↗</a><a href=\"" + esc(b.guideUrl.replace(/^https?:\/\/[^/]+\/raid/, "raid.html")) + "\">Taktika ↗</a></span>" +
         (state.edit ? '<input type="date" value="' + esc(b.date) + '" data-b="' + bi + '" data-f="date">' + (bi > 0 ? '<br><button class="mini" type="button" data-b="' + bi + '" data-act="copyprev" title="zkopírovat sestavu předchozího bosse">← kopírovat ' + esc(list[bi - 1].no) + "</button>" : "")
-                    : '<span class="date">' + (b.date ? esc(czDate(b.date)) : "bez data") + "</span>") +
-        '<span class="cnt' + (n === state.size ? " full" : "") + '">' + n + " / " + state.size + "</span></th>";
+                    : '<span class="meta">' + (b.date ? esc(czDate(b.date)) : "bez data") + ' · <span class="cnt' + (n === state.size ? " full" : "") + '">' + n + "/" + state.size + "</span></span>") +
+        "</th>";
     }).join("") + "</tr>";
     var rows = [];
     for (var i = 0; i < state.size; i++) {
@@ -161,8 +162,8 @@
         }
         var inner = state.edit
           ? '<select data-b="' + bi + '" data-s="' + i + '"><option value="">–</option>' + optionsFor(name) + "</select>"
-          : esc(name || "–") + (why ? '<span class="why">' + esc(why) + "</span>" : "");
-        return '<td class="slot ' + cls.join(" ") + '" style="' + style + '">' + inner + "</td>";
+          : esc(name || "–");
+        return '<td class="slot ' + cls.join(" ") + '" style="' + style + '"' + (why ? ' title="' + esc(why) + '"' : "") + ">" + inner + "</td>";
       }).join("") + "</tr>");
     }
     $("#lu thead").innerHTML = head; $("#lu tbody").innerHTML = rows.join("");
