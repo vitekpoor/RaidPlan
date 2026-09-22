@@ -22,6 +22,7 @@
   .bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
   .bar .sp { flex: 1; }
   .bar input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font: inherit; width: 11rem; }
+  .bar label#alldate { color: var(--ink); font-weight: 600; } .bar label#alldate input { padding: 5px 12px; font-size: 13px; width: auto; margin-left: 6px; }
   .bar .btn, .bar .btn-outline { padding: 7px 16px; font-size: 13.5px; }
   #msg { min-height: 1.2em; font-weight: 600; } #msg.ok { color: var(--accent); } #msg.err { color: var(--dps); }
   /* všech 9 bossů na jednu obrazovku: pevné sloupce přes celou šířku, těsné buňky, hlavička na 3 krátké řádky */
@@ -84,6 +85,7 @@
   <span id="status">Načítám…</span>
   <span class="sp"></span>
   <span id="msg"></span>
+  <label id="alldate" title="nadřazené datum: nastaví datum všem bossům najednou (datum u bosse jde pak změnit zvlášť, zpět se nepropisuje)" hidden>Datum všech bossů <input type="date" id="alldateInput"></label>
   <span id="adminbox" hidden>
     <button class="btn-outline" id="edit" type="button">Upravit</button>
     <button class="btn" id="save" type="button" hidden>Uložit</button>
@@ -171,8 +173,10 @@
     if (!bodyOnly) $("#lu thead").innerHTML = head;
     $("#lu tbody").innerHTML = rows.join("");
     $("#adminbox").hidden = !state.token; $("#loginhint").hidden = !!state.token;
+    $("#alldate").hidden = !state.edit;
+    if (state.edit && !bodyOnly) { var ds = list.map(function (b) { return b.date; }); $("#alldateInput").value = ds.length && ds.every(function (d) { return d === ds[0]; }) ? ds[0] || "" : ""; }
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
-    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown), nastav datum raidu u bosse, nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit."
+    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown), nastav datum raidu u bosse (nebo „Datum všech bossů“ nahoře najednou – jednotlivé datum jde pak ještě upravit), nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit."
       : "Sestavy čte tools/raidplan/raidplan.py --boss (přejmenování markerů v RaidPlan.io) a bot docházky na Discordu. Datum bosse určuje, čí omluvenky se v jeho sloupci ukážou.";
   }
   var optCache = null;
@@ -186,8 +190,13 @@
     if (sel && !state.roster.some(function (p) { return p.name === sel; })) html += '<option value="' + esc(sel) + '">' + esc(sel) + " (mimo roster)</option>";
     return html.replace('value="' + esc(sel) + '"', 'value="' + esc(sel) + '" selected');
   }
+  // nadřazené datum → všem bossům; opačně (změna u bosse) se do něj nepropisuje
+  $("#alldateInput").addEventListener("change", function () {
+    if (!state.edit) return;
+    var v = $("#alldateInput").value; state.draft.forEach(function (b) { b.date = v; }); render();
+  });
   document.addEventListener("change", function (ev) {
-    var t = ev.target; if (!state.edit) return;
+    var t = ev.target; if (!state.edit || t.id === "alldateInput") return;
     var b = state.draft[+t.dataset.b]; if (!b) return;
     if (t.dataset.f === "date") { b.date = t.value; render(true); }      // absence ve sloupci podle nového data
     else if (t.dataset.s != null) { b.slots[+t.dataset.s] = t.value; render(); }
