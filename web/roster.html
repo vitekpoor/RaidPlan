@@ -23,31 +23,32 @@
   .bar input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font: inherit; width: 11rem; }
   .bar .btn, .bar .btn-outline { padding: 7px 16px; font-size: 13.5px; }
   #msg { min-height: 1.2em; font-weight: 600; } #msg.ok { color: var(--accent); } #msg.err { color: var(--dps); }
-  table.roster { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 6px; }
+  /* těsná tabulka jako Sestavy: všech ~30 hráčů na jednu obrazovku */
+  table.roster { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
   /* lavička = řádky pod tlustou linkou (žádné nadpisy skupin) */
   .roster tbody#bench tr:first-child td { border-top: 3px solid #3a433e; }
-  .roster th { text-align: left; padding: 4px 8px; color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
-  .roster td { padding: 5px 8px; vertical-align: top; }
+  .roster th { text-align: left; padding: 2px 6px; color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; }
+  .roster td { padding: 1px 6px; vertical-align: top; line-height: 1.4; }
   .roster tbody tr:nth-child(odd) td { background: rgba(255,255,255,.025); }
   .roster tbody tr:first-child td:first-child { border-top-left-radius: 6px; } .roster tbody tr:first-child td:last-child { border-top-right-radius: 6px; }
   .roster tr.bench td { color: var(--muted); }
-  .roster td.player { font-weight: 700; white-space: nowrap; width: 12.5rem; }
-  .pid { display: inline-block; min-width: 1.6rem; margin-right: 6px; color: var(--muted); font-weight: 600; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .roster td.player { font-weight: 700; white-space: nowrap; width: 10.5rem; }
+  .pid { display: inline-block; min-width: 1.5rem; margin-right: 5px; color: var(--muted); font-weight: 600; font-size: 10.5px; font-variant-numeric: tabular-nums; }
   .pid.new { color: var(--accent); }
-  .roster td.note { color: var(--muted); font-size: 13px; }
-  .roster td.grab { width: 1.2rem; color: var(--line); cursor: grab; user-select: none; padding-right: 0; }
+  .roster td.note { color: var(--muted); font-size: 12px; }
+  .roster td.grab { width: 1rem; color: var(--line); cursor: grab; user-select: none; padding-right: 0; }
   .roster tr.dragging td { opacity: .35; }
   .roster tr.over td { background: var(--accent-soft) !important; }
   .roster tbody.over-empty { outline: 1px dashed var(--accent); min-height: 30px; }
-  .char { display: grid; grid-template-columns: 8.5rem 7.6rem 7rem 3.4rem; align-items: center; column-gap: 8px; line-height: 1.5; }
+  .char { display: grid; grid-template-columns: 7.5rem 6.8rem 6.5rem 3.1rem; align-items: center; column-gap: 6px; line-height: 1.4; }
   .char > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .char .add { justify-self: start; }
   .edit .char { grid-template-columns: 1.1rem 7.6rem 7.6rem 7rem 3.4rem 1.2rem; column-gap: 5px; }
-  .edit .roster td { font-size: 12.5px; }
-  .char + .char { margin-top: 2px; }
+  .edit .roster td { font-size: 12px; }
+  .char + .char { margin-top: 0; }
   .cname { font-weight: 600; }
-  .cinfo { color: var(--muted); font-size: 12.5px; } .cinfo.spec { color: var(--ink); opacity: .8; }
-  .role { display: inline-block; font-size: 10.5px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; line-height: 1.5; }
+  .cinfo { color: var(--muted); font-size: 11.5px; } .cinfo.spec { color: var(--ink); opacity: .8; }
+  .role { display: inline-block; font-size: 9.5px; padding: 0 5px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; line-height: 1.45; }
   .role.tank { color: var(--tank); border-color: var(--tank); } .role.heal { color: var(--heal); border-color: var(--heal); } .role.dps { color: var(--dps); border-color: var(--dps); }
   .hint { color: var(--muted); font-size: 13px; margin: 16px 0 0; }
   /* inline editing */
