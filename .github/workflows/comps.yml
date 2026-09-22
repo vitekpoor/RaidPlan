@@ -1,0 +1,46 @@
+name: Meta sestavy (raider.io → databáze)
+
+# Stáhne z raider.io sestavy prvních killů top guild na každém bossovi (tools/raidplan/rio_comps.mjs) a uloží je přes
+# Worker API do D1 (tabulka rio_comps). Zobrazuje web/comps.html. Spouští se každou středu po resetu a ručně
+# (stránka přes Worker POST /api/comps/refresh → workflow_dispatch, nebo tlačítko Run workflow).
+#
+# Secrets: ES_API_TOKEN (Worker API_TOKEN).
+
+on:
+  schedule:
+    - cron: "30 6 * * 3"          # středa 08:30 českého času (po EU resetu)
+  workflow_dispatch:
+    inputs:
+      boss:
+        description: "Slug bosse podle raider.io (např. ulatek,the-coiled-altar) nebo all"
+        type: string
+        default: "all"
+      kills:
+        description: "Kolik nejvyšších killů vzít (max 100 na stránku rankingu)"
+        type: string
+        default: "100"
+      reason:
+        description: "Kdo/co spustil (jen do logu)"
+        type: string
+        default: "manual"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comps
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ES_API_TOKEN: ${{ secrets.ES_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Scrape rosters
+        run: node tools/raidplan/rio_comps.mjs --boss "${{ inputs.boss || 'all' }}" --kills "${{ inputs.kills || '100' }}"

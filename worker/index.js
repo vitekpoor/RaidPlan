@@ -10,6 +10,7 @@
 //   flopik       → worker/flopik.js     /api/flopik/reports, /pulls, /pulls/parse, /refs, /refwin, /refresh, /status
 //   attendance   → worker/attendance.js /api/attendance (+ .csv, DELETE + PATCH admin), /api/es?p=esroster|attendance (addon)
 //   lineups      → worker/lineups.js    /api/lineups (+ .csv), PUT (admin)
+//   meta comps   → worker/comps.js      /api/comps (GET, POST auth), /api/comps/refresh (admin), /api/comps/status
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -19,16 +20,18 @@ import migration0002 from "./migrations/0002_sim_queue.sql";
 import migration0003 from "./migrations/0003_roster_absence.sql";
 import migration0004 from "./migrations/0004_flopik.sql";
 import migration0005 from "./migrations/0005_attendance_lineups.sql";
+import migration0006 from "./migrations/0006_rio_comps.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
 import * as flopik from "./flopik.js";
 import { postAttendance, getAttendance, getAttendanceCsv, deleteAttendance, patchAttendance, esEndpoint } from "./attendance.js";
 import { getLineups, putLineups, getLineupsCsv } from "./lineups.js";
+import * as comps from "./comps.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006]];
 
 export default {
   async fetch(request, env, ctx) {
@@ -133,6 +136,12 @@ async function route(request, env, ctx, url) {
   if (path === "/api/lineups" && method === "GET") return getLineups(env);
   if (path === "/api/lineups.csv" && method === "GET") return getLineupsCsv(env);
   if (path === "/api/lineups" && method === "PUT") return admin(() => putLineups(request, env));
+
+  // ---- meta sestavy: raider.io first-kill rosters (worker/comps.js)
+  if (path === "/api/comps" && method === "GET") return comps.getComps(env, url);
+  if (path === "/api/comps" && method === "POST") return auth() || comps.postComps(request, env);
+  if (path === "/api/comps/refresh" && method === "POST") return admin(() => comps.refresh(request, env));
+  if (path === "/api/comps/status" && method === "GET") return comps.status(env);
 
   return json({ ok: false, error: "not found" }, 404);
 }

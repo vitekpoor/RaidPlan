@@ -7,7 +7,7 @@
 //   index.html  = hub.html
 //   <!-- @nav --> in every page = parts/nav.html (shared header menu; the current page's link gets class="active",
 //                 on index.html the index.html#… hrefs become #… so the hub switches sections by hash)
-//   loot / roster / attendance / lineups / flopik .html, loot_items.json, *.png and assets/ are copied as they are –
+//   loot / roster / attendance / lineups / comps / flopik .html, loot_items.json, *.png and assets/ are copied as they are –
 //   the pages reference assets/… and loot_items.json relative to the site root, exactly like the sources do.
 
 import { readFileSync, writeFileSync, mkdirSync, cpSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -16,7 +16,7 @@ import path from "node:path";
 
 const WEB = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(WEB, "..", "dist");
-const PAGES = ["loot.html", "roster.html", "attendance.html", "lineups.html", "flopik.html"];
+const PAGES = ["loot.html", "roster.html", "attendance.html", "lineups.html", "comps.html", "flopik.html"];
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST, { recursive: true });

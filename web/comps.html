@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<!--
+  comps.html - Meta sestavy: jaké specy hrály top guildy při PRVNÍM killu každého bosse (raider.io boss rankings →
+  tools/raidplan/rio_comps.mjs v GitHub Actions → Worker /api/comps). Stránka z uložených killů spočítá
+  „nejlepší sestavu“ (nejčastější rozložení rolí + nejhranější specy podle průměrného počtu na kill) a „alternativu“
+  (reálná sestava guildy, která je té nejlepší nejblíž, ale liší se). Filtr: počet nejvyšších killů, region.
+  Admin může stahování z raider.io spustit tlačítkem (POST /api/comps/refresh → workflow comps.yml).
+-->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meta sestavy – Eternal Shadows</title>
+<link rel="icon" href="assets/images/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<style>
+  :root { --wrap: 1500px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  .bar .sp { flex: 1; }
+  .bar select { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; }
+  .bar .btn, .bar .btn-outline { padding: 7px 16px; font-size: 13.5px; }
+  #msg { min-height: 1.2em; font-weight: 600; } #msg.ok { color: var(--accent); } #msg.err { color: var(--dps); }
+  .sub-nav { margin-bottom: 14px; }
+  .sub-nav a small { color: inherit; opacity: .7; font-weight: 400; margin-left: 4px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+  @media (max-width: 1000px) { .cards { grid-template-columns: 1fr; } }
+  .card { background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card h5 { font-size: 15px; font-weight: 700; color: var(--ink-strong); margin: 0 0 2px; }
+  .card h5 em { color: var(--accent); font-style: normal; }
+  .card .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; line-height: 1.5; }
+  .card .sub a { color: var(--accent); text-decoration: none; }
+  .roles { display: flex; flex-wrap: wrap; gap: 10px 22px; }
+  .role { min-width: 120px; }
+  .role .rh { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 5px; }
+  .role.tank .rh { color: var(--tank); } .role.healer .rh { color: var(--heal); } .role.dps .rh { color: var(--dps); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { display: inline-block; border-radius: 4px; padding: 2px 7px; font-size: 12px; font-weight: 600; color: #111; line-height: 1.5; white-space: nowrap; }
+  .chip.add { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .chip .n { opacity: .65; font-weight: 700; margin-right: 3px; }
+  .chip.mini { padding: 0 4px; font-size: 10.5px; border-radius: 3px; }
+  .diff { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  .diff b { color: var(--ink); font-weight: 600; }
+  .dist { margin: 12px 0 0; font-size: 12.5px; color: var(--muted); }
+  .dist .row { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .dist .lbl { width: 9rem; color: var(--ink); }
+  .dist .barw { flex: 1; height: 8px; background: var(--surface3); border-radius: 4px; overflow: hidden; }
+  .dist .barw i { display: block; height: 100%; background: var(--accent); }
+  .dist .pct { width: 6rem; text-align: right; }
+  h5.sec { font-size: 14px; font-weight: 700; color: var(--ink-strong); margin: 18px 0 6px; }
+  h5.sec span { color: var(--muted); font-weight: 400; font-size: 12.5px; margin-left: 8px; }
+  table.specs { width: auto; min-width: 60%; font-size: 12.5px; border-collapse: collapse; }
+  .specs th { text-align: left; padding: 3px 10px 3px 0; color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line); }
+  .specs td { padding: 2px 10px 2px 0; border-bottom: 1px solid rgba(255,255,255,.04); white-space: nowrap; vertical-align: middle; }
+  .specs td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .specs td.pbar { min-width: 120px; } .specs td.pbar i { display: inline-block; height: 7px; background: var(--accent); border-radius: 3px; vertical-align: middle; margin-right: 6px; opacity: .8; }
+  .specs tr.rsep td { border-top: 2px solid var(--line); }
+  .specs td.ours { color: var(--muted); white-space: normal; max-width: 22rem; } .specs td.ours b { color: var(--ink); font-weight: 600; }
+  .specs tr.inbest td:first-child { color: var(--ink-strong); }
+  details.kills { margin-top: 18px; }
+  details.kills summary { cursor: pointer; font-size: 14px; font-weight: 700; color: var(--ink-strong); }
+  details.kills summary span { color: var(--muted); font-weight: 400; font-size: 12.5px; margin-left: 8px; }
+  table.kt { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 8px; }
+  .kt th { text-align: left; padding: 3px 8px 3px 0; color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line); }
+  .kt td { padding: 2px 8px 2px 0; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; white-space: nowrap; }
+  .kt td.num { text-align: right; color: var(--muted); }
+  .kt td.g a { color: var(--ink); text-decoration: none; font-weight: 600; } .kt td.g a:hover { color: var(--accent); }
+  .kt td.g small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .kt td.ro { white-space: normal; } .kt td.ro .chips { gap: 2px; }
+  .kt td.none { color: var(--muted); font-style: italic; }
+  .kt .sepc { display: inline-block; width: 6px; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 14px 0 0; line-height: 1.5; }
+  .hint a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+<div class="container">
+<!-- @nav -->
+</div>
+</header>
+<script src="assets/js/es-auth.js"></script>
+
+<div class="container">
+<div class="page-content" id="page">
+<div class="heading-section">
+  <h4><em>Meta</em> sestavy top guild</h4>
+  <p>Jaké specy hrály nejlepší guildy světa při svém prvním killu bosse (raider.io). Nejhranější složení = doporučená sestava, k ní nejbližší reálná sestava jako alternativa.</p>
+</div>
+
+<nav class="sub-nav" id="bosses"></nav>
+
+<div class="bar">
+  <span id="status">Načítám…</span>
+  <span class="sp"></span>
+  <span id="msg"></span>
+  <label>Killů <select id="topn"><option value="10">top 10</option><option value="25">top 25</option><option value="50">top 50</option><option value="100" selected>top 100</option></select></label>
+  <label>Region <select id="region"><option value="">všechny</option></select></label>
+  <span id="adminbox" hidden><button class="btn-outline" id="refresh" type="button" title="stáhne z raider.io znovu všechny bosse (GitHub Actions, 1–3 min)">Obnovit z raider.io</button></span>
+</div>
+
+<div id="content"></div>
+
+<p class="hint">Data: <a href="https://raider.io/" target="_blank" rel="noopener">raider.io</a> – žebříček bosse (Mythic, celý svět) a sestava PRVNÍHO killu každé guildy (20 postav se specem). Guildy bez nahraného logu nebo se skrytou sestavou sestavu nemají a do výpočtu nevstupují.
+Nejlepší sestava: nejčastější rozložení rolí (tank / heal / DPS) mezi vybranými killy, sloty každé role obsazené podle průměrného počtu specu na kill (metoda největšího zbytku). Alternativa: skutečná sestava guildy s nejmenším rozdílem od nejlepší (nejméně vyměněných slotů), která není totožná.
+Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skript <code>tools/raidplan/rio_comps.mjs</code>), admin může spustit ručně. Naše sestavy: <a href="lineups.html">Boss sestavy</a>.</p>
+</div>
+</div>
+
+<footer>
+  <p>Eternal Shadows · Burning Blade EU</p>
+  <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
+</footer>
+
+<script>
+(function () {
+  var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
+  var CLASS_COLOR = { "death-knight": "#C41E3A", "demon-hunter": "#A330C9", druid: "#FF7C0A", evoker: "#33937F", hunter: "#AAD372", mage: "#3FC7EB",
+                      monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
+  // class/spec (raider.io slugs) → label + short code for the kill table
+  var SPEC = {
+    "death-knight/blood": ["Blood DK", "BDK"], "death-knight/frost": ["Frost DK", "FDK"], "death-knight/unholy": ["Unholy DK", "UDK"],
+    "demon-hunter/havoc": ["Havoc DH", "Hav"], "demon-hunter/vengeance": ["Vengeance DH", "Ven"], "demon-hunter/devourer": ["Devourer DH", "Dvr"],
+    "druid/balance": ["Balance", "Bal"], "druid/feral": ["Feral", "Fer"], "druid/guardian": ["Guardian", "Gua"], "druid/restoration": ["Resto Druid", "RDr"],
+    "evoker/devastation": ["Devastation", "Dev"], "evoker/preservation": ["Preservation", "Pre"], "evoker/augmentation": ["Augmentation", "Aug"],
+    "hunter/beast-mastery": ["BM Hunter", "BM"], "hunter/marksmanship": ["MM Hunter", "MM"], "hunter/survival": ["Survival", "Sur"],
+    "mage/arcane": ["Arcane", "Arc"], "mage/fire": ["Fire", "Fir"], "mage/frost": ["Frost Mage", "FrM"],
+    "monk/brewmaster": ["Brewmaster", "Brw"], "monk/mistweaver": ["Mistweaver", "MW"], "monk/windwalker": ["Windwalker", "WW"],
+    "paladin/holy": ["Holy Pala", "HPa"], "paladin/protection": ["Prot Pala", "PPa"], "paladin/retribution": ["Retribution", "Ret"],
+    "priest/discipline": ["Disc", "Dis"], "priest/holy": ["Holy Priest", "HPr"], "priest/shadow": ["Shadow", "SP"],
+    "rogue/assassination": ["Assassination", "Ass"], "rogue/outlaw": ["Outlaw", "Out"], "rogue/subtlety": ["Subtlety", "Sub"],
+    "shaman/elemental": ["Elemental", "Ele"], "shaman/enhancement": ["Enhancement", "Enh"], "shaman/restoration": ["Resto Shaman", "RSh"],
+    "warlock/affliction": ["Affliction", "Aff"], "warlock/demonology": ["Demonology", "Dem"], "warlock/destruction": ["Destruction", "Des"],
+    "warrior/arms": ["Arms", "Arm"], "warrior/fury": ["Fury", "Fur"], "warrior/protection": ["Prot Warrior", "PWa"]
+  };
+  var ROLES = ["tank", "healer", "dps"], ROLE_CZ = { tank: "Tanky", healer: "Healeři", dps: "DPS" };
+  var REGION_CZ = { eu: "EU", us: "US", cn: "Čína", kr: "Korea", tw: "Taiwan" };
+  var $ = function (s) { return document.querySelector(s); };
+  var state = { token: window.esAuth ? esAuth.token() : null, list: [], boss: null, data: null, ours: {}, topn: 100, region: "", polling: null };
+  if (window.esAuth) esAuth.onChange(function (t) { state.token = t; $("#adminbox").hidden = !t; });
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ""; }
+  function label(key) { var s = SPEC[key]; if (s) return s[0]; var p = key.split("/"); return cap(p[1]).replace(/-/g, " ") + " " + cap(p[0]).replace(/-/g, " "); }
+  function short(key) { var s = SPEC[key]; if (s) return s[1]; var p = key.split("/"); return cap(p[1]).slice(0, 3); }
+  function color(key) { return CLASS_COLOR[key.split("/")[0]] || "#999"; }
+  function chip(key, extra, mini, title) {
+    return '<span class="chip' + (mini ? " mini" : "") + (extra && extra.cls ? " " + extra.cls : "") + '" style="background:' + color(key) + '" title="' + esc(title || label(key)) + '">' +
+      (extra && extra.n > 1 ? '<span class="n">' + extra.n + "×</span>" : "") + esc(mini ? short(key) : label(key)) + "</span>";
+  }
+  function fmtDate(iso) { if (!iso) return ""; var d = new Date(iso); return d.getDate() + "." + (d.getMonth() + 1) + "."; }
+  function fmtDur(ms) { if (!ms) return ""; var s = Math.round(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+  function guildUrl(k) { return "https://raider.io/guilds/" + esc(k.region) + "/" + esc(k.realmSlug || "") + "/" + encodeURIComponent(k.guild); }
+  function rankingUrl() { return "https://raider.io/" + (state.data ? state.data.raid : "the-venomous-abyss") + "/boss-rankings/" + (state.boss || "") + "/world/" + (state.data ? state.data.difficulty : "mythic"); }
+
+  // ---------------------------------------------------------------- loading
+  function load() {
+    return Promise.all([
+      fetch(API_BASE + "/api/comps", { cache: "no-store" }).then(function (r) { return r.json(); }),
+      fetch(API_BASE + "/api/roster", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return { players: [] }; })
+    ]).then(function (res) {
+      if (!res[0].ok) throw new Error(res[0].error || "chyba");
+      state.list = res[0].bosses || [];
+      state.ours = ourSpecs(res[1].players || []);
+      renderBosses();
+      if (!state.list.length) { $("#status").textContent = "Zatím žádná data – admin je stáhne tlačítkem vpravo (nebo spusť workflow comps.yml)."; $("#content").innerHTML = ""; return; }
+      var want = (location.hash || "").slice(1), has = state.list.some(function (b) { return b.slug === want; });
+      return selectBoss(has ? want : state.list[state.list.length - 1].slug);
+    }).catch(function (err) { $("#status").textContent = "Data se nenačetla: " + err.message; });
+  }
+  function ourSpecs(players) {
+    var m = {};
+    players.forEach(function (p) {
+      (p.characters || []).forEach(function (c) {
+        if (!c.class || !c.spec) return;
+        var key = String(c.class).toLowerCase().replace(/\s+/g, "-") + "/" + String(c.spec).toLowerCase().replace(/\s+/g, "-");
+        (m[key] = m[key] || []).push({ player: p.name, character: c.name, main: !!c.main, bench: !!p.bench });
+      });
+    });
+    return m;
+  }
+  function selectBoss(slug) {
+    state.boss = slug; state.data = null;
+    if (location.hash !== "#" + slug) history.replaceState(null, "", "#" + slug);
+    renderBosses();
+    $("#status").textContent = "Načítám…"; $("#content").innerHTML = "";
+    return fetch(API_BASE + "/api/comps?boss=" + encodeURIComponent(slug), { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "chyba");
+      state.data = d;
+      var regions = {};
+      (d.boss.kills || []).forEach(function (k) { if (k.region) regions[k.region] = (regions[k.region] || 0) + 1; });
+      var sel = $("#region"), cur = state.region;
+      sel.innerHTML = '<option value="">všechny regiony</option>' + Object.keys(regions).sort().map(function (r) { return '<option value="' + esc(r) + '">' + esc(REGION_CZ[r] || r.toUpperCase()) + " (" + regions[r] + ")</option>"; }).join("");
+      sel.value = regions[cur] ? cur : ""; state.region = sel.value;
+      render();
+    }).catch(function (err) { $("#status").textContent = "Data se nenačetla: " + err.message; });
+  }
+  function renderBosses() {
+    $("#bosses").innerHTML = state.list.map(function (b) {
+      return '<a href="#' + esc(b.slug) + '" data-boss="' + esc(b.slug) + '"' + (b.slug === state.boss ? ' class="active"' : "") + ' title="' + esc(b.rosters + " sestav z " + b.kills + " killů") + '">' + esc(b.name) + "<small>" + b.rosters + "</small></a>";
+    }).join("");
+  }
+
+  // ---------------------------------------------------------------- aggregation
+  function selectedKills() {
+    var kills = (state.data.boss.kills || []).filter(function (k) { return k.roster && k.roster.length; });
+    if (state.region) kills = kills.filter(function (k) { return k.region === state.region; });
+    kills.sort(function (a, b) { return a.rank - b.rank; });
+    return kills.slice(0, state.topn);
+  }
+  function keyOf(m) { return m.class + "/" + m.spec; }
+  function counts(roster) { var c = {}; roster.forEach(function (m) { var k = keyOf(m); c[k] = (c[k] || 0) + 1; }); return c; }
+  function analyze(kills) {
+    var n = kills.length, specs = {}, splits = {}, roleOf = {}, meleeOf = {};
+    kills.forEach(function (k) {
+      var c = counts(k.roster), r = { tank: 0, healer: 0, dps: 0 };
+      k.roster.forEach(function (m) { var key = keyOf(m); roleOf[key] = m.role; meleeOf[key] = m.melee; if (r[m.role] != null) r[m.role]++; });
+      var sk = r.tank + "/" + r.healer + "/" + r.dps; splits[sk] = (splits[sk] || 0) + 1;
+      Object.keys(c).forEach(function (key) { var s = specs[key] = specs[key] || { key: key, total: 0, kills: 0, max: 0 }; s.total += c[key]; s.kills++; s.max = Math.max(s.max, c[key]); });
+    });
+    Object.keys(specs).forEach(function (key) { var s = specs[key]; s.role = roleOf[key] || "dps"; s.melee = !!meleeOf[key]; s.avg = s.total / n; s.pct = s.kills / n; });
+    var splitList = Object.keys(splits).map(function (k) { return { split: k, n: splits[k], parts: k.split("/").map(Number) }; }).sort(function (a, b) { return b.n - a.n || a.split.localeCompare(b.split); });
+    var best = {}, mode = splitList[0];
+    ROLES.forEach(function (role, ri) {
+      var slots = mode.parts[ri];
+      var cand = Object.keys(specs).map(function (k) { return specs[k]; }).filter(function (s) { return s.role === role; }).sort(function (a, b) { return b.avg - a.avg || b.pct - a.pct; });
+      var used = 0;
+      cand.forEach(function (s) { s.take = Math.floor(s.avg); used += s.take; });
+      if (used > slots) { cand.slice().sort(function (a, b) { return a.avg - b.avg; }).forEach(function (s) { while (used > slots && s.take > 0) { s.take--; used--; } }); }
+      cand.slice().sort(function (a, b) { return (b.avg - Math.floor(b.avg)) - (a.avg - Math.floor(a.avg)) || b.pct - a.pct; }).forEach(function (s) { if (used < slots) { s.take++; used++; } });
+      cand.forEach(function (s) { if (s.take) best[s.key] = s.take; delete s.take; });
+    });
+    // alternative = real kill roster closest to "best" (fewest swapped slots) that is not identical
+    var alt = null;
+    kills.forEach(function (k) {
+      var c = counts(k.roster), d = 0, keys = {};
+      Object.keys(c).forEach(function (x) { keys[x] = 1; }); Object.keys(best).forEach(function (x) { keys[x] = 1; });
+      Object.keys(keys).forEach(function (x) { d += Math.abs((c[x] || 0) - (best[x] || 0)); });
+      d /= 2;
+      if (d > 0 && (!alt || d < alt.d || (d === alt.d && k.rank < alt.kill.rank))) alt = { kill: k, d: d, counts: c };
+    });
+    var exact = kills.filter(function (k) { var c = counts(k.roster); return Object.keys(best).every(function (x) { return c[x] === best[x]; }) && Object.keys(c).length === Object.keys(best).length; });
+    return { n: n, specs: specs, splits: splitList, best: best, alt: alt, exact: exact };
+  }
+
+  // ---------------------------------------------------------------- rendering
+  function rosterBlock(cnt, specs, hilite) {
+    return '<div class="roles">' + ROLES.map(function (role) {
+      var keys = Object.keys(cnt).filter(function (k) { return (specs[k] ? specs[k].role : "dps") === role; })
+        .sort(function (a, b) { return (specs[a] && specs[b] && (specs[b].melee - specs[a].melee)) || cnt[b] - cnt[a] || a.localeCompare(b); });
+      var total = keys.reduce(function (s, k) { return s + cnt[k]; }, 0);
+      return '<div class="role ' + role + '"><div class="rh">' + ROLE_CZ[role] + " " + total + '</div><div class="chips">' + keys.map(function (k) {
+        var s = specs[k], t = label(k) + (s ? " – Ø " + s.avg.toFixed(2) + " na kill, v " + Math.round(s.pct * 100) + " % killů" : "");
+        return chip(k, { n: cnt[k], cls: hilite && hilite[k] ? "add" : "" }, false, t);
+      }).join("") + "</div></div>";
+    }).join("") + "</div>";
+  }
+  function render() {
+    var d = state.data, b = d.boss;
+    $("#status").innerHTML = esc(b.name) + " · data z raider.io " + esc(new Date(b.fetchedAt).toLocaleString("cs-CZ")) + " · <a href=\"" + rankingUrl() + "\" target=\"_blank\" rel=\"noopener\">žebříček ↗</a>";
+    $("#adminbox").hidden = !state.token;
+    var kills = selectedKills();
+    if (!kills.length) { $("#content").innerHTML = '<p class="hint">Pro tento výběr není žádný kill se známou sestavou.</p>'; return; }
+    var a = analyze(kills), best = a.best, mode = a.splits[0];
+    var altHtml = "";
+    if (a.alt) {
+      var k = a.alt.kill, plus = {}, minus = [];
+      Object.keys(a.alt.counts).forEach(function (x) { var diff = a.alt.counts[x] - (best[x] || 0); if (diff > 0) plus[x] = diff; });
+      Object.keys(best).forEach(function (x) { var diff = best[x] - (a.alt.counts[x] || 0); if (diff > 0) minus.push(chip(x, { n: diff }, true)); });
+      altHtml = '<div class="card"><h5>Alternativní sestava <em>' + esc(k.guild) + "</em></h5><p class=\"sub\">Reálná sestava nejblíž té nejlepší: <a href=\"" + guildUrl(k) + "\" target=\"_blank\" rel=\"noopener\">" + esc(k.guild) + " ↗</a> (" +
+        esc(REGION_CZ[k.region] || k.region.toUpperCase()) + ", " + k.rank + ". kill" + (k.defeatedAt ? " " + fmtDate(k.defeatedAt) : "") + (k.ilvlAvg ? ", ilvl " + k.ilvlAvg : "") + "), liší se v " + a.alt.d + (a.alt.d === 1 ? " slotu" : a.alt.d < 5 ? " slotech" : " slotech") + ".</p>" +
+        rosterBlock(a.alt.counts, a.specs, plus) +
+        '<div class="diff">Oproti nejlepší: <b>navíc</b> ' + Object.keys(plus).map(function (x) { return chip(x, { n: plus[x] }, true); }).join(" ") + " · <b>místo</b> " + minus.join(" ") + "</div></div>";
+    } else altHtml = '<div class="card"><h5>Alternativní sestava</h5><p class="sub">Všechny vybrané killy mají stejnou sestavu jako nejlepší – alternativa není.</p></div>';
+    var splitHtml = a.splits.slice(0, 4).map(function (s) {
+      return '<div class="row"><span class="lbl">' + s.parts[0] + " tank · " + s.parts[1] + " heal · " + s.parts[2] + ' DPS</span><span class="barw"><i style="width:' + Math.round(s.n / a.n * 100) + '%"></i></span><span class="pct">' + s.n + " killů (" + Math.round(s.n / a.n * 100) + " %)</span></div>";
+    }).join("");
+    var melee = 0, ranged = 0;
+    Object.keys(best).forEach(function (x) { var s = a.specs[x]; if (s && s.role === "dps") { if (s.melee) melee += best[x]; else ranged += best[x]; } });
+    var bestHtml = '<div class="card"><h5>Nejlepší sestava <em>' + a.n + " killů</em></h5><p class=\"sub\">Nejčastější rozložení rolí " + mode.parts[0] + " / " + mode.parts[1] + " / " + mode.parts[2] + " (" + Math.round(mode.n / a.n * 100) + " % killů), DPS " + melee + " melee + " + ranged + " ranged; sloty obsazené podle průměrného počtu specu na kill." +
+      (a.exact.length ? " Přesně takto hrálo " + a.exact.length + (a.exact.length === 1 ? " guilda" : a.exact.length < 5 ? " guildy" : " guild") + " (" + a.exact.slice(0, 3).map(function (k) { return esc(k.guild); }).join(", ") + (a.exact.length > 3 ? "…" : "") + ")." : " Přesně takto nehrála žádná guilda.") + "</p>" +
+      rosterBlock(best, a.specs) + '<div class="dist"><b>Rozložení rolí:</b>' + splitHtml + "</div></div>";
+    // spec table
+    var specList = Object.keys(a.specs).map(function (k) { return a.specs[k]; }).sort(function (x, y) { return ROLES.indexOf(x.role) - ROLES.indexOf(y.role) || y.avg - x.avg || y.pct - x.pct; });
+    var lastRole = null;
+    var specRows = specList.map(function (s) {
+      var sep = lastRole !== null && lastRole !== s.role; lastRole = s.role;
+      var ours = (state.ours[s.key] || []).slice().sort(function (x, y) { return (x.bench - y.bench) || (y.main - x.main); });
+      var oursHtml = ours.map(function (o) { return (o.bench ? '<span title="lavička">' : "<b>") + esc(o.player) + (o.main ? "" : " (alt)") + (o.bench ? "</span>" : "</b>"); }).join(", ");
+      return '<tr class="' + (sep ? "rsep " : "") + (best[s.key] ? "inbest" : "") + '"><td>' + chip(s.key, null, false) + "</td><td>" + (s.role === "dps" ? (s.melee ? "melee" : "ranged") : ROLE_CZ[s.role].toLowerCase()) + '</td><td class="num">' + s.avg.toFixed(2) +
+        '</td><td class="pbar"><i style="width:' + Math.round(s.pct * 80) + 'px"></i>' + Math.round(s.pct * 100) + ' %</td><td class="num">' + s.max + '</td><td class="num">' + (best[s.key] ? best[s.key] : "–") + '</td><td class="ours">' + (oursHtml || '<span style="opacity:.5">–</span>') + "</td></tr>";
+    }).join("");
+    var specHtml = '<h5 class="sec">Specy<span>průměr na kill, podíl killů se specem, max v jednom killu, sloty v nejlepší sestavě, kdo z nás spec hraje (roster: main / alt / lavička)</span></h5>' +
+      '<table class="specs"><thead><tr><th>Spec</th><th>Role</th><th>Ø / kill</th><th>Killů se specem</th><th>Max</th><th>Nejlepší</th><th>U nás</th></tr></thead><tbody>' + specRows + "</tbody></table>";
+    // kills
+    var allKills = (b.kills || []).slice().sort(function (x, y) { return x.rank - y.rank; });
+    var killRows = allKills.map(function (k) {
+      var inSel = kills.indexOf(k) >= 0;
+      var ro = k.roster && k.roster.length ? k.roster.slice().sort(function (x, y) { return ROLES.indexOf(x.role) - ROLES.indexOf(y.role) || (y.melee - x.melee) || keyOf(x).localeCompare(keyOf(y)); }) : null;
+      var chips = "";
+      if (ro) { var lr = null; chips = ro.map(function (m) { var s = (lr !== null && lr !== m.role) ? '<span class="sepc"></span>' : ""; lr = m.role; return s + chip(keyOf(m), null, true, label(keyOf(m)) + " – " + m.name + (m.ilvl ? " (" + m.ilvl + ")" : "")); }).join(""); }
+      return '<tr style="' + (inSel ? "" : "opacity:.45") + '"><td class="num">' + k.rank + '</td><td class="g"><a href="' + guildUrl(k) + '" target="_blank" rel="noopener">' + esc(k.guild) + "</a><small>" + esc(REGION_CZ[k.region] || k.region.toUpperCase()) + " · " + esc(k.realm) + '</small></td><td class="num">' + fmtDate(k.defeatedAt) + '</td><td class="num">' + (k.ilvlAvg || "") + '</td><td class="num">' + fmtDur(k.durationMs) +
+        '</td><td class="' + (ro ? "ro" : "none") + '">' + (ro ? '<div class="chips">' + chips + "</div>" : (k.compsHidden ? "sestava skrytá" : k.error ? esc(k.error) : "bez logu / sestava neznámá")) + "</td></tr>";
+    }).join("");
+    var killsHtml = '<details class="kills"><summary>Všechny killy<span>' + allKills.length + " killů, " + allKills.filter(function (k) { return k.roster && k.roster.length; }).length + " se sestavou; zesvětlené řádky nejsou ve výběru</span></summary>" +
+      '<table class="kt"><thead><tr><th>#</th><th>Guilda</th><th>Kill</th><th>ilvl</th><th>Čas</th><th>Sestava (tank · heal · melee · ranged)</th></tr></thead><tbody>' + killRows + "</tbody></table></details>";
+    $("#content").innerHTML = '<div class="cards">' + bestHtml + altHtml + "</div>" + specHtml + killsHtml;
+  }
+
+  // ---------------------------------------------------------------- events
+  $("#bosses").addEventListener("click", function (ev) { var a = ev.target.closest("a[data-boss]"); if (!a) return; ev.preventDefault(); selectBoss(a.dataset.boss); });
+  $("#topn").addEventListener("change", function () { state.topn = +$("#topn").value; if (state.data) render(); });
+  $("#region").addEventListener("change", function () { state.region = $("#region").value; if (state.data) render(); });
+  window.addEventListener("hashchange", function () { var s = (location.hash || "").slice(1); if (s && s !== state.boss && state.list.some(function (b) { return b.slug === s; })) selectBoss(s); });
+  $("#refresh").addEventListener("click", function () {
+    $("#refresh").disabled = true; msg(true, "Spouštím…");
+    fetch(API_BASE + "/api/comps/refresh", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + state.token }, body: JSON.stringify({ boss: "all", reason: "comps page" }) })
+      .then(function (r) { return r.json().then(function (d) { d._status = r.status; return d; }); }).then(function (d) {
+        if (d._status === 401) { esAuth.logout(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); }
+        if (!d.ok) throw new Error(d.error || "spuštění selhalo");
+        msg(true, d.message || "spuštěno"); poll(d.lastDispatch);
+      }).catch(function (err) { msg(false, "⚠ " + err.message); $("#refresh").disabled = false; });
+  });
+  function poll(since) {
+    clearTimeout(state.polling);
+    state.polling = setTimeout(function () {
+      fetch(API_BASE + "/api/comps/status", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (s) {
+        if (s.running || (s.lastFetch && since && s.lastFetch < since)) { poll(since); return; }
+        msg(true, s.lastFetch && (!since || s.lastFetch >= since) ? "✔ Data z raider.io obnovena." : "Stahování skončilo."); $("#refresh").disabled = false;
+        var keep = state.boss; load().then(function () { if (keep && state.list.some(function (b) { return b.slug === keep; })) return selectBoss(keep); });
+      }).catch(function () { poll(since); });
+    }, 10000);
+  }
+  load();
+})();
+</script>
+</body>
+</html>
