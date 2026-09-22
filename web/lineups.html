@@ -52,6 +52,25 @@
   .legend { color: var(--muted); font-size: 12px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
   .legend span i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+  /* RaidPlan.io sync (GitHub Actions raidplan.yml) */
+  .sync { border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); padding: 8px 12px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  .sync .row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .sync .row + .row { margin-top: 6px; }
+  .sync b.t { color: var(--ink-strong); margin-right: 4px; }
+  .sync .bosses { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+  .sync .bosses label { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
+  .sync .bosses label.on { background: var(--accent); border-color: var(--accent); color: #07110c; font-weight: 600; }
+  .sync .bosses input { display: none; }
+  .sync input[type=text] { background: var(--surface3); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13px; width: 22rem; max-width: 100%; }
+  .sync label.chk { color: var(--ink); cursor: pointer; } .sync label.chk input { vertical-align: -1px; margin-right: 3px; }
+  .sync .btn { padding: 6px 16px; font-size: 13px; }
+  .sync .btn[disabled] { opacity: .5; cursor: default; }
+  #syncmsg { font-weight: 600; } #syncmsg.ok { color: var(--accent); } #syncmsg.err { color: var(--dps); }
+  .sync .last b { color: var(--ink); font-weight: 600; } .sync .last b.bad { color: var(--dps); } .sync .last b.good { color: var(--accent); }
+  .sync .last a { color: var(--accent); text-decoration: none; }
+  .sync details { display: inline; } .sync details summary { cursor: pointer; color: var(--accent); display: inline; }
+  .sync pre { margin: 6px 0 0; padding: 8px 10px; background: var(--ground, #0a0c0b); border: 1px solid var(--line); border-radius: 6px; font-size: 11.5px; line-height: 1.45; max-height: 22rem; overflow: auto; white-space: pre-wrap; color: var(--ink); }
+  .sync pre .warn { color: #F6B26B; } .sync pre .man { color: var(--dps); font-weight: 600; } .sync pre .swap { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -81,6 +100,18 @@
     <button class="btn-outline" id="cancel" type="button" hidden>Zrušit</button>
   </span>
   <span id="loginhint" hidden>Úpravy: přihlas se vpravo nahoře.</span>
+</div>
+
+<div class="sync" id="sync" hidden>
+  <div class="row" id="syncctl" hidden>
+    <b class="t">RaidPlan.io</b>
+    <span class="bosses" id="syncbosses" title="které plány synchronizovat"></span>
+    <input type="text" id="syncchanges" placeholder="výměny navíc: Akka-Meslock, Miky=Hase" title="A-B vymění místa a přiřazení dvou hráčů, Old=New přejmenuje; víc změn odděl čárkou">
+    <label class="chk" title="jen ukáže, co by se změnilo – nic se do plánů neuloží"><input type="checkbox" id="syncdry"> jen náhled</label>
+    <button class="btn" id="syncbtn" type="button" title="přejmenuje hráče v plánech na raidplan.io podle sestav (GitHub Actions, ~1 min)">Synchronizovat plány</button>
+    <span id="syncmsg"></span>
+  </div>
+  <div class="row last" id="synclast"></div>
 </div>
 
 <div class="wrap"><table class="lu" id="lu"><thead></thead><tbody></tbody></table></div>
@@ -165,7 +196,7 @@
     $("#alldate").hidden = !state.edit;
     if (state.edit && !bodyOnly) { var ds = list.map(function (b) { return b.date; }); $("#alldateInput").value = ds.length && ds.every(function (d) { return d === ds[0]; }) ? ds[0] || "" : ""; }
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
-    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown), nastav datum raidu u bosse (nebo „Datum všech bossů“ nahoře najednou – jednotlivé datum jde pak ještě upravit), nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit."
+    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown), nastav datum raidu u bosse (nebo „Datum všech bossů“ nahoře najednou – jednotlivé datum jde pak ještě upravit), nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit. Po uložení dej „Synchronizovat plány“, aby se změny propsaly do RaidPlan.io."
       : "Sestavy čte tools/raidplan/raidplan.py --boss (přejmenování markerů v RaidPlan.io) a bot docházky na Discordu. Datum bosse určuje, čí omluvenky se v jeho sloupci ukážou.";
   }
   var optCache = null;
@@ -207,7 +238,70 @@
       }).catch(function (err) { msg(false, "⚠ " + err.message); }).then(function () { $("#save").disabled = false; });
   });
   window.addEventListener("beforeunload", function (ev) { if (state.edit) { ev.preventDefault(); ev.returnValue = ""; } });
-  load();
+
+  // ---- RaidPlan.io sync: POST /api/lineups/sync → GitHub Actions raidplan.yml (raidplan.py --boss); log from /sync-status
+  var sync = { status: null, timer: null, bossesBuilt: false };
+  function syncMsg(ok, t) { var m = $("#syncmsg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
+  function syncBosses() {
+    if (sync.bossesBuilt || !state.bosses.length) return;
+    sync.bossesBuilt = true;
+    $("#syncbosses").innerHTML = '<label class="on" title="všechny plány"><input type="checkbox" value="all" checked>vše</label>' + state.bosses.map(function (b) {
+      return '<label title="' + esc(b.name) + '"><input type="checkbox" value="' + esc(b.no) + '">' + esc(b.no) + "</label>";
+    }).join("");
+  }
+  $("#syncbosses").addEventListener("change", function (ev) {
+    var t = ev.target, labels = $("#syncbosses").querySelectorAll("label");
+    if (t.value === "all" && t.checked) labels.forEach(function (l) { var i = l.querySelector("input"); if (i.value !== "all") i.checked = false; });
+    else if (t.value !== "all" && t.checked) $("#syncbosses input[value=all]").checked = false;
+    if (!$("#syncbosses").querySelector("input:checked")) $("#syncbosses input[value=all]").checked = true;
+    labels.forEach(function (l) { l.classList.toggle("on", l.querySelector("input").checked); });
+  });
+  function fmtLog(log) {
+    return esc(log).split("\n").map(function (l) {
+      if (/PLACE MANUALLY|REMOVE MANUALLY|Save rejected|Error|Traceback|Cannot|missing/.test(l)) return '<span class="man">' + l + "</span>";
+      if (/WARNING|NOT 20/.test(l)) return '<span class="warn">' + l + "</span>";
+      if (/^\s+swap:|-&gt;/.test(l)) return '<span class="swap">' + l + "</span>";
+      return l;
+    }).join("\n");
+  }
+  function renderSync() {
+    var s = sync.status, r = s && s.result, d = s && s.dispatch;
+    $("#sync").hidden = !state.token && !r;
+    $("#syncctl").hidden = !state.token;
+    if (state.token) syncBosses();
+    $("#syncbtn").disabled = !!(s && s.running);
+    var html = "";
+    if (s && s.running) html = "<b>⏳ Synchronizace běží</b> (spuštěno " + esc(new Date(d.at).toLocaleTimeString("cs-CZ")) + (d.dryRun ? ", jen náhled" : "") + ", plány " + esc(d.bosses.join(" ")) + (d.changes ? ", změny: " + esc(d.changes) : "") + ") – výsledek se objeví sám…";
+    else if (r) {
+      html = "Poslední " + (r.dryRun ? "náhled" : "synchronizace") + " " + esc(new Date(r.finishedAt).toLocaleString("cs-CZ")) + ': <b class="' + (r.ok ? "good" : "bad") + '">' + (r.ok ? "✔ OK" : "⚠ selhala (kód " + r.exitCode + ")") + "</b>" +
+        " · plány " + esc(r.bosses.join(" ")) + (r.changes.length ? " · změny: " + esc(r.changes.join(", ")) : "") + (/PLACE MANUALLY|REMOVE MANUALLY/.test(r.log) ? ' · <b class="bad">něco je třeba doplnit ručně (viz log)</b>' : "") +
+        (r.runUrl ? ' · <a href="' + esc(r.runUrl) + '" target="_blank" rel="noopener">běh ↗</a>' : "") + " · <details><summary>log</summary><pre>" + fmtLog(r.log || "(prázdný log)") + "</pre></details>";
+    } else if (state.token) html = "Zatím žádná synchronizace. Tlačítko přejmenuje hráče v plánech na raidplan.io podle sestav (kdo vypadl → kdo přibyl, páruje se podle role) a srovná ikony a barvy podle rosteru.";
+    $("#synclast").innerHTML = html;
+  }
+  function loadSync() {
+    return fetch(API_BASE + "/api/lineups/sync-status", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (s) {
+      if (!s.ok) throw new Error(s.error || "chyba");
+      sync.status = s; renderSync();
+      clearTimeout(sync.timer);
+      if (s.running) sync.timer = setTimeout(loadSync, 8000);
+    }).catch(function (err) { $("#synclast").textContent = "Stav synchronizace se nenačetl: " + err.message; });
+  }
+  $("#syncbtn").addEventListener("click", function () {
+    var picked = Array.prototype.map.call($("#syncbosses").querySelectorAll("input:checked"), function (i) { return i.value; });
+    var body = { bosses: picked.indexOf("all") >= 0 || !picked.length ? "all" : picked, changes: $("#syncchanges").value.trim(), dryRun: $("#syncdry").checked, reason: "lineups page" };
+    if (state.edit) { syncMsg(false, "Nejdřív ulož (nebo zruš) rozpracované úpravy sestav."); return; }
+    $("#syncbtn").disabled = true; syncMsg(true, "Spouštím…");
+    fetch(API_BASE + "/api/lineups/sync", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + state.token }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (d) { d._status = r.status; return d; }); }).then(function (d) {
+        if (d._status === 401) { esAuth.logout(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); }
+        if (!d.ok) throw new Error(d.error || "spuštění selhalo");
+        syncMsg(true, d.message || "spuštěno"); if (d.dispatched) $("#syncchanges").value = "";
+        return loadSync();
+      }).catch(function (err) { syncMsg(false, "⚠ " + err.message); $("#syncbtn").disabled = false; });
+  });
+  if (window.esAuth) esAuth.onChange(function () { renderSync(); });
+  load().then(loadSync);
 })();
 </script>
 </body>

@@ -1,0 +1,65 @@
+name: RaidPlan sync (Boss sestavy → raidplan.io)
+
+# Přejmenuje hráče v plánech na raidplan.io podle Boss sestav (tools/raidplan/raidplan.py --boss, totéž co lokální
+# update_plans.bat). Spouští ho stránka lineups.html tlačítkem „Synchronizovat plány“ přes Worker
+# (POST /api/lineups/sync → workflow_dispatch, secret GITHUB_TOKEN ve Workeru) nebo ručně (Run workflow).
+# Log běhu se pošle zpět do Workeru (POST /api/lineups/sync-result) a stránka ho zobrazí; zálohy dokumentů
+# před uložením (backup_<code>_rev<N>.json) zůstávají 30 dní jako artefakt běhu (obnova: raidplan.py --restore).
+#
+# Secrets: RAIDPLAN_PLANS (celý obsah tools/raidplan/venomabyss_plans.txt – čísla bossů + view/edit odkazy;
+#          edit klíče dávají právo plány měnit, proto NEJSOU v repu), ES_API_TOKEN (Worker API_TOKEN).
+
+on:
+  workflow_dispatch:
+    inputs:
+      bosses:
+        description: "Čísla plánů (02 05) nebo all"
+        type: string
+        default: "all"
+      changes:
+        description: "Výměny / přejmenování navíc: Akka-Meslock, Miky=Hase (oddělené čárkou)"
+        type: string
+        default: ""
+      dry_run:
+        description: "true = jen náhled, nic se neuloží"
+        type: string
+        default: "false"
+      reason:
+        description: "Kdo/co spustil (jen do logu)"
+        type: string
+        default: "manual"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: raidplan
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Sync plans
+        env:
+          RAIDPLAN_PLANS: ${{ secrets.RAIDPLAN_PLANS }}
+          ES_API_TOKEN: ${{ secrets.ES_API_TOKEN }}
+          BOSSES: ${{ inputs.bosses }}
+          CHANGES: ${{ inputs.changes }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REASON: ${{ inputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python -X utf8 tools/raidplan/sync_runner.py
+      - name: Keep plan backups
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raidplan-backups-${{ github.run_id }}
+          path: tools/raidplan/backup_*.json
+          if-no-files-found: ignore
+          retention-days: 30

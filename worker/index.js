@@ -10,6 +10,7 @@
 //   flopik       → worker/flopik.js     /api/flopik/reports, /pulls, /pulls/parse, /refs, /refwin, /refresh, /status
 //   attendance   → worker/attendance.js /api/attendance (+ .csv, DELETE + PATCH admin), /api/es?p=esroster|attendance (addon)
 //   lineups      → worker/lineups.js    /api/lineups (+ .csv), PUT (admin)
+//   raidplan     → worker/raidplan.js   /api/lineups/sync (admin → GitHub Actions raidplan.yml), /sync-result (auth), /sync-status
 //   meta comps   → worker/comps.js      /api/comps (GET, POST auth), /api/comps/refresh (admin), /api/comps/status
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
@@ -28,6 +29,7 @@ import * as flopik from "./flopik.js";
 import { postAttendance, getAttendance, getAttendanceCsv, deleteAttendance, patchAttendance, esEndpoint } from "./attendance.js";
 import { getLineups, putLineups, getLineupsCsv } from "./lineups.js";
 import * as comps from "./comps.js";
+import * as raidplan from "./raidplan.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
@@ -136,6 +138,9 @@ async function route(request, env, ctx, url) {
   if (path === "/api/lineups" && method === "GET") return getLineups(env);
   if (path === "/api/lineups.csv" && method === "GET") return getLineupsCsv(env);
   if (path === "/api/lineups" && method === "PUT") return admin(() => putLineups(request, env));
+  if (path === "/api/lineups/sync" && method === "POST") return admin(() => raidplan.sync(request, env));
+  if (path === "/api/lineups/sync-result" && method === "POST") return auth() || raidplan.syncResult(request, env);
+  if (path === "/api/lineups/sync-status" && method === "GET") return raidplan.syncStatus(env);
 
   // ---- meta sestavy: raider.io first-kill rosters (worker/comps.js)
   if (path === "/api/comps" && method === "GET") return comps.getComps(env, url);
