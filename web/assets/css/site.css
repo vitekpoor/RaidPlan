@@ -84,6 +84,8 @@ h1, h2, h3, h4, h5, h6 { color: var(--ink-strong); margin: 0; line-height: 1.25;
 }
 .main-nav .nav a:hover { color: var(--ink-strong); background: var(--surface2); }
 .main-nav .nav a.active { color: var(--accent); }
+/* skupiny v menu: Omluvenky+Docházka | SimC+Simy | Roster+Sestavy | Flopik | Raid taktiky */
+.main-nav .nav li.sep { margin-left: 8px; padding-left: 10px; border-left: 1px solid var(--line); }
 
 /* druhý řádek hlavičky - bossové / přepínače pohledu */
 .sub-nav {
@@ -195,6 +197,7 @@ footer .credit { font-size: 12px; opacity: .8; }
   .main-nav .nav { margin-left: 0; }
   .main-nav .es-auth { top: 10px; }
   .main-nav .nav a { padding: 6px 8px; font-size: 13px; }
+  .main-nav .nav li.sep { margin-left: 4px; padding-left: 6px; }
   /* jeden posuvný řádek, aby přilepená hlavička nezabírala půl displeje */
   .sub-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .sub-nav::-webkit-scrollbar { display: none; }

@@ -1,0 +1,16 @@
+<!-- Sdílené menu: web/build.mjs ho vloží místo značky "@nav" (HTML komentář) do každé stránky a odkazu aktuální stránky
+     přidá class="active" (na hubu = index.html přepíše index.html#… na #…, aby sekce přepínal hash bez reloadu).
+     Skupiny oddělují <li class="sep">. -->
+<nav class="main-nav">
+  <a href="index.html" class="logo"><span class="mark" aria-hidden="true"></span>Eternal <em>Shadows</em></a>
+  <ul class="nav">
+    <li><a href="index.html#omluvenky" data-sec="omluvenky">Omluvenky</a></li>
+    <li><a href="attendance.html">Docházka</a></li>
+    <li class="sep"><a href="index.html#simc" data-sec="simc">SimC</a></li>
+    <li><a href="loot.html">Simy</a></li>
+    <li class="sep"><a href="roster.html">Roster</a></li>
+    <li><a href="lineups.html">Sestavy</a></li>
+    <li class="sep"><a href="flopik.html">Flopik</a></li>
+    <li class="sep"><a href="raid.html">Raid taktiky</a></li>
+  </ul>
+</nav>
