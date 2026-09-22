@@ -2,8 +2,8 @@
 <!--
   comps.html - Meta sestavy: jaké specy hrály top guildy při PRVNÍM killu každého bosse (raider.io boss rankings →
   tools/raidplan/rio_comps.mjs v GitHub Actions → Worker /api/comps). Stránka z uložených killů spočítá
-  „nejlepší sestavu“ (nejčastější rozložení rolí + nejhranější specy podle průměrného počtu na kill) a „alternativu“
-  (reálná sestava guildy, která je té nejlepší nejblíž, ale liší se). Filtr: počet nejvyšších killů, region.
+  „nejlepší sestavu“ (přesná sestava, se kterou zabilo bosse nejvíc guild) a „alternativu“ (druhá nejčastější přesná
+  sestava) – killy se seskupují podle celé 20členné sestavy, nic se nedopočítává z průměrů. Filtr: počet nejvyšších killů, region.
   Admin může stahování z raider.io spustit tlačítkem (POST /api/comps/refresh → workflow comps.yml).
 -->
 <html lang="cs">
@@ -93,7 +93,7 @@
 <div class="page-content" id="page">
 <div class="heading-section">
   <h4><em>Meta</em> sestavy top guild</h4>
-  <p>Jaké specy hrály nejlepší guildy světa při svém prvním killu bosse (raider.io). Nejhranější složení = doporučená sestava, k ní nejbližší reálná sestava jako alternativa.</p>
+  <p>Jaké specy hrály nejlepší guildy světa při svém prvním killu bosse (raider.io). Sestava, se kterou zabilo bosse nejvíc guild = nejlepší; druhá nejčastější = alternativa. Obě jsou přesně tak, jak s nimi guildy killovaly.</p>
 </div>
 
 <nav class="sub-nav" id="bosses"></nav>
@@ -110,7 +110,7 @@
 <div id="content"></div>
 
 <p class="hint">Data: <a href="https://raider.io/" target="_blank" rel="noopener">raider.io</a> – žebříček bosse (Mythic, celý svět) a sestava PRVNÍHO killu každé guildy (20 postav se specem). Guildy bez nahraného logu nebo se skrytou sestavou a killy s neúplnou sestavou (méně než 20 postav) se vynechávají.
-Nejlepší sestava: nejčastější rozložení rolí (tank / heal / DPS) mezi vybranými killy, sloty každé role obsazené podle průměrného počtu specu na kill (metoda největšího zbytku). Alternativa: skutečná sestava guildy s nejmenším rozdílem od nejlepší (nejméně vyměněných slotů), která není totožná.
+Killy se seskupí podle přesné sestavy (20 speců); nejlepší sestava = ta, se kterou zabilo bosse nejvíc guild, alternativa = druhá nejčastější (při shodě rozhoduje lepší umístění). Nic se nedopočítává z průměrů.
 Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skript <code>tools/raidplan/rio_comps.mjs</code>), admin může spustit ručně. Naše sestavy: <a href="lineups.html">Boss sestavy</a>.</p>
 </div>
 </div>
@@ -230,27 +230,19 @@ Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skr
     });
     Object.keys(specs).forEach(function (key) { var s = specs[key]; s.role = roleOf[key] || "dps"; s.melee = !!meleeOf[key]; s.avg = s.total / n; s.pct = s.kills / n; });
     var splitList = Object.keys(splits).map(function (k) { return { split: k, n: splits[k], parts: k.split("/").map(Number) }; }).sort(function (a, b) { return b.n - a.n || a.split.localeCompare(b.split); });
-    var best = {}, mode = splitList[0];
-    ROLES.forEach(function (role, ri) {
-      var slots = mode.parts[ri];
-      var cand = Object.keys(specs).map(function (k) { return specs[k]; }).filter(function (s) { return s.role === role; }).sort(function (a, b) { return b.avg - a.avg || b.pct - a.pct; });
-      var used = 0;
-      cand.forEach(function (s) { s.take = Math.floor(s.avg); used += s.take; });
-      if (used > slots) { cand.slice().sort(function (a, b) { return a.avg - b.avg; }).forEach(function (s) { while (used > slots && s.take > 0) { s.take--; used--; } }); }
-      cand.slice().sort(function (a, b) { return (b.avg - Math.floor(b.avg)) - (a.avg - Math.floor(a.avg)) || b.pct - a.pct; }).forEach(function (s) { if (used < slots) { s.take++; used++; } });
-      cand.forEach(function (s) { if (s.take) best[s.key] = s.take; delete s.take; });
-    });
-    // alternative = real kill roster closest to "best" (fewest swapped slots) that is not identical
-    var alt = null;
+    // group the kills by their EXACT roster (multiset of specs); best = the roster most guilds killed with,
+    // alternative = the second most common one (ties → the roster with the better rank)
+    var groups = {};
     kills.forEach(function (k) {
-      var c = counts(k.roster), d = 0, keys = {};
-      Object.keys(c).forEach(function (x) { keys[x] = 1; }); Object.keys(best).forEach(function (x) { keys[x] = 1; });
-      Object.keys(keys).forEach(function (x) { d += Math.abs((c[x] || 0) - (best[x] || 0)); });
-      d /= 2;
-      if (d > 0 && (!alt || d < alt.d || (d === alt.d && k.rank < alt.kill.rank))) alt = { kill: k, d: d, counts: c };
+      var c = counts(k.roster), sig = Object.keys(c).sort().map(function (x) { return x + ":" + c[x]; }).join("|");
+      var g = groups[sig] = groups[sig] || { sig: sig, counts: c, kills: [] };
+      g.kills.push(k);
     });
-    var exact = kills.filter(function (k) { var c = counts(k.roster); return Object.keys(best).every(function (x) { return c[x] === best[x]; }) && Object.keys(c).length === Object.keys(best).length; });
-    return { n: n, specs: specs, splits: splitList, best: best, alt: alt, exact: exact };
+    var groupList = Object.keys(groups).map(function (x) { return groups[x]; });
+    groupList.forEach(function (g) { g.kills.sort(function (x, y) { return x.rank - y.rank; }); g.n = g.kills.length; g.bestRank = g.kills[0].rank; });
+    groupList.sort(function (x, y) { return y.n - x.n || x.bestRank - y.bestRank; });
+    var best = groupList[0].counts, alt = groupList[1] || null;
+    return { n: n, specs: specs, splits: splitList, best: best, bestGroup: groupList[0], alt: alt, groups: groupList };
   }
 
   // ---------------------------------------------------------------- rendering
@@ -272,27 +264,40 @@ Stahuje se každou středu po resetu (GitHub Actions <code>comps.yml</code>, skr
     var kills = selectedKills();
     if (!kills.length) { $("#content").innerHTML = '<p class="hint">Pro tento výběr není žádný kill s úplnou 20člennou sestavou.</p>'; return; }
     var a = analyze(kills), best = a.best, mode = a.splits[0];
-    var altHtml = "";
+    function guildList(g) {
+      return g.kills.map(function (k) { return '<a href="' + guildUrl(k) + '" target="_blank" rel="noopener" title="' + esc((REGION_CZ[k.region] || k.region.toUpperCase()) + " · " + k.realm + (k.defeatedAt ? " · kill " + fmtDate(k.defeatedAt) : "")) + '">' + esc(k.guild) + "</a> <small>(" + k.rank + ".)</small>"; }).join(", ");
+    }
+    function guildsWord(n) { return n === 1 ? "guilda" : n < 5 ? "guildy" : "guild"; }
+    function meleeRanged(cnt) {
+      var melee = 0, ranged = 0;
+      Object.keys(cnt).forEach(function (x) { var s = a.specs[x]; if (s && s.role === "dps") { if (s.melee) melee += cnt[x]; else ranged += cnt[x]; } });
+      return melee + " melee + " + ranged + " ranged";
+    }
+    function roleSplit(cnt) {
+      var r = { tank: 0, healer: 0, dps: 0 };
+      Object.keys(cnt).forEach(function (x) { var s = a.specs[x]; if (s) r[s.role] += cnt[x]; });
+      return r.tank + " / " + r.healer + " / " + r.dps;
+    }
+    var bg = a.bestGroup;
+    var bestHtml = '<div class="card"><h5>Nejlepší sestava <em>' + bg.n + " z " + a.n + " killů (" + Math.round(bg.n / a.n * 100) + " %)</em></h5><p class=\"sub\">Přesně s touto sestavou zabilo bosse nejvíc guild: " + guildList(bg) +
+      ". Role " + roleSplit(best) + ", DPS " + meleeRanged(best) + ".</p>" + rosterBlock(best, a.specs) +
+      '<div class="dist"><b>Rozložení rolí ve všech vybraných killech:</b>' + a.splits.slice(0, 4).map(function (sp) {
+        return '<div class="row"><span class="lbl">' + sp.parts[0] + " tank · " + sp.parts[1] + " heal · " + sp.parts[2] + ' DPS</span><span class="barw"><i style="width:' + Math.round(sp.n / a.n * 100) + '%"></i></span><span class="pct">' + sp.n + " killů (" + Math.round(sp.n / a.n * 100) + " %)</span></div>";
+      }).join("") + "</div></div>";
+    var altHtml;
     if (a.alt) {
-      var k = a.alt.kill, plus = {}, minus = [];
-      Object.keys(a.alt.counts).forEach(function (x) { var diff = a.alt.counts[x] - (best[x] || 0); if (diff > 0) plus[x] = diff; });
-      Object.keys(best).forEach(function (x) { var diff = best[x] - (a.alt.counts[x] || 0); if (diff > 0) minus.push(chip(x, { n: diff }, true)); });
-      altHtml = '<div class="card"><h5>Alternativní sestava <em>' + esc(k.guild) + "</em></h5><p class=\"sub\">Reálná sestava nejblíž té nejlepší: <a href=\"" + guildUrl(k) + "\" target=\"_blank\" rel=\"noopener\">" + esc(k.guild) + " ↗</a> (" +
-        esc(REGION_CZ[k.region] || k.region.toUpperCase()) + ", " + k.rank + ". kill" + (k.defeatedAt ? " " + fmtDate(k.defeatedAt) : "") + (k.ilvlAvg ? ", ilvl " + k.ilvlAvg : "") + "), liší se v " + a.alt.d + (a.alt.d === 1 ? " slotu" : a.alt.d < 5 ? " slotech" : " slotech") + ".</p>" +
-        rosterBlock(a.alt.counts, a.specs, plus) +
-        '<div class="diff">Oproti nejlepší: <b>navíc</b> ' + Object.keys(plus).map(function (x) { return chip(x, { n: plus[x] }, true); }).join(" ") + " · <b>místo</b> " + minus.join(" ") + "</div></div>";
-    } else altHtml = '<div class="card"><h5>Alternativní sestava</h5><p class="sub">Všechny vybrané killy mají stejnou sestavu jako nejlepší – alternativa není.</p></div>';
-    var splitHtml = a.splits.slice(0, 4).map(function (s) {
-      return '<div class="row"><span class="lbl">' + s.parts[0] + " tank · " + s.parts[1] + " heal · " + s.parts[2] + ' DPS</span><span class="barw"><i style="width:' + Math.round(s.n / a.n * 100) + '%"></i></span><span class="pct">' + s.n + " killů (" + Math.round(s.n / a.n * 100) + " %)</span></div>";
-    }).join("");
-    var melee = 0, ranged = 0;
-    Object.keys(best).forEach(function (x) { var s = a.specs[x]; if (s && s.role === "dps") { if (s.melee) melee += best[x]; else ranged += best[x]; } });
-    var bestHtml = '<div class="card"><h5>Nejlepší sestava <em>' + a.n + " killů</em></h5><p class=\"sub\">Nejčastější rozložení rolí " + mode.parts[0] + " / " + mode.parts[1] + " / " + mode.parts[2] + " (" + Math.round(mode.n / a.n * 100) + " % killů), DPS " + melee + " melee + " + ranged + " ranged; sloty obsazené podle průměrného počtu specu na kill." +
-      (a.exact.length ? " Přesně takto hrálo " + a.exact.length + (a.exact.length === 1 ? " guilda" : a.exact.length < 5 ? " guildy" : " guild") + " (" + a.exact.slice(0, 3).map(function (k) { return esc(k.guild); }).join(", ") + (a.exact.length > 3 ? "…" : "") + ")." : " Přesně takto nehrála žádná guilda.") + "</p>" +
-      rosterBlock(best, a.specs) + '<div class="dist"><b>Rozložení rolí:</b>' + splitHtml + "</div></div>";
+      var ag = a.alt, plus = {}, minus = [], d = 0;
+      Object.keys(ag.counts).forEach(function (x) { var diff = ag.counts[x] - (best[x] || 0); if (diff > 0) { plus[x] = diff; d += diff; } });
+      Object.keys(best).forEach(function (x) { var diff = best[x] - (ag.counts[x] || 0); if (diff > 0) minus.push(chip(x, { n: diff }, true)); });
+      var others = a.groups.length - 2;
+      altHtml = '<div class="card"><h5>Alternativní sestava <em>' + ag.n + " z " + a.n + " killů (" + Math.round(ag.n / a.n * 100) + " %)</em></h5><p class=\"sub\">Druhá nejčastější přesná sestava: " + guildList(ag) +
+        ". Role " + roleSplit(ag.counts) + ", DPS " + meleeRanged(ag.counts) + ".</p>" + rosterBlock(ag.counts, a.specs, plus) +
+        '<div class="diff">Oproti nejlepší (' + d + (d === 1 ? " slot" : d < 5 ? " sloty" : " slotů") + "): <b>navíc</b> " + Object.keys(plus).map(function (x) { return chip(x, { n: plus[x] }, true); }).join(" ") + " · <b>místo</b> " + minus.join(" ") +
+        (others > 0 ? "<br>Dalších " + others + " odlišných sestav" + (others === 1 ? "u" : "") + " (" + a.groups.slice(2).filter(function (g) { return g.n > 1; }).length + " opakovan" + (a.groups.slice(2).filter(function (g) { return g.n > 1; }).length === 1 ? "á" : "é") + ") – viz tabulka killů." : "") + "</div></div>";
+    } else altHtml = '<div class="card"><h5>Alternativní sestava</h5><p class="sub">Všechny vybrané killy mají stejnou sestavu – alternativa není.</p></div>';
     // spec table: one small table per role, side by side; specs seen in < 3 % of kills are dimmed
     var specList = Object.keys(a.specs).map(function (k) { return a.specs[k]; }).sort(function (x, y) { return y.avg - x.avg || y.pct - x.pct; });
-    var specHtml = '<h5 class="sec">Specy<span>Ø na kill · podíl killů se specem · max v jednom killu · sloty v nejlepší sestavě · kdo z nás spec hraje (main / alt / <span style="opacity:.6">lavička</span>)</span></h5><div class="specgrid">' + ROLES.map(function (role) {
+    var specHtml = '<h5 class="sec">Specy<span>Ø na kill · podíl killů se specem · max v jednom killu · počet v nejlepší sestavě · kdo z nás spec hraje (main / alt / <span style="opacity:.6">lavička</span>)</span></h5><div class="specgrid">' + ROLES.map(function (role) {
       var rows = specList.filter(function (s) { return s.role === role; }).map(function (s) {
         var ours = (state.ours[s.key] || []).slice().sort(function (x, y) { return (x.bench - y.bench) || (y.main - x.main); });
         var oursHtml = ours.map(function (o) { return (o.bench ? '<span title="lavička" style="opacity:.6">' : "<b>") + esc(o.player) + (o.main ? "" : " (alt)") + (o.bench ? "</span>" : "</b>"); }).join(", ");
