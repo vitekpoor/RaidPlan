@@ -217,3 +217,6 @@ footer .credit { font-size: 12px; opacity: .8; }
 .es-auth-pop button:disabled { opacity: .6; }
 .es-auth-pop .es-auth-err { display: block; color: var(--dps); margin-top: 6px; min-height: 1.2em; }
 .es-auth-pop p { margin: 0 0 8px; }
+
+/* atribut hidden vyhrává nad display tříd (.btn, .seg…) – tlačítka Upravit / Uložit / Zrušit se střídají */
+[hidden] { display: none !important; }

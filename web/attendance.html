@@ -3,7 +3,9 @@
   attendance.html - Docházka (záznamy z addonu ES Attendance, GET /api/attendance) a přehled absencí
   (GET /api/absence) jako matice hráči × dny – náhrada listů „Docházka“ a „Absence přehled“.
   Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance (přihlášený admin – tlačítko vpravo nahoře).
-  Přihlášený admin může smazat den docházky nebo jednotlivou absenci. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
+  Přihlášený admin může docházku upravovat (Upravit → buňky jako dropdown ano/ne/omluvenka/pozdě → Uložit = PATCH /api/attendance),
+  smazat den docházky nebo jednotlivou absenci. Dny jsou od nejnovějšího; sloupce Absence / Bez oml. = podíl raidů, kde hráč chyběl
+  (vůbec / bez omluvenky) z raidů, kde je v záznamu. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
 -->
 <html lang="cs">
 <head>
@@ -35,8 +37,12 @@
   .mx td:first-child, .mx th:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); z-index: 1; font-weight: 600; }
   .mx tbody tr:nth-child(odd) td { background: rgba(255,255,255,.025); }
   .mx tbody tr:nth-child(odd) td:first-child { background: #131715; }
-  .mx tr.bench td { color: var(--muted); }
-  .mx tr.sep td { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding-top: 10px; background: transparent !important; text-align: left; }
+  .mx td.pct { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .mx td.pct.bad { color: var(--dps); }
+  .mx th.pct { font-size: 10.5px; }
+  select.cell { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font: inherit; font-size: 12px; min-width: 6rem; cursor: pointer; }
+  select.cell.ano { background: #9bd9a8; color: #111; } select.cell.ne { background: #e88b8b; color: #111; } select.cell.omluvenka { background: #f2d488; color: #111; } select.cell.pozdě { background: #f4b473; color: #111; }
+  select.cell option { background: var(--surface2); color: var(--ink); }
   .mx tfoot td { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
   .m { display: inline-block; min-width: 3.4rem; padding: 1px 7px; border-radius: 4px; font-weight: 600; font-size: 12px; color: #111; }
   .m.ano { background: #9bd9a8; } .m.ne { background: #e88b8b; } .m.omluvenka { background: #f2d488; } .m.pozdě { background: #f4b473; }
@@ -86,6 +92,11 @@
   <span id="status"></span>
   <span class="sp"></span>
   <span id="msg"></span>
+  <span id="adminbox" hidden>
+    <button class="btn-outline" id="edit" type="button">Upravit</button>
+    <button class="btn" id="save" type="button" hidden>Uložit</button>
+    <button class="btn-outline" id="cancel" type="button" hidden>Zrušit</button>
+  </span>
 </div>
 
 <div class="wrap"><table class="mx" id="mx"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
@@ -113,8 +124,9 @@
   var CLASS_COLOR = { "death knight": "#C41E3A", "demon hunter": "#A330C9", druid: "#FF7C0A", evoker: "#33937F", hunter: "#AAD372", mage: "#3FC7EB",
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
   var $ = function (s) { return document.querySelector(s); };
-  var state = { view: "att", token: window.esAuth ? esAuth.token() : null, roster: [], att: null, abs: null };
-  if (window.esAuth) esAuth.onChange(function (t) { state.token = t; render(); });
+  var STATES = ["ano", "ne", "omluvenka", "pozdě"];
+  var state = { view: "att", token: window.esAuth ? esAuth.token() : null, roster: [], att: null, abs: null, edit: false, draft: {} };
+  if (window.esAuth) esAuth.onChange(function (t) { state.token = t; if (!t) { state.edit = false; state.draft = {}; } render(); });
   try { state.view = localStorage.getItem("attView") || "att"; } catch (e) {}
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
@@ -123,7 +135,7 @@
   var today = new Date();
   $("#from").value = iso(new Date(today.getTime() - 60 * 86400000)); $("#to").value = iso(new Date(today.getTime() + 60 * 86400000));
   function mainClass(name) { var p = state.roster.filter(function (x) { return x.name === name; })[0]; var m = p && (p.characters.filter(function (c) { return c.main; })[0] || p.characters[0]); return m ? m.class : ""; }
-  function nameCell(name, bench) { return '<td style="color:' + (CLASS_COLOR[String(mainClass(name)).toLowerCase()] || "var(--ink)") + '">' + esc(name) + "</td>"; }
+  function nameCell(name) { return '<td style="color:' + (CLASS_COLOR[String(mainClass(name)).toLowerCase()] || "var(--ink)") + '">' + esc(name) + "</td>"; }
 
   function load() {
     var from = $("#from").value, to = $("#to").value;
@@ -140,26 +152,32 @@
   }
 
   function renderAtt() {
-    var a = state.att, days = a.days || [];
-    var head = "<tr><th>Hráč</th>" + days.map(function (d) { var dd = day(d.date); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "<small>" + esc(d.time) + (state.token ? ' <span class="x" data-del="' + d.date + '" title="smazat den">✕</span>' : "") + "</small></th>"; }).join("") + "</tr>";
+    var a = state.att, edit = state.edit && !!state.token;
+    var days = (a.days || []).slice().sort(function (x, y) { return x.date < y.date ? 1 : x.date > y.date ? -1 : 0; });   // nejnovější první
+    var head = "<tr><th>Hráč</th>" +
+      '<th class="pct" title="podíl raidů, kde hráč chyběl (ne + omluvenka + pozdě), z raidů, kde je v záznamu">Absence</th>' +
+      '<th class="pct" title="podíl raidů, kde hráč chyběl bez omluvenky (ne)">Bez oml.</th>' +
+      days.map(function (d) { var dd = day(d.date); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "<small>" + esc(d.time) + (edit ? ' <span class="x" data-del="' + d.date + '" title="smazat den">✕</span>' : "") + "</small></th>"; }).join("") + "</tr>";
     var rows = [], counts = days.map(function () { return { ano: 0, ne: 0, omluvenka: 0, "pozdě": 0 }; });
-    var groups = [["Raid roster", state.roster.filter(function (p) { return !p.bench; })], ["Lavička", state.roster.filter(function (p) { return p.bench; })]];
-    if (a.extra && a.extra.length) groups.push(["Mimo roster", a.extra.map(function (n) { return { name: n }; })]);
-    groups.forEach(function (g) {
-      if (!g[1].length) return;
-      if (state.roster.some(function (p) { return p.bench; }) || g[0] === "Mimo roster") rows.push('<tr class="sep"><td colspan="' + (days.length + 1) + '">' + g[0] + "</td></tr>");
-      g[1].forEach(function (p) {
-        rows.push('<tr class="' + (p.bench ? "bench" : "") + '">' + nameCell(p.name) + days.map(function (d, i) {
-          var m = (a.marks[d.date] || {})[p.name];
-          if (!m) return "<td></td>";
-          counts[i][m.state] = (counts[i][m.state] || 0) + 1;
-          return '<td><span class="m ' + esc(m.state) + '" title="' + esc(m.char || "") + '">' + esc(m.state) + "</span></td>";
-        }).join("") + "</tr>");
-      });
+    var people = state.roster.map(function (p) { return p.name; }).concat(a.extra || []);
+    people.forEach(function (name) {
+      var n = 0, abs = 0, bad = 0;
+      var cells = days.map(function (d, i) {
+        var key = d.date + "|" + name, m = (a.marks[d.date] || {})[name];
+        var st = edit && key in state.draft ? state.draft[key] : (m ? m.state : "");
+        if (st) { n++; counts[i][st] = (counts[i][st] || 0) + 1; if (st !== "ano") abs++; if (st === "ne") bad++; }
+        if (edit) return '<td><select class="cell' + (st ? " " + esc(st) : "") + '" data-date="' + d.date + '" data-player="' + esc(name) + '">' +
+          [""].concat(STATES).map(function (x) { return '<option value="' + esc(x) + '"' + (x === st ? " selected" : "") + ">" + (x || "–") + "</option>"; }).join("") + "</select></td>";
+        return st ? '<td><span class="m ' + esc(st) + '" title="' + esc(m && m.char || "") + '">' + esc(st) + "</span></td>" : "<td></td>";
+      }).join("");
+      var pct = function (x) { return n ? Math.round(100 * x / n) + " %" : "–"; };
+      rows.push("<tr>" + nameCell(name) + '<td class="pct" title="chyběl ' + abs + " z " + n + '">' + pct(abs) + '</td><td class="pct' + (bad ? " bad" : "") + '" title="bez omluvenky ' + bad + " z " + n + '">' + pct(bad) + "</td>" + cells + "</tr>");
     });
-    var foot = "<tr><td>Přítomno / chybí</td>" + counts.map(function (c) { return "<td>" + c.ano + " / " + (c.ne + c.omluvenka + c["pozdě"]) + (c.omluvenka || c["pozdě"] ? ' <span class="cnt">(' + (c.omluvenka ? c.omluvenka + " oml." : "") + (c.omluvenka && c["pozdě"] ? ", " : "") + (c["pozdě"] ? c["pozdě"] + " pozdě" : "") + ")</span>" : "") + "</td>"; }).join("") + "</tr>";
-    $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (days.length + 1) + '" class="cnt">Žádné záznamy v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = days.length ? foot : "";
-    $("#hint").textContent = "Docházku zapisuje addon ES Attendance (řádek = hráč z rosteru, sloupec = raid). Najeď na buňku – ukáže se postava, se kterou hráč přišel. Sloupce st / čt / ne jsou raidové dny.";
+    var foot = "<tr><td>Přítomno / chybí</td><td></td><td></td>" + counts.map(function (c) { return "<td>" + c.ano + " / " + (c.ne + c.omluvenka + c["pozdě"]) + (c.omluvenka || c["pozdě"] ? ' <span class="cnt">(' + (c.omluvenka ? c.omluvenka + " oml." : "") + (c.omluvenka && c["pozdě"] ? ", " : "") + (c["pozdě"] ? c["pozdě"] + " pozdě" : "") + ")</span>" : "") + "</td>"; }).join("") + "</tr>";
+    $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (days.length + 3) + '" class="cnt">Žádné záznamy v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = days.length ? foot : "";
+    $("#hint").textContent = edit
+      ? "Vyber v buňce ano / ne / omluvenka / pozdě („–“ = hráč v ten den v záznamu nebude). Omluvenka a pozdě zapíšou hráči i absenci na ten den, „ne“ ji smaže. ✕ u dne smaže celý den. Nic se neuloží, dokud nedáš Uložit."
+      : "Docházku zapisuje addon ES Attendance (řádek = hráč z rosteru, sloupec = raid, nejnovější vlevo). Absence = podíl raidů, kde hráč chyběl (včetně omluvenek a pozdních příchodů), Bez oml. = chyběl bez omluvenky; počítá se z raidů, kde je hráč v záznamu. Najeď na buňku – ukáže se postava, se kterou hráč přišel. Sloupce st / čt / ne jsou raidové dny.";
   }
   function renderAbs() {
     var a = state.abs, marks = a.marks || [];
@@ -167,17 +185,12 @@
     var byKey = {}; marks.forEach(function (m) { byKey[m.player.toLowerCase() + "|" + m.date] = m; });
     var head = "<tr><th>Hráč</th>" + dates.map(function (d) { var dd = day(d); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "</th>"; }).join("") + "</tr>";
     var rows = [];
-    var groups = [["Raid roster", state.roster.filter(function (p) { return !p.bench; })], ["Lavička", state.roster.filter(function (p) { return p.bench; })]];
-    groups.forEach(function (g) {
-      if (!g[1].length) return;
-      if (state.roster.some(function (p) { return p.bench; })) rows.push('<tr class="sep"><td colspan="' + (dates.length + 1) + '">' + g[0] + "</td></tr>");
-      g[1].forEach(function (p) {
-        rows.push('<tr class="' + (p.bench ? "bench" : "") + '">' + nameCell(p.name) + dates.map(function (d) {
-          var m = byKey[p.name.toLowerCase() + "|" + d];
-          if (!m) return "<td></td>";
-          return '<td><span class="m ' + esc(m.type) + (state.token ? " del" : "") + '" data-id="' + m.id + '" title="nahlášeno ' + esc(new Date(m.createdAt).toLocaleString("cs-CZ")) + (state.token ? " · klik = smazat" : "") + '">' + (m.type === "late" ? "pozdě" : "X") + "</span></td>";
-        }).join("") + "</tr>");
-      });
+    state.roster.forEach(function (p) {
+      rows.push("<tr>" + nameCell(p.name) + dates.map(function (d) {
+        var m = byKey[p.name.toLowerCase() + "|" + d];
+        if (!m) return "<td></td>";
+        return '<td><span class="m ' + esc(m.type) + (state.token ? " del" : "") + '" data-id="' + m.id + '" title="nahlášeno ' + esc(new Date(m.createdAt).toLocaleString("cs-CZ")) + (state.token ? " · klik = smazat" : "") + '">' + (m.type === "late" ? "pozdě" : "X") + "</span></td>";
+      }).join("") + "</tr>");
     });
     var foot = "<tr><td>Chybí / pozdě</td>" + dates.map(function (d) { var n = marks.filter(function (m) { return m.date === d && m.type === "absent"; }).length, l = marks.filter(function (m) { return m.date === d && m.type === "late"; }).length; return "<td>" + n + (l ? " / " + l : "") + "</td>"; }).join("") + "</tr>";
     $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (dates.length + 1) + '" class="cnt">Žádné nahlášené absence v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = dates.length ? foot : "";
@@ -186,13 +199,37 @@
   function render() {
     document.querySelectorAll(".seg button").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); });
     $("#send").hidden = !state.token; $("#rec").disabled = !state.token; $("#rechint").hidden = !!state.token;
+    if (state.view !== "att") { state.edit = false; state.draft = {}; }
+    $("#adminbox").hidden = !(state.token && state.view === "att"); $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
     if (state.view === "abs") renderAbs(); else renderAtt();
   }
+  // editace docházky: změny se sbírají do draftu (datum|hráč → stav), uloží se najednou
+  $("#mx").addEventListener("change", function (ev) {
+    var sel = ev.target.closest("select.cell"); if (!sel || !state.edit) return;
+    var key = sel.dataset.date + "|" + sel.dataset.player, orig = ((state.att.marks[sel.dataset.date] || {})[sel.dataset.player] || {}).state || "";
+    if (sel.value === orig) delete state.draft[key]; else state.draft[key] = sel.value;
+    sel.className = "cell" + (sel.value ? " " + sel.value : "");
+  });
+  $("#edit").addEventListener("click", function () { state.edit = true; state.draft = {}; msg(true, ""); render(); });
+  $("#cancel").addEventListener("click", function () { state.edit = false; state.draft = {}; render(); });
+  $("#save").addEventListener("click", function () {
+    var changes = Object.keys(state.draft).map(function (k) { var i = k.indexOf("|"); return { date: k.slice(0, i), player: k.slice(i + 1), state: state.draft[k] }; });
+    if (!changes.length) { state.edit = false; render(); return; }
+    $("#save").disabled = true; msg(true, "Ukládám…");
+    fetch(API_BASE + "/api/attendance", { method: "PATCH", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + state.token }, body: JSON.stringify({ changes: changes }) })
+      .then(function (r) { return r.json().then(function (d) { d._status = r.status; return d; }); }).then(function (d) {
+        if (d._status === 401) { esAuth.logout(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); }
+        if (!d.ok) throw new Error(d.error || "uložení selhalo");
+        state.edit = false; state.draft = {}; msg(true, "✔ Uloženo: " + d.changed + " změn."); return load();
+      }).catch(function (err) { msg(false, "⚠ " + err.message); }).then(function () { $("#save").disabled = false; });
+  });
+  window.addEventListener("beforeunload", function (ev) { if (state.edit && Object.keys(state.draft).length) { ev.preventDefault(); ev.returnValue = ""; } });
   document.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { state.view = b.dataset.view; try { localStorage.setItem("attView", state.view); } catch (e) {} render(); }); });
   $("#from").addEventListener("change", load); $("#to").addEventListener("change", load);
   $("#mx").addEventListener("click", function (ev) {
     var del = ev.target.closest("[data-del]"), mark = ev.target.closest(".m.del");
     if (!state.token || (!del && !mark)) return;
+    if (del) { state.edit = false; state.draft = {}; }
     var url = del ? "/api/attendance?date=" + del.dataset.del : "/api/absence?id=" + mark.dataset.id;
     if (!confirm(del ? "Smazat docházku za " + del.dataset.del + "?" : "Smazat tuhle absenci?")) return;
     fetch(API_BASE + url, { method: "DELETE", headers: { "Authorization": "Bearer " + state.token } }).then(function (r) { return r.json(); })

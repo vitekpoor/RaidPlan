@@ -8,7 +8,7 @@
 //   roster       → worker/roster.js     /api/roster (+ .csv), PUT (admin), /api/admin/login, /api/admin/check
 //   absence      → worker/absence.js    /api/absence (+ .csv), DELETE (admin), /api/absence/import (admin)
 //   flopik       → worker/flopik.js     /api/flopik/reports, /pulls, /pulls/parse, /refs, /refwin, /refresh, /status
-//   attendance   → worker/attendance.js /api/attendance (+ .csv, DELETE admin), /api/es?p=esroster|attendance (addon)
+//   attendance   → worker/attendance.js /api/attendance (+ .csv, DELETE + PATCH admin), /api/es?p=esroster|attendance (addon)
 //   lineups      → worker/lineups.js    /api/lineups (+ .csv), PUT (admin)
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
@@ -23,7 +23,7 @@ import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./l
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
 import * as flopik from "./flopik.js";
-import { postAttendance, getAttendance, getAttendanceCsv, deleteAttendance, esEndpoint } from "./attendance.js";
+import { postAttendance, getAttendance, getAttendanceCsv, deleteAttendance, patchAttendance, esEndpoint } from "./attendance.js";
 import { getLineups, putLineups, getLineupsCsv } from "./lineups.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
@@ -126,6 +126,7 @@ async function route(request, env, ctx, url) {
   if (path === "/api/attendance" && method === "GET") return getAttendance(env, url);
   if (path === "/api/attendance.csv" && method === "GET") return getAttendanceCsv(env, url);
   if (path === "/api/attendance" && method === "DELETE") return admin(() => deleteAttendance(env, url));
+  if (path === "/api/attendance" && method === "PATCH") return admin(() => patchAttendance(request, env));
   if (path === "/api/es" && method === "GET") return esEndpoint(env, url);
 
   // ---- boss lineups (worker/lineups.js)

@@ -6,6 +6,9 @@
 //                                    state = ano | ne | omluvenka (absent + absence X that day) | pozdě (absent + "přijdu pozdě")
 //   GET  /api/attendance.csv         the old sheet layout ("Hráč", "16.9.2026 (19:13)", … / ano, ne, omluvenka, pozdě)
 //   DELETE /api/attendance?date=     (admin)
+//   PATCH  /api/attendance           (admin) { changes: [{ date, player, state: ano | ne | omluvenka | pozdě | "" }] } – cell edits from
+//                                    attendance.html: upserts the attendance row ("" deletes it); omluvenka / pozdě also upsert the
+//                                    player's absence for that day (source admin), ne deletes it, ano leaves absences alone.
 //   GET  /api/es?p=esroster[&raw=1]  roster text for the addon's /esa import (ESROSTER;version + Hráč;char;class;role;alt;class;role);
 //        /api/es?p=attendance        → the attendance page (the addon prints both URLs; set /esa url https://…/api/es in game)
 
@@ -109,6 +112,36 @@ export async function getAttendanceCsv(env, url) {
   const lines = [csvLine(head)];
   for (const n of names) lines.push(csvLine([n, ...m.days.map((d) => ((m.marks[d.date] || {})[n] || {}).state || "")]));
   return new Response(lines.join("\r\n") + "\r\n", { headers: { "content-type": "text/csv; charset=utf-8", "cache-control": "no-store", ...CORS } });
+}
+
+const PATCH_STATES = { ano: [1, null], ne: [0, "delete"], omluvenka: [0, "absent"], "pozdě": [0, "late"] };
+
+export async function patchAttendance(request, env) {
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ ok: false, error: "JSON body required" }, 400); }
+  const changes = Array.isArray(body.changes) ? body.changes : [];
+  if (!changes.length) return json({ ok: false, error: "changes[] required" }, 400);
+  const roster = await loadRoster(env);
+  const byKey = new Map(roster.map((p) => [nameKey(p.name), p.name]));
+  const days = new Map((await env.DB.prepare("SELECT id, date FROM attendance_days").all()).results.map((d) => [d.date, d.id]));
+  const now = nowIso();
+  const stmts = [];
+  for (const c of changes) {
+    const date = String(c.date || ""), player = String(c.player || "").trim(), st = String(c.state || "");
+    if (!days.has(date)) return json({ ok: false, error: `Den ${date} v docházce není.` }, 400);
+    if (!player) return json({ ok: false, error: "player required" }, 400);
+    if (st && !PATCH_STATES[st]) return json({ ok: false, error: `Neznámý stav „${st}“.` }, 400);
+    const key = nameKey(player), name = byKey.get(key) || player, dayId = days.get(date);
+    if (!st) { stmts.push(env.DB.prepare("DELETE FROM attendance WHERE day_id = ?1 AND player_key = ?2").bind(dayId, key)); continue; }
+    const [present, abs] = PATCH_STATES[st];
+    stmts.push(env.DB.prepare(`INSERT INTO attendance (day_id, player, player_key, present, character) VALUES (?1, ?2, ?3, ?4, '')
+      ON CONFLICT(day_id, player_key) DO UPDATE SET present = excluded.present, player = excluded.player`).bind(dayId, name, key, present));
+    if (abs === "delete") stmts.push(env.DB.prepare("DELETE FROM absences WHERE player_key = ?1 AND date = ?2").bind(key, date));
+    else if (abs) stmts.push(env.DB.prepare(`INSERT INTO absences (player, player_key, date, type, source, created_at) VALUES (?1, ?2, ?3, ?4, 'admin', ?5)
+      ON CONFLICT(player_key, date) DO UPDATE SET type = excluded.type, source = excluded.source`).bind(name, key, date, abs, now));
+  }
+  await env.DB.batch(stmts);
+  return json({ ok: true, changed: changes.length });
 }
 
 export async function deleteAttendance(env, url) {

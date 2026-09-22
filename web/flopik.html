@@ -578,9 +578,9 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
       $("bosses").innerHTML = $("tabs").innerHTML = $("strip").innerHTML = $("legend").innerHTML = "";
       $("wrap").hidden = true;
       if (o) renderSelect(o);
-      var computing = o && refreshing === o.code;
+      var computing = !!(o && o.code && (refreshing === o.code || running[o.code]));
       $("loading").hidden = !computing; $("empty").hidden = computing;
-      if (computing) { $("loadingMsg").textContent = "Načítám pully z Warcraft Logs"; $("loadingSub").textContent = o.title + " · první výsledky se objeví za chvíli"; }
+      if (computing) { $("loadingMsg").textContent = "Počítám pully z Warcraft Logs"; $("loadingSub").textContent = o.title + " · GitHub Actions, první výsledky za 1–3 min"; }
       $("empty").innerHTML = NIGHTS === null && !REPORTS.length
         ? "Data se nepodařilo načíst (API databáze neodpovědělo)."
         : o ? (refreshing === o.code ? "Načítám pully z Warcraft Logs (" + esc(o.title) + ")… první výsledky se objeví za chvíli."
@@ -759,7 +759,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
   }
 
   // --- data loading ----------------------------------------------------
-  var lastText = null, refreshing = null, refreshTimer = null, checked = {}, refsWerePending = false;
+  var lastText = null, refreshing = null, refreshTimer = null, checked = {}, refsWerePending = false, running = {};   // running[code] = runner běží (ze /status)
   var LIVE_MS = 90 * 60000;   // report whose last fight ended less than 90 min ago may still grow
   function isLive(o) { var r = REPORTS.filter(function (x) { return x.code === o.code; })[0]; return !!(r && Date.now() - (r.end || r.start) < LIVE_MS); }
   function setLive(ok, msg) { $("live").className = "live" + (ok ? "" : " stale"); $("liveTxt").textContent = msg; }
@@ -830,10 +830,12 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     checked[o.code] = true;
     refreshing = o.code;
     setLive(true, "kontroluji nové pully v Warcraft Logs…");
+    render();
     fetch(API_BASE + "/api/flopik/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: o.code, reason: "page" }) })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (!j || !j.ok) { refreshing = null; setLive(false, "Warcraft Logs runner: " + (j && j.error || "chyba")); render(); return; }
+        if (!j || !j.ok) { refreshing = null; running[o.code] = false; setLive(false, "Warcraft Logs runner: " + (j && j.error || "chyba")); render(); return; }
+        running[o.code] = true;
         setLive(true, j.dispatched ? "počítám nové pully v GitHub Actions… (1–3 min)" : "výpočet už běží…");
         render();
         var started = Date.now();
@@ -841,18 +843,19 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
           fetch(API_BASE + "/api/flopik/status?code=" + encodeURIComponent(o.code), { cache: "no-store" }).then(function (r) { return r.json(); })
             .then(function (st) {
               return Promise.all([loadCsv(), loadRefs()]).then(function (ch) {
-                if (ch[0] || ch[1]) render();
-                if (st && st.running && Date.now() - started < 12 * 60000) { pollTimer = setTimeout(poll, 10000); return; }
-                refreshing = null;
+                running[o.code] = !!(st && st.running);
+                if (ch[0] || ch[1] || !running[o.code]) render();
+                if (running[o.code] && Date.now() - started < 12 * 60000) { pollTimer = setTimeout(poll, 10000); return; }
+                refreshing = null; running[o.code] = false;
                 setLive(isLive(o), (isLive(o) ? "živý log · aktuální " : "log je kompletní · ") + stamp());
                 render();
               });
             })
-            .catch(function (e) { refreshing = null; setLive(false, "API neodpovědělo (" + e.message + ")"); render(); });
+            .catch(function (e) { refreshing = null; running[o.code] = false; setLive(false, "API neodpovědělo (" + e.message + ")"); render(); });
         }
         pollTimer = setTimeout(poll, 8000);
       })
-      .catch(function (e) { refreshing = null; setLive(false, "API neodpovědělo (" + e.message + ")"); render(); });
+      .catch(function (e) { refreshing = null; running[o.code] = false; setLive(false, "API neodpovědělo (" + e.message + ")"); render(); });
   }
 
   Promise.all([loadReports(), loadRefs(), loadCsv().catch(function (e) { setLive(false, "API: " + e.message); return false; })]).then(function () {
