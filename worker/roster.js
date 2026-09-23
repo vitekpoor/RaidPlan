@@ -88,8 +88,10 @@ export async function putRoster(request, env, ctx, url) {
       const cn = String((c && c.name) || "").trim();
       if (!cn) continue;
       const ck = nameKey(cn);
-      if (charSeen.has(ck)) return json({ ok: false, error: `character ${cn} is listed twice` }, 400);
-      charSeen.add(ck);
+      // duplicate check keeps diacritics: WoW allows "Rendyylord" and "Rendyýlord" as two different characters
+      const exact = cn.normalize("NFC").toLowerCase();
+      if (charSeen.has(exact)) return json({ ok: false, error: `character ${cn} is listed twice` }, 400);
+      charSeen.add(exact);
       const role = String(c.role || "dps").toLowerCase();
       if (!ROLES.includes(role)) return json({ ok: false, error: `${cn}: role must be tank/heal/dps` }, 400);
       cs.push({ name: cn, key: ck, class: String(c.class || "").trim(), role, spec: String(c.spec || "").trim().toLowerCase(), main: !!c.main });
