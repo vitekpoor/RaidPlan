@@ -1,5 +1,8 @@
 // Boss lineups (Boss sestavy) – table lineups (0005): one row per boss with the raid date and 20 player slots.
 //   GET /api/lineups        { bosses: [{ no, name, planView, guideUrl, date, slots: [20 names], updatedAt }], size }
+//                           a slot is the player name, or "Player (Class)" when they bring a character of another
+//                           class than their main (lineups.html dropdown lists dual-class players once per class;
+//                           raidplan.py swaps icon/role to that alt, attendance.py strips the suffix)
 //   PUT /api/lineups        (admin) { bosses: [{ no, date, slots, planView? }] } – bosses not sent are left as they are
 //   GET /api/lineups.csv    the old sheet layout (Boss / Odkazy / Datum / Hráčů / blank / 1..20) read by
 //                           tools/raidplan/raidplan.py --boss and tools/attendance/attendance.py

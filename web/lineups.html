@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!--
   lineups.html - Boss sestavy: 20 hráčů na každého bosse (GET /api/lineups), náhrada listu „Boss sestavy“.
-  Buňky mají barvu classy hlavní postavy z rosteru; hráč s absencí na datum bosse je červený (nepřijde) /
+  Slot je jméno hráče, nebo "Hráč (Classa)" když má hrát jinou postavu než main (Glasolo (Paladin)) – dropdown
+  nabízí každého hráče jednou za každou classu, kterou má v rosteru. Buňky mají barvu classy zvolené postavy; hráč s absencí na datum bosse je červený (nepřijde) /
   oranžový (přijde pozdě), duplicita v sestavě má červené jméno, hráč mimo roster šedou. Přihlášený admin
   upravuje přímo v tabulce (dropdown hráčů, datum) a ukládá PUT /api/lineups. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
   Stejná data čte tools/raidplan/raidplan.py --boss (přes /api/lineups.csv) a bot docházky.
@@ -43,6 +44,7 @@
   .lu td.slot.late { background: #F6B26B !important; }
   .lu td.slot.unknown { background: #666 !important; color: #eee; }
   .lu td.slot.dup { color: #b00000 !important; }
+  .lu td.slot small { font-size: 9.5px; font-weight: 500; opacity: .8; margin-left: 3px; }
   .edit .lu td.slot select, .edit .lu th input[type=date] { width: 100%; background: transparent; color: inherit; border: 0; border-bottom: 1px dashed rgba(0,0,0,.35); font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
   .edit .lu td.slot.empty select { color: var(--muted); border-bottom-color: var(--line); }
   .edit .lu th input[type=date] { display: block; color: var(--ink); border-bottom-color: var(--line); font-weight: 400; font-size: 11px; width: 100%; margin-top: 1px; }
@@ -138,11 +140,19 @@
   function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
   function nk(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim(); }
   function czDate(s) { if (!s) return ""; var d = new Date(s + "T00:00:00"); return CZ[d.getDay()] + " " + d.getDate() + "." + (d.getMonth() + 1) + "." + d.getFullYear(); }
-  function playerInfo(name) {
-    var k = nk(name), p = state.roster.filter(function (x) { return nk(x.name) === k; })[0];
+  // slot "Glasolo" = main postava, "Glasolo (Paladin)" = postava dané classy (alt); splitSlot vrací { name, cls }
+  function splitSlot(slot) {
+    var m = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(String(slot || "").trim());
+    return m ? { name: m[1].trim(), cls: m[2].trim() } : { name: String(slot || "").trim(), cls: "" };
+  }
+  function slotValue(name, cls, mainCls) { return nk(cls) && nk(cls) !== nk(mainCls) ? name + " (" + cls + ")" : name; }
+  function playerInfo(slot) {
+    var sp = splitSlot(slot), k = nk(sp.name), p = state.roster.filter(function (x) { return nk(x.name) === k; })[0];
     if (!p) return null;
-    var m = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0] || {};
-    return { player: p, cls: m.class || "", role: m.role || "", bench: p.bench };
+    var main = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0] || {};
+    var ch = sp.cls ? p.characters.filter(function (c) { return nk(c.class) === nk(sp.cls); })[0] : main;
+    return { player: p, name: p.name, cls: (ch || main).class || "", role: (ch || main).role || "", bench: p.bench,
+             alt: !!ch && ch !== main, badClass: sp.cls && !ch ? sp.cls : "" };
   }
 
   function load() {
@@ -175,18 +185,22 @@
     var rows = [];
     for (var i = 0; i < state.size; i++) {
       rows.push('<tr><td class="no">' + (i + 1) + "</td>" + list.map(function (b, bi) {
-        var name = b.slots[i] || "", info = name ? playerInfo(name) : null, cls = [], why = "", style = "";
-        if (!name) cls.push("empty");
+        var slot = b.slots[i] || "", sp = splitSlot(slot), name = sp.name, info = slot ? playerInfo(slot) : null, cls = [], why = "", style = "";
+        if (!slot) cls.push("empty");
         else {
           if (!info) { cls.push("unknown"); why = "není v rosteru"; }
-          else style = "background:" + (CLASS_COLOR[info.cls.toLowerCase()] || "#999");
-          if (b.slots.filter(function (s) { return nk(s) === nk(name); }).length > 1) { cls.push("dup"); why = why || "dvakrát"; }
+          else {
+            style = "background:" + (CLASS_COLOR[info.cls.toLowerCase()] || "#999");
+            if (info.badClass) why = "postava classy " + info.badClass + " není v rosteru – bere se main";
+            else if (info.alt) why = "hraje alt: " + info.cls;
+          }
+          if (b.slots.filter(function (s) { return nk(splitSlot(s).name) === nk(name); }).length > 1) { cls.push("dup"); why = "dvakrát"; }
           var a = b.date ? state.abs[nk(name) + "|" + b.date] : null;
           if (a === "absent") { cls.push("absent"); why = "nepřijde"; } else if (a === "late") { cls.push("late"); why = "pozdě"; }
         }
         var inner = state.edit
-          ? '<select data-b="' + bi + '" data-s="' + i + '"><option value="">–</option>' + optionsFor(name) + "</select>"
-          : esc(name || "–");
+          ? '<select data-b="' + bi + '" data-s="' + i + '"><option value="">–</option>' + optionsFor(slot) + "</select>"
+          : esc(name || "–") + (sp.cls ? "<small>" + esc(sp.cls) + "</small>" : "");
         return '<td class="slot ' + cls.join(" ") + '" style="' + style + '"' + (why ? ' title="' + esc(why) + '"' : "") + ">" + inner + "</td>";
       }).join("") + "</tr>");
     }
@@ -196,18 +210,29 @@
     $("#alldate").hidden = !state.edit;
     if (state.edit && !bodyOnly) { var ds = list.map(function (b) { return b.date; }); $("#alldateInput").value = ds.length && ds.every(function (d) { return d === ds[0]; }) ? ds[0] || "" : ""; }
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
-    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown), nastav datum raidu u bosse (nebo „Datum všech bossů“ nahoře najednou – jednotlivé datum jde pak ještě upravit), nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit. Po uložení dej „Synchronizovat plány“, aby se změny propsaly do RaidPlan.io."
+    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown; hráč s více classami je v seznamu jednou za každou – „Glasolo (Paladin)“ = hraje alta), nastav datum raidu u bosse (nebo „Datum všech bossů“ nahoře najednou – jednotlivé datum jde pak ještě upravit), nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit. Po uložení dej „Synchronizovat plány“, aby se změny propsaly do RaidPlan.io."
       : "Sestavy čte tools/raidplan/raidplan.py --boss (přejmenování markerů v RaidPlan.io) a bot docházky na Discordu. Datum bosse určuje, čí omluvenky se v jeho sloupci ukážou.";
   }
-  var optCache = null;
+  // jeden plochý seznam podle abecedy (roster i lavička dohromady); hráč s postavami více class je tam jednou za každou classu
+  var optCache = null, optValues = null;
   function optionsFor(sel) {
     if (!optCache) {
-      var main = state.roster.filter(function (p) { return !p.bench; }), bench = state.roster.filter(function (p) { return p.bench; });
-      var opt = function (p) { return '<option value="' + esc(p.name) + '">' + esc(p.name) + "</option>"; };
-      optCache = '<optgroup label="Roster">' + main.map(opt).join("") + "</optgroup>" + (bench.length ? '<optgroup label="Lavička">' + bench.map(opt).join("") + "</optgroup>" : "");
+      var items = [];
+      state.roster.forEach(function (p) {
+        var main = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0] || {}, seen = {};
+        var classes = p.characters.map(function (c) { return c.class || ""; }).filter(function (c) { var k = nk(c); if (!k || seen[k]) return false; seen[k] = true; return true; });
+        if (!classes.length) { items.push({ value: p.name, label: p.name, name: p.name, main: true }); return; }
+        classes.forEach(function (c) {
+          var isMain = nk(c) === nk(main.class);
+          items.push({ value: slotValue(p.name, c, main.class), label: classes.length > 1 ? p.name + " (" + c + ")" : p.name, name: p.name, main: isMain });
+        });
+      });
+      items.sort(function (a, b) { return a.name.localeCompare(b.name, "cs") || (a.main ? -1 : b.main ? 1 : a.label.localeCompare(b.label, "cs")); });
+      optValues = {}; items.forEach(function (it) { optValues[it.value] = true; });
+      optCache = items.map(function (it) { return '<option value="' + esc(it.value) + '">' + esc(it.label) + "</option>"; }).join("");
     }
     var html = optCache;
-    if (sel && !state.roster.some(function (p) { return p.name === sel; })) html += '<option value="' + esc(sel) + '">' + esc(sel) + " (mimo roster)</option>";
+    if (sel && !optValues[sel]) html += '<option value="' + esc(sel) + '">' + esc(sel) + (state.roster.some(function (p) { return nk(p.name) === nk(splitSlot(sel).name); }) ? "" : " (mimo roster)") + "</option>";
     return html.replace('value="' + esc(sel) + '"', 'value="' + esc(sel) + '" selected');
   }
   // nadřazené datum → všem bossům; opačně (změna u bosse) se do něj nepropisuje

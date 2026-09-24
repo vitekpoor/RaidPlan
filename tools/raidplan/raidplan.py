@@ -438,10 +438,13 @@ def gviz_rows(doc_id, sheet_name):
     return list(csv.reader(io.StringIO(text)))
 
 
-def load_roster_tab():
+def load_roster_tab(with_alts=False):
     """Roster tab -> {norm(player): (Player, class_key, role, spec)}.
     class_key matches CLASS_COLORS keys ('Death Knight' -> 'deathknight').
-    spec comes from the OPTIONAL 'Main spec' column ('' when absent)."""
+    spec comes from the OPTIONAL 'Main spec' column ('' when absent).
+    with_alts=True returns (roster, alts) where alts = {norm(player):
+    [(Player, class_key, role, spec), ...]} for the 'Alt char' columns —
+    used when a lineup slot says "Player (Class)" (play the alt)."""
     # roster lives in the guild database now (Worker API, same CSV layout the sheet tab had; edited on roster.html)
     roster_url = os.environ.get("ES_ROSTER_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/roster.csv")
     rows = list(csv.reader(io.StringIO(http_bytes(roster_url).decode("utf-8", "replace"))))
@@ -459,12 +462,11 @@ def load_roster_tab():
 
     ip, ic, ir = col("Hráč"), col("Main classa"), col("Main role")
     isp = col("Main spec", required=False)
-    roster = {}
-    for r in rows[1:]:
-        cell = lambda i: r[i].strip() if i is not None and i < len(r) else ""
-        player, cls, role, spec = cell(ip), cell(ic), cell(ir), cell(isp)
-        if not player or not cls:
-            continue
+    ia, iac, iar = (col("Alt char", required=False), col("Alt classa", required=False),
+                    col("Alt role", required=False))
+    ias = col("Alt spec", required=False)
+
+    def entry(player, cls, role, spec):
         cls_key = cls.lower().replace(" ", "")
         if cls_key not in CLASS_COLORS:
             print(f"  WARNING: {player} has unknown class '{cls}' in the Roster")
@@ -473,10 +475,21 @@ def load_roster_tab():
             print(f"  WARNING: {player}: '{spec}' is not a {cls} spec in RaidPlan "
                   f"(known: {', '.join(sorted(KNOWN_SPECS.get(cls_key, ())))}) — ignored")
             spec_key = ""
-        roster[norm(player)] = (player, cls_key, role.lower(), spec_key)
+        return (player, cls_key, role.lower(), spec_key)
+
+    roster, alts = {}, {}
+    for r in rows[1:]:
+        cell = lambda i: r[i].strip() if i is not None and i < len(r) else ""
+        player, cls, role, spec = cell(ip), cell(ic), cell(ir), cell(isp)
+        if not player or not cls:
+            continue
+        roster[norm(player)] = entry(player, cls, role, spec)
+        if cell(ia) and cell(iac):
+            alts.setdefault(norm(player), []).append(
+                entry(player, cell(iac), cell(iar) or role, cell(ias)))
     if not roster:
         sys.exit(f"Tab '{ROSTER_TAB}' contains no players.")
-    return roster
+    return (roster, alts) if with_alts else roster
 
 
 def load_plans_file(path):
@@ -505,8 +518,23 @@ def load_plans_file(path):
     return plans
 
 
+SLOT_CLASS_RE = re.compile(r"^(.*?)\s*\(([^()]+)\)\s*$")
+
+
+def split_slot(cell):
+    """'Glasolo (Paladin)' -> ('Glasolo', 'paladin'); 'Glasolo' -> ('Glasolo', '').
+    The class suffix means the player plays their character of that class
+    (lineups.html offers dual-class players once per class)."""
+    m = SLOT_CLASS_RE.match(cell.strip())
+    if not m:
+        return cell.strip(), ""
+    return m.group(1).strip(), m.group(2).strip().lower().replace(" ", "")
+
+
 def load_lineups():
-    """Boss sestavy tab -> {'01': {'header': ..., 'date': ..., 'players': [...]}}"""
+    """Boss sestavy tab -> {'01': {'header': ..., 'date': ..., 'players': [...],
+    'classes': {norm(player): class_key}}} (classes only for slots written
+    as "Player (Class)")."""
     # lineups live in the guild database (Worker API, same layout the sheet tab had; edited on lineups.html)
     lineups_url = os.environ.get("ES_LINEUPS_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/lineups.csv")
     rows = list(csv.reader(io.StringIO(http_bytes(lineups_url).decode("utf-8", "replace"))))
@@ -533,9 +561,15 @@ def load_lineups():
             continue
         date_str = next((r[ci].strip() for r in rows[1:first_slot]
                          if ci < len(r) and date_re.search(r[ci])), "")
-        players = [r[ci].strip() for r in slot_rows if ci < len(r) and r[ci].strip()]
+        players, classes = [], {}
+        for r in slot_rows:
+            if ci < len(r) and r[ci].strip():
+                name, cls = split_slot(r[ci])
+                players.append(name)
+                if cls:
+                    classes[norm(name)] = cls
         lineups[m.group(1)] = {"header": head.strip(), "date": date_str,
-                               "players": players}
+                               "players": players, "classes": classes}
     if not lineups:
         # gviz silently serves the DEFAULT tab when the name doesn't exist,
         # so this usually means the tab was never created (or was renamed).
@@ -597,12 +631,35 @@ def lineup_renames(doc, lineup, roster, extra_renames):
     return renames, (to_add, to_remove)
 
 
+def roster_for_lineup(roster, alts, lineup):
+    """Roster with the class/role/spec swapped to the alt for every slot
+    written as "Player (Class)" — so pairing by role, marker icons and
+    border colors follow the character the player actually brings."""
+    out = dict(roster)
+    for pn, cls in lineup.get("classes", {}).items():
+        hit = roster_lookup(roster, pn)
+        if not hit:
+            continue  # reported as "not in the Roster" by lineup_renames
+        key = norm(hit[0])
+        if hit[1] == cls:
+            continue  # main class spelled out — nothing to swap
+        alt = next((a for a in alts.get(key, []) if a[1] == cls), None)
+        if alt is None:
+            print(f"  WARNING: {hit[0]} has no {cls} character in the Roster — "
+                  f"using the main ({hit[1]})")
+            continue
+        out[key] = alt
+        print(f"  {hit[0]} plays the {cls} alt ({alt[2]}"
+              f"{', spec ' + alt[3] if alt[3] else ''})")
+    return out
+
+
 def boss_mode(args, cli_renames):
     """--boss NN [NN ...] | all — sync plans with the Boss sestavy tab."""
     plans = load_plans_file(args.plans_file)
     print(f"Loading '{LINEUP_TAB}' and '{ROSTER_TAB}' tabs ...")
     lineups = load_lineups()
-    roster = load_roster_tab()
+    roster, alts = load_roster_tab(with_alts=True)
     print(f"  {len(lineups)} boss lineups, {len(roster)} roster players")
 
     if any(b.lower() == "all" for b in args.boss):
@@ -629,13 +686,14 @@ def boss_mode(args, cli_renames):
               (f", raid date {lu['date']}" if lu["date"] else ", no date set") +
               "  (absence colors live in the sheet)")
 
+        boss_roster = roster_for_lineup(roster, alts, lu)
         print(f"  Fetching plan {info['code']} ...")
         plan, doc = fetch_plan(info["code"])
 
-        renames, (to_add, to_remove) = lineup_renames(doc, lu, roster, cli_renames)
+        renames, (to_add, to_remove) = lineup_renames(doc, lu, boss_roster, cli_renames)
         a = copy.copy(args)
         a.in_place, a.key, a.sync_icons = True, info["key"], True
-        process_plan(info["code"], a, doc, plan, renames, roster)
+        process_plan(info["code"], a, doc, plan, renames, boss_roster)
         if to_add:
             print(f"  PLACE MANUALLY (in the lineup, nowhere in the plan): "
                   f"{', '.join(sorted(to_add))}")

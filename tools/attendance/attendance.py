@@ -418,7 +418,10 @@ def parse_lineups(csv_text, reference):
         date = parse_header_date(date_txt, reference) if date_txt else None
         if date_txt and not date:
             warnings.append(T("lineup_bad_date", boss=boss, date=date_txt))
-        players = [r[i].strip() for r in slot_rows if i < len(r) and r[i].strip()]
+        # "Glasolo (Paladin)" = the player brings their alt of that class (lineups.html);
+        # attendance is per player, so drop the class suffix
+        players = [re.sub(r"\s*\([^()]+\)\s*$", "", r[i].strip()) for r in slot_rows
+                   if i < len(r) and r[i].strip()]
         lineups.append((boss, date, players))
     return lineups, warnings
 
