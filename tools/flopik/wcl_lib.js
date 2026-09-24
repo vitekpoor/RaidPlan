@@ -213,14 +213,15 @@ export async function referenceWindow(gql, ref, endSec) {
 const DMG_MAX_WINDOWS = 6;   // at most this many separate "until first death" windows per pull
 
 /**
- * Attach `dmg` breakdowns to res.players (window = until the player's first death, at most the death cutoff) and
- * return the set of specs seen: { "Class-Spec": encounterID } so the caller can ensure reference logs.
+ * Attach `dmg` breakdowns to res.players and return the set of specs seen: { "Class-Spec": encounterID } so the
+ * caller can ensure reference logs. Window: on a WIPE until the player's first death, at most the death cutoff;
+ * on a KILL always the whole fight (deaths do not matter once the boss is dead) → bd.cut = "end".
  */
 export async function attachDamage(gql, code, fight, res) {
-  const st = fight.startTime, fightEnd = fight.endTime;
-  const winEnd = res.cutoff == null ? fightEnd : Math.min(fightEnd, st + res.cutoff * 1000);
+  const st = fight.startTime, fightEnd = fight.endTime, whole = !!res.kill;
+  const winEnd = whole || res.cutoff == null ? fightEnd : Math.min(fightEnd, st + res.cutoff * 1000);
   const firstDeath = {};
-  (res.deathList || []).forEach((d) => { if (firstDeath[d.n] == null || d.t < firstDeath[d.n]) firstDeath[d.n] = d.t; });
+  if (!whole) (res.deathList || []).forEach((d) => { if (firstDeath[d.n] == null || d.t < firstDeath[d.n]) firstDeath[d.n] = d.t; });
   const endOf = {}, extra = {};
   (res.players || []).forEach((p) => {
     let e = winEnd; const fd = firstDeath[p.name];
@@ -254,7 +255,7 @@ export async function attachDamage(gql, code, fight, res) {
     const ps = mainRow ? (psByEnd[e] || {})[mainRow.id] : null;
     const bd = breakdown(mainRow, castsE, e - st, ps);
     bd.metric = healer ? "hps" : "dps";
-    if (e !== winEnd) bd.cut = "death"; else if (winEnd !== fightEnd) bd.cut = "cutoff";
+    if (e !== winEnd) bd.cut = "death"; else if (winEnd !== fightEnd) bd.cut = "cutoff"; else if (whole) bd.cut = "end";
     p.dmg = bd;
     if (spec) specs[spec] = fight.encounterID;
   });

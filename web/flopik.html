@@ -389,7 +389,8 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     var out = { ref: ref, rd: rd, winTxt: "", winNote: "", exact: !!rd && isAll };
     var endSec = Math.round((d.dur || 0) / 1000);
     if (rd && !isAll) {
-      if (endSec > 0 && endSec < ref.dur - 2) {
+      if (d.cut === "end") { out.exact = true; out.winTxt = " · celý kill"; }   // our kill: whole log vs the whole rank 1 kill
+      else if (endSec > 0 && endSec < ref.dur - 2) {
         var rw = REFWIN[refKey + "|" + endSec];
         if (rw && rw.ok && rw.data) { out.rd = rw.data; out.winTxt = " · do " + fmt(endSec) + " jeho killu"; out.exact = true; }
         else if (rw && rw.ok && rw.whole) { out.winTxt = " · celý kill"; out.exact = true; }
@@ -421,7 +422,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     var unit = d.metric === "hps" ? "HPS" : "DPS";
     var usPs = d.total / (d.dur / 1000 || 1), refPs = rd ? rd.total / ((rd.dur || ref.dur * 1000) / 1000 || 1) : 0;
     var h = '<div class="bd"><div class="head">';
-    var cutTxt = { death: "do první smrti", cutoff: "do death cutoffu", end: "celý pull" }[d.cut] || "";
+    var cutTxt = { death: "do první smrti", cutoff: "do death cutoffu", end: "celý kill" }[d.cut] || "";
     h += "<span><b>" + esc(r.name) + "</b> · " + esc(specLabel(d.spec)) +
       (isAll ? " · součet " + plural(d.pulls || 1, "pullu", "pullů", "pullů") + " · hodnoceno " + fmt(d.dur / 1000) : " · hodnoceno " + fmt(d.dur / 1000) + (cutTxt ? " (" + cutTxt + ")" : "")) + "</span>";
     h += '<span class="us"><b>' + kfmt(usPs) + "</b> " + unit + " · aktivní " + pct(d.active, d.dur) + " · " + kfmt(d.total) + " celkem · " + d.castN + " castů (" + (d.castN / min).toFixed(1) + "/min)</span>";
@@ -540,8 +541,8 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
       if (missing.length) g += '<div><b><span style="color: var(--warn)">Top log používá, my ne:</span></b> ' + missing.map(esc).join(", ") + "</div>";
       if (g) h += '<div class="gaps">' + g + "</div>";
     } else if (parseStat) h += '<div class="sum">' + parseStat + "</div>";
-    h += '<div class="note">Rozpad každého hráče je jen do jeho první smrti, nejpozději do death cutoffu pullu; rank 1 log se u jednoho pullu ' +
-      'ořízne do stejného času jeho killu (v součtu pullů je celý kill). ' +
+    h += '<div class="note">Na wipu je rozpad každého hráče jen do jeho první smrti, nejpozději do death cutoffu pullu, a rank 1 log se ' +
+      'ořízne do stejného času jeho killu. Na killu se porovnává celý náš log s celým rank 1 killem – smrti nehrají roli (v součtu pullů je také celý kill). ' +
       '<span class="us">Zelená</span> = my, <span class="ref">fialová</span> = rank 1 log stejného specu na tomto bossovi a obtížnosti (' +
       (rd ? "podíly a hodnoty za sekundu / minutu, pruh = podíl na celku" : "zatím bez reference") +
       '). <span style="color: var(--warn)">Oranžové</span> schopnosti používá top log a my ne.</div></div>';
@@ -725,8 +726,8 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     // popis mechaniky bosse (engine.js description) nad legendou sloupců
     var lg = (lastMeta.description ? ["<div>" + lastMeta.description + "</div>"] : []).concat((lastMeta.legend || []).map(function (l) { return "<div>" + l + "</div>"; }));
     lg.push(cutoffN
-      ? "<div><b>Death cutoff " + cutoffN + "</b> – každý pull se hodnotí jen do " + cutoffN + ". smrti hráče (pak už je wipe rozjetý a další stacky / zásahy nic neříkají). " +
-        "Sloupec <b>Smrti</b> počítá úmrtí za celý pull, i po cutoffu.</div>"
+      ? "<div><b>Death cutoff " + cutoffN + "</b> – každý wipe se hodnotí jen do " + cutoffN + ". smrti hráče (pak už je wipe rozjetý a další stacky / zásahy nic neříkají). " +
+        "<b>Kill se hodnotí celý</b> bez ohledu na smrti. Sloupec <b>Smrti</b> počítá úmrtí za celý pull, i po cutoffu.</div>"
       : "<div><b>Bez death cutoffu</b> – hodnotí se celý pull od začátku do konce.</div>");
     lg.push("<div><b>Výkon</b> (sloupce Parse a % top) je DPS/HPS srovnání s ostatními logy a <b>s faily nesouvisí</b> – hráč může mít nízký parse a nula failů i naopak.</div>");
     lg.push("<div><b>Parse</b> = skutečný percentil z Warcraft Logs (rankings killu: DPS, u healerů HPS, mezi všemi logy stejného specu na tomto bossovi a obtížnosti), " +
@@ -734,7 +735,7 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
       "<span style=\"color:#a335ee\">75</span> · <span style=\"color:#ff8000\">95</span> · <span style=\"color:#e268a8\">99</span>. Mají ho jen killy" +
       (isAll ? " (v součtu průměr killů)" : "") + "; hned po killu může chvíli trvat, než ho WCL spočítá.</div>");
     lg.push("<div><b>% top</b> = DPS (u healerů HPS) hráče v procentech rank 1 logu stejného specu na tomto bossovi a obtížnosti, ve stejném čase boje " +
-      "(do první smrti hráče / death cutoffu). <b>Není to percentil</b> – 72 % znamená, že hráč udělal 72 % DPS nejlepšího logu. Funguje i na wipech. " +
+      "(na wipu do první smrti hráče / death cutoffu, <b>na killu celý log proti celému rank 1 killu</b>). <b>Není to percentil</b> – 72 % znamená, že hráč udělal 72 % DPS nejlepšího logu. Funguje i na wipech. " +
       "~ = stejný čas se ještě načítá, zatím proti celému killu. <b>Klik na jméno hráče</b> rozbalí rozpad – schopnosti, casty za minutu, cíle a shrnutí – vedle rank 1 logu " +
       "(hledá se jednou týdně, list „FlopikRef“).</div>");
     lg.push("<div><b>Smrti</b> = počet úmrtí hráče v pullu. † = hráč umřel" + (isAll ? " (v některém pullu)" : "") +

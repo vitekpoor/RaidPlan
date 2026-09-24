@@ -52,8 +52,15 @@ var FLOPIK_BOSSES = {
 var FLOPIK_DEATH_COL = { k: "deaths", l: "Smrti", cls: "deaths", hot: [1, 2], hotAll: [3, 5], agg: "sum" };
 
 /** Boss definition for an encounter ID (unknown bosses get deaths only). */
+// Engine-wide version: added to every boss ver, so bumping it recomputes ALL cached pulls on the next refresh
+// (2 = kills are evaluated over the whole pull – no death cutoff, damage windows not cut at deaths).
+var FLOPIK_ENGINE_VER = 2;
 function flopikBossFor(encounterID, name) {
-  return FLOPIK_BOSSES[encounterID] || { key: "enc" + encounterID, name: name || ("Encounter " + encounterID), metrics: [] };
+  var b = FLOPIK_BOSSES[encounterID] || { key: "enc" + encounterID, name: name || ("Encounter " + encounterID), metrics: [] };
+  var out = {};
+  Object.keys(b).forEach(function (k) { out[k] = b[k]; });
+  out.ver = (b.ver || 1) + FLOPIK_ENGINE_VER;
+  return out;
 }
 
 /** WCL events filterExpression: only what the boss's metrics need + player deaths. */
@@ -101,9 +108,11 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
     if (e.type === "death" && players[e.targetID]) deaths.push({ t: e.timestamp, id: e.targetID, n: players[e.targetID] });
   });
   deaths.sort(function (a, b) { return a.t - b.t; });
+  // death cutoff applies to WIPES only: a kill is evaluated over the whole pull, however many died on the way
   var cutoffN = boss.cutoff || 0;
-  var cutT = (cutoffN && deaths.length >= cutoffN) ? deaths[cutoffN - 1].t : fight.endTime;
-  var cutoff = (cutoffN && deaths.length >= cutoffN) ? Math.round((cutT - st) / 1000) : null;
+  var useCut = !!(cutoffN && !fight.kill && deaths.length >= cutoffN);
+  var cutT = useCut ? deaths[cutoffN - 1].t : fight.endTime;
+  var cutoff = useCut ? Math.round((cutT - st) / 1000) : null;
   var evc = events.filter(function (e) { return e.timestamp <= cutT; });
 
   var res = {
@@ -116,7 +125,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
   Object.keys(players).forEach(function (id) { rows[players[id]] = { name: players[id], died: false }; });
 
   if (boss.analyze === "twinfangs") {
-    var out = flopikTwinFangs_(evc, events, players, actorById, deaths, st, cutoffN, cutoff);
+    var out = flopikTwinFangs_(evc, events, players, actorById, deaths, st, cutoffN, cutoff, !!fight.kill);
     ["cols", "legend", "description", "stats"].forEach(function (k) { res[k] = out[k]; });
     Object.keys(out.summary).forEach(function (k) { res.summary[k] = out.summary[k]; });
     out.players.forEach(function (r) { rows[r.name] = r; });
@@ -232,7 +241,7 @@ var FLOPIK_TF = {
     "V ideálním případě má hráč přesně tolik stacků, kolik soaknul orbů."
 };
 
-function flopikTwinFangs_(evc, events, players, actorById, deaths, st, cutoffN, cutoff) {
+function flopikTwinFangs_(evc, events, players, actorById, deaths, st, cutoffN, cutoff, kill) {
   var T = FLOPIK_TF;
   var deathT = {};
   deaths.forEach(function (d) { (deathT[d.id] = deathT[d.id] || []).push(d.t); });
@@ -306,7 +315,7 @@ function flopikTwinFangs_(evc, events, players, actorById, deaths, st, cutoffN, 
   Object.keys(spitT).forEach(function (k) { addsN++; if (spitT[k].length >= 2) adds2++; });
   var stats = [
     { l: "Cutoff", v: cutoff !== null ? flopikMmss_(cutoff) : "—", cls: cutoff !== null ? "bad" : "",
-      s: cutoff !== null ? cutoffN + ". smrt: " + cutNames.join(", ") : "nedosažen (" + deaths.length + " úmrtí)" },
+      s: cutoff !== null ? cutoffN + ". smrt: " + cutNames.join(", ") : kill ? "kill – hodnotí se celý pull (" + deaths.length + " úmrtí)" : "nedosažen (" + deaths.length + " úmrtí)" },
     { l: "Soaknuté orby", v: totalOrbs, cls: "accent", s: (totalOrbs / n).toFixed(1) + " na hráče", agg: "sum" },
     { l: "Stacky (čisté)", v: net, cls: "venom", s: (diff >= 0 ? "+" : "") + diff + " oproti orbům", agg: "sum" },
     { l: "Zbytečné stacky", v: avoid, cls: avoid ? "bad" : "", s: "addka v cestě + 2. cast + vlny + Vile Flood", agg: "sum" },
