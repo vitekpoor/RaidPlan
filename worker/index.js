@@ -22,6 +22,7 @@ import migration0003 from "./migrations/0003_roster_absence.sql";
 import migration0004 from "./migrations/0004_flopik.sql";
 import migration0005 from "./migrations/0005_attendance_lineups.sql";
 import migration0006 from "./migrations/0006_rio_comps.sql";
+import migration0007 from "./migrations/0007_absence_time.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
@@ -33,7 +34,7 @@ import * as raidplan from "./raidplan.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007]];
 
 export default {
   async fetch(request, env, ctx) {
@@ -73,9 +74,15 @@ async function route(request, env, ctx, url) {
     if (denied) return denied;
     const applied = [];
     for (const [name, sql] of MIGRATIONS) {
+      // one statement at a time: ALTER TABLE … ADD COLUMN cannot be "IF NOT EXISTS", so a re-run reports "duplicate
+      // column name" – that one is expected and skipped, anything else still throws
       const stmts = splitSql(sql);
-      await env.DB.batch(stmts.map((s) => env.DB.prepare(s)));
-      applied.push({ name, statements: stmts.length });
+      let skipped = 0;
+      for (const s of stmts) {
+        try { await env.DB.prepare(s).run(); }
+        catch (e) { if (/duplicate column name/i.test(String(e && e.message))) skipped++; else throw e; }
+      }
+      applied.push({ name, statements: stmts.length, skipped });
     }
     return json({ ok: true, applied });
   }

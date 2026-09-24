@@ -1,8 +1,9 @@
 // Absences (Omluvenky) – table absences (0003). One row per player + day; the latest report of a day wins.
-//   POST   /api/absence              { player, from: "yyyy-mm-dd", to?, type: "Nepřijdu" | "Přijdu pozdě" | absent | late }  (public form)
-//   GET    /api/absence?from&to      { players: [names in roster order], marks: [{ id, player, date, type, mark }], from, to }
+//   POST   /api/absence              { player, from: "yyyy-mm-dd", to?, type: "Nepřijdu" | "Přijdu pozdě" | absent | late, time? }  (public form)
+//                                    time "HH:MM" = when a late player arrives (required for late, migration 0007 column absences.time)
+//   GET    /api/absence?from&to      { players: [names in roster order], marks: [{ id, player, date, type, mark, time }], from, to }
 //   GET    /api/absence.csv?from&to  matrix like the old "Absence přehled" tab: "Hráč", one ISO-date column per day in range,
-//                                    cells "X" (absent) / "pozdě" (late) – read by tools/attendance/attendance.py and the Apps Script
+//                                    cells "X" (absent) / "pozdě 19:30" (late + time) – read by tools/attendance/attendance.py
 //   DELETE /api/absence?id=N | ?player&date   (admin) remove a wrong entry
 //   POST   /api/absence/import       (admin) { marks: [{ player, date, type }] } – one-time import, replaces everything
 
@@ -28,6 +29,8 @@ export async function postAbsence(request, env) {
   if (!from) return json({ ok: false, message: "⚠ Vyber datum Od." });
   if (body.to && !to) return json({ ok: false, message: "⚠ Datum Do není platné." });
   if (!type) return json({ ok: false, message: "⚠ Vyber typ absence." });
+  const time = type === "late" ? normTime(body.time) : null;
+  if (type === "late" && !time) return json({ ok: false, message: "⚠ Napiš, v kolik dorazíš (např. 19:30)." });
   const roster = await loadRoster(env);
   const hit = roster.find((p) => nameKey(p.name) === nameKey(player));
   if (!hit) return json({ ok: false, message: `⚠ Hráč '${player}' není v Rosteru.` });
@@ -40,15 +43,27 @@ export async function postAbsence(request, env) {
   for (let i = 0; i < days; i++) {
     const d = addDays(from, i);
     stmts.push(env.DB.prepare(
-      `INSERT INTO absences (player, player_key, date, type, source, created_at) VALUES (?1, ?2, ?3, ?4, 'web', ?5)
-       ON CONFLICT(player_key, date) DO UPDATE SET player = excluded.player, type = excluded.type, source = excluded.source, created_at = excluded.created_at`
-    ).bind(hit.name, nameKey(hit.name), d, type, now));
+      `INSERT INTO absences (player, player_key, date, type, time, source, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 'web', ?6)
+       ON CONFLICT(player_key, date) DO UPDATE SET player = excluded.player, type = excluded.type, time = excluded.time, source = excluded.source, created_at = excluded.created_at`
+    ).bind(hit.name, nameKey(hit.name), d, type, time, now));
   }
   await env.DB.batch(stmts);
   let range = czDate(from);
   if (days > 1) range += ` – ${czDate(to)} (${days} ${days >= 5 ? "dní" : "dny"})`;
-  return json({ ok: true, message: `✔ Uloženo: ${hit.name} – ${range} – ${LABEL[type]}`, player: hit.name, from, to, type, days });
+  return json({ ok: true, message: `✔ Uloženo: ${hit.name} – ${range} – ${LABEL[type]}${time ? ` (od ${time})` : ""}`, player: hit.name, from, to, type, time, days });
 }
+
+/** "19:30" / "19.30" / "1930" / "19" → "19:30", anything else → null. */
+export function normTime(v) {
+  const m = /^\s*(\d{1,2})(?:[:.h]?(\d{2}))?\s*$/.exec(String(v || ""));
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2] || 0);
+  if (h > 23 || mi > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+}
+
+/** CSV / sheet cell for a mark: "X" or "pozdě 19:30". */
+function cellMark(r) { return r.type === "late" && r.time ? `${MARK.late} ${r.time}` : MARK[r.type]; }
 
 function czDate(iso) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -63,14 +78,14 @@ function range(url) {
 }
 
 async function marksIn(env, from, to) {
-  return (await env.DB.prepare("SELECT id, player, player_key, date, type, created_at FROM absences WHERE date >= ?1 AND date <= ?2 ORDER BY date, player_key")
+  return (await env.DB.prepare("SELECT id, player, player_key, date, type, time, created_at FROM absences WHERE date >= ?1 AND date <= ?2 ORDER BY date, player_key")
     .bind(from, to).all()).results;
 }
 
 export async function getAbsence(env, url) {
   const { from, to } = range(url);
   const [roster, rows] = await Promise.all([loadRoster(env), marksIn(env, from, to)]);
-  const marks = rows.map((r) => ({ id: r.id, player: r.player, date: r.date, type: r.type, mark: MARK[r.type], createdAt: r.created_at }));
+  const marks = rows.map((r) => ({ id: r.id, player: r.player, date: r.date, type: r.type, mark: cellMark(r), time: r.time || null, createdAt: r.created_at }));
   return json({ ok: true, from, to, today: todayPrague(), players: roster.map((p) => ({ name: p.name, bench: p.bench })), marks });
 }
 
@@ -80,7 +95,7 @@ export async function getAbsenceCsv(env, url) {
   const dates = [];
   for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
   const byKey = new Map();
-  rows.forEach((r) => byKey.set(`${r.player_key}|${r.date}`, MARK[r.type]));
+  rows.forEach((r) => byKey.set(`${r.player_key}|${r.date}`, cellMark(r)));
   const names = roster.map((p) => p.name);
   rows.forEach((r) => { if (!names.some((n) => nameKey(n) === r.player_key)) names.push(r.player); });
   const lines = [csvLine(["Hráč", ...dates])];
@@ -107,8 +122,8 @@ export async function importAbsence(request, env) {
   for (const m of marks) {
     const type = TYPES[String((m && m.type) || "").trim().toLowerCase()], date = isoDate(m && m.date), player = String((m && m.player) || "").trim();
     if (!type || !date || !player) continue;
-    stmts.push(env.DB.prepare("INSERT OR REPLACE INTO absences (player, player_key, date, type, source, created_at) VALUES (?1, ?2, ?3, ?4, 'sheet', ?5)")
-      .bind(player, nameKey(player), date, type, m.createdAt || nowIso()));
+    stmts.push(env.DB.prepare("INSERT OR REPLACE INTO absences (player, player_key, date, type, time, source, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 'sheet', ?6)")
+      .bind(player, nameKey(player), date, type, type === "late" ? normTime(m.time) : null, m.createdAt || nowIso()));
     n++;
   }
   await env.DB.batch(stmts);

@@ -450,6 +450,7 @@ def build_report(dates, players, raid_dates, warnings, lineups=None, bosses=None
     present_days = [d for d in raid_dates if d in col_of]
 
     unavailable, late, unconfirmed, unknown = [], [], [], []
+    late_time = {}   # (name, date) -> "19:30" when the cell says when the player arrives ("pozdě 19:30")
     for name, cells in players:
         days_x, days_late = [], []
         for d in present_days:
@@ -458,6 +459,9 @@ def build_report(dates, players, raid_dates, warnings, lineups=None, bosses=None
                 days_x.append(d)
             elif status == LATE:
                 days_late.append(d)
+                t = re.search(r"\b(\d{1,2}:\d{2})\b", cells[col_of[d]])
+                if t:
+                    late_time[(name, d)] = t.group(1)
             elif status == UNKNOWN:
                 unknown.append(f"{name} — {day_label(d)}: {cells[col_of[d]]!r}")
         if days_x:
@@ -476,6 +480,7 @@ def build_report(dates, players, raid_dates, warnings, lineups=None, bosses=None
         "bosses": bosses,
         "unavailable": unavailable,
         "late": late,
+        "late_time": late_time,
         "unconfirmed": unconfirmed,
         "unknown": unknown,
         "missing_days": missing_days,
@@ -509,8 +514,9 @@ def format_message(report, start, end, raid_dates, mentions, mention_sections,
             return f"{name} <@{uid}>"
         return name
 
-    def days(ds):
-        return " / ".join(day_label(d) for d in ds)
+    def days(ds, name=None):
+        lt = report.get("late_time") or {}
+        return " / ".join(day_label(d) + (f" ({lt[(name, d)]})" if (name, d) in lt else "") for d in ds)
 
     def lineup_lines(name, section):
         if not report["bosses"]:
@@ -538,7 +544,7 @@ def format_message(report, start, end, raid_dates, mentions, mention_sections,
     lines.append(f"⏰ **{T('late')}**")
     if report["late"]:
         for n, ds in report["late"]:
-            lines.append(f"• {who(n, 'late')} — {days(ds)}")
+            lines.append(f"• {who(n, 'late')} — {days(ds, n)}")
             lines += lineup_lines(n, "late")
     else:
         lines.append(T("nobody"))

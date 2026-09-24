@@ -134,7 +134,7 @@
   var CLASS_COLOR = { "death knight": "#C41E3A", "demon hunter": "#A330C9", druid: "#FF7C0A", evoker: "#33937F", hunter: "#AAD372", mage: "#3FC7EB",
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
   var $ = function (s) { return document.querySelector(s); };
-  var state = { token: window.esAuth ? esAuth.token() : null, roster: [], bosses: [], size: 20, abs: {}, edit: false, draft: null };
+  var state = { token: window.esAuth ? esAuth.token() : null, roster: [], bosses: [], size: 20, abs: {}, absTime: {}, edit: false, draft: null };
   if (window.esAuth) esAuth.onChange(function (t) { state.token = t; if (!t) { state.edit = false; state.draft = null; } render(); });
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
@@ -166,7 +166,7 @@
       var dates = state.bosses.map(function (b) { return b.date; }).filter(Boolean).sort();
       if (!dates.length) { state.abs = {}; render(); return; }
       return fetch(API_BASE + "/api/absence?from=" + dates[0] + "&to=" + dates[dates.length - 1], { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (a) {
-        state.abs = {}; (a.marks || []).forEach(function (m) { state.abs[nk(m.player) + "|" + m.date] = m.type; }); render();
+        state.abs = {}; state.absTime = {}; (a.marks || []).forEach(function (m) { state.abs[nk(m.player) + "|" + m.date] = m.type; if (m.time) state.absTime[nk(m.player) + "|" + m.date] = m.time; }); render();
       });
     }).catch(function (err) { $("#status").textContent = "Data se nenačetla: " + err.message; });
   }
@@ -196,7 +196,7 @@
           }
           if (b.slots.filter(function (s) { return nk(splitSlot(s).name) === nk(name); }).length > 1) { cls.push("dup"); why = "dvakrát"; }
           var a = b.date ? state.abs[nk(name) + "|" + b.date] : null;
-          if (a === "absent") { cls.push("absent"); why = "nepřijde"; } else if (a === "late") { cls.push("late"); why = "přijde dýl"; }
+          if (a === "absent") { cls.push("absent"); why = "nepřijde"; } else if (a === "late") { cls.push("late"); why = "přijde dýl" + (state.absTime[nk(name) + "|" + b.date] ? " v " + state.absTime[nk(name) + "|" + b.date] : ""); }
         }
         var inner = state.edit
           ? '<select data-b="' + bi + '" data-s="' + i + '"><option value="">–</option>' + optionsFor(slot) + "</select>"

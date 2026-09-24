@@ -2,11 +2,13 @@ name: Weekly raid attendance report
 
 on:
   schedule:
-  # Every day at 18:00 Czech time. GitHub cron is UTC only, so the job fires
-  # at both 16:00 and 17:00 UTC and the "gate" step below keeps only the
-  # firing where it is 18:00 in Europe/Prague (16 UTC in summer, 17 in winter).
-  - cron: "0 16 * * *"
-  - cron: "0 17 * * *"
+  # Every day at 18:00 Czech time. GitHub cron is UTC only AND its firings are
+  # routinely 1–4 hours late (the old "0 16 / 0 17 UTC + must be 18:xx" gate
+  # therefore never posted: the 16:00 firing arrived at 19:51 UTC). So the job
+  # fires every 30 minutes from 15:30 UTC to 21:30 UTC and the "gate" step keeps
+  # the FIRST firing where it is already 18:00 or later in Europe/Prague and the
+  # report has not been posted today yet (per-day marker in the Actions cache).
+  - cron: "0,30 15-21 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -24,6 +26,7 @@ on:
 
 permissions:
   contents: read
+  actions: write   # actions/cache save (the "posted today" marker)
 
 concurrency:
   group: attendance-report
@@ -34,30 +37,53 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Run only at 18:00 Czech time (DST guard for the two UTC crons)
+      - name: Time gate (18:00 or later in Europe/Prague; manual runs always pass)
         id: gate
         run: |
-          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(TZ=Europe/Prague date +%H)" = "18" ]; then
+          echo "day=$(TZ=Europe/Prague date +%F)" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(TZ=Europe/Prague date +%H)" -ge 18 ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "It is $(TZ=Europe/Prague date +%H:%M) in Europe/Prague, not 18:xx - skipping this cron firing."
+            echo "It is $(TZ=Europe/Prague date +%H:%M) in Europe/Prague, before 18:00 - skipping this cron firing."
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Scheduled runs: was the report already posted today? (exact-key cache hit = yes)
+      - name: Check the "posted today" marker
+        id: marker
+        if: steps.gate.outputs.run == 'true' && github.event_name == 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: .absence-report-posted
+          key: absence-report-posted-${{ steps.gate.outputs.day }}
+          lookup-only: true
+
+      - name: Decide
+        id: go
+        run: |
+          if [ "${{ steps.gate.outputs.run }}" != "true" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ] && [ "${{ steps.marker.outputs.cache-hit }}" = "true" ]; then
+            echo "Report for ${{ steps.gate.outputs.day }} was already posted today - skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
-        if: steps.gate.outputs.run == 'true'
+        if: steps.go.outputs.run == 'true'
 
       - uses: actions/setup-python@v5
-        if: steps.gate.outputs.run == 'true'
+        if: steps.go.outputs.run == 'true'
         with:
           python-version: "3.12"
 
       - name: Install dependencies
-        if: steps.gate.outputs.run == 'true'
+        if: steps.go.outputs.run == 'true'
         run: pip install -r tools/attendance/requirements.txt
 
       - name: Build and send the report
-        if: steps.gate.outputs.run == 'true'
+        if: steps.go.outputs.run == 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_MENTIONS: ${{ secrets.DISCORD_MENTIONS }}
@@ -79,3 +105,13 @@ jobs:
           if [ -n "${{ inputs.date }}" ]; then ARGS="$ARGS --date ${{ inputs.date }}"; fi
           if [ -n "${{ inputs.week_offset }}" ]; then ARGS="$ARGS --week-offset ${{ inputs.week_offset }}"; fi
           python tools/attendance/attendance.py $ARGS
+
+      # Scheduled run posted → write today's marker so the later cron firings skip.
+      - name: Write the "posted today" marker
+        if: steps.go.outputs.run == 'true' && github.event_name == 'schedule'
+        run: date -u > .absence-report-posted
+      - uses: actions/cache/save@v4
+        if: steps.go.outputs.run == 'true' && github.event_name == 'schedule'
+        with:
+          path: .absence-report-posted
+          key: absence-report-posted-${{ steps.gate.outputs.day }}
