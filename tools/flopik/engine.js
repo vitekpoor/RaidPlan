@@ -13,7 +13,9 @@ var FLOPIK_DIFFICULTY = { 1: "LFR", 3: "Normal", 4: "Heroic", 5: "Mythic" };
 /** Which bosses are tracked and which fails are counted – mirror of tools/flopik/bosses.py. */
 // Metric options: avoid (default true = fail, false = desirable action such as an orb pickup), window (s, hits clustering),
 // castIds (boss casts counted for the summary), spawnIds (summon events counted for the summary – "X z N spawnutých"),
-// spawnNoun / castLabel (words for that summary text), cls (page cell class, e.g. "orb"), hot / hotAll, note (legend).
+// spawnNoun / castLabel (words for that summary text), cls (page cell class, e.g. "orb"), hot / hotAll, note (legend),
+// ticks (hits only: count periodic tick damage too – for channelled / whirlwind abilities WCL logs ONLY as ticks; the
+// clustering window then turns a burst of ticks into one hit).
 function flopikMetric_(kind, key, label, ids, opts) {
   var m = { kind: kind, k: key, l: label, ids: ids.map(String), avoid: true, window: 1.5, castIds: [], spawnIds: [] };
   Object.keys(opts || {}).forEach(function (o) { m[o] = opts[o]; });
@@ -39,12 +41,17 @@ var FLOPIK_BOSSES = {
   // a player who runs over an orb picks it up = debuff Volatile Venom 1282419 for 5 s, then the orb is put down and can be
   // picked up again (relay), so pickups can exceed spawned orbs. Verified on report YZKv4kb6DtmqA73f (2026-09-20).
   // ver: bump when the metrics change – cached pulls with an older ver are recomputed by flopikRefresh_.
-  3429: { key: "coiledaltar", name: "The Coiled Altar", ver: 2, sortBy: "orbs", metrics: [
+  // Axegrinder (NPC "Axegrinder", spell 1285017): its damage is logged almost only as periodic ticks 0.2–0.3 s apart while a
+  // player stands in it (ES HC kill 23.9.: 10/10 ticks, Fierce Mythic kill 6md7JTqgjcw3fkpL: 185/197) → ticks: true + 1.5 s
+  // clustering = one "hit" per time a player got caught. ver 3 = Axegrinder column added (2026-09-24).
+  3429: { key: "coiledaltar", name: "The Coiled Altar", ver: 3, sortBy: "orbs", metrics: [
     flopikDebuff_("orbs", "Orby", [1282419], { avoid: false, cls: "orb", castIds: [1299960], castLabel: "Toxic Deluge", spawnIds: [1299781], spawnNoun: "spawnutých orbů",
       note: "sebrání orbu Coalesced Venom (debuff Volatile Venom 1282419 při každém sebrání) – orb se nese 5 s, pak se položí a může ho sebrat někdo další, " +
-        "takže sebrání může být víc než spawnutých orbů; smrt s orbem v ruce se počítá jako sebrání" })
+        "takže sebrání může být víc než spawnutých orbů; smrt s orbem v ruce se počítá jako sebrání" }),
+    flopikHits_("axe", "Axegrinder", [1285017], { ticks: true, window: 1.5, hot: [1, 2], hotAll: [3, 6],
+      note: "zásah od addky Axegrinder (1285017) – dmg se loguje jako rychlé ticky, dokud v tom hráč stojí; souvislá série ticků (mezera do 1,5 s) = jeden zásah" })
   ], description: "Zelené orby (<b>Coalesced Venom</b>) po každém <b>Toxic Deluge</b> se sbírají přeběhnutím a nosí doprostřed, kde je tank zničí Severem. " +
-    "<b>Orby</b> = kolikrát hráč orb sebral (počítá se i další sebrání po položení)." },
+    "<b>Orby</b> = kolikrát hráč orb sebral (počítá se i další sebrání po položení). <b>Axegrinder</b> = kolikrát hráče chytla addka Axegrinder." },
   3492: { key: "ulatek", name: "Ula'tek", metrics: [] },
   3379: { key: "nymrissa", name: "Nymrissa Wavecaller", metrics: [] }
 };
@@ -138,7 +145,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
         if (e.type === "summon" && m.spawnIds.indexOf(ab) >= 0) spawned++;
         if (m.ids.indexOf(ab) < 0) return;
         var hitTypes = m.kind === "hits" ? ["damage", "applydebuff"] : m.kind === "debuff" ? ["applydebuff", "applydebuffstack"] : ["cast"];
-        if (hitTypes.indexOf(e.type) < 0 || e.tick) return;   // periodic ticks are not new hits
+        if (hitTypes.indexOf(e.type) < 0 || (e.tick && !m.ticks)) return;   // periodic ticks are not new hits (unless ticks: true)
         var who = m.kind === "casts" ? e.sourceID : e.targetID;
         if (!players[who]) return;
         (per[who] = per[who] || []).push(e.timestamp);
