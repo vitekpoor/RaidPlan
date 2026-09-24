@@ -47,6 +47,10 @@
   select.cell.ano { background: #9bd9a8; color: #111; } select.cell.ne { background: #e88b8b; color: #111; } select.cell.omluvenka { background: #f2d488; color: #111; } select.cell.pozdě { background: #f4b473; color: #111; }
   select.cell option { background: var(--surface2); color: var(--ink); }
   .mx tfoot td { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
+  /* sloupec dnešního data (přehled absencí): červený rámeček přes hlavičku, řádky i patičku */
+  .mx th.today, .mx td.today { border-left: 2px solid #e05050; border-right: 2px solid #e05050; }
+  .mx th.today { border-top: 2px solid #e05050; border-radius: 4px 4px 0 0; color: #e05050; }
+  .mx tfoot td.today { border-bottom: 2px solid #e05050; border-radius: 0 0 4px 4px; }
   .m { display: inline-block; min-width: 3.4rem; padding: 1px 7px; border-radius: 4px; font-weight: 600; font-size: 12px; color: #111; }
   .m.ano { background: #9bd9a8; } .m.ne { background: #e88b8b; } .m.omluvenka { background: #f2d488; } .m.pozdě { background: #f4b473; }
   .m.absent { background: #e88b8b; } .m.late { background: #f4b473; }
@@ -173,20 +177,23 @@
   }
   function renderAbs() {
     var a = state.abs, marks = a.marks || [];
-    var dates = []; marks.forEach(function (m) { if (dates.indexOf(m.date) < 0) dates.push(m.date); }); dates.sort().reverse();   // nejnovější vlevo
+    var todayIso = iso(today), inRange = $("#from").value <= todayIso && todayIso <= $("#to").value;
+    var dates = inRange ? [todayIso] : [];   // dnešek je vidět vždy (červený rámeček), i když nikdo nic nenahlásil
+    marks.forEach(function (m) { if (dates.indexOf(m.date) < 0) dates.push(m.date); }); dates.sort().reverse();   // nejnovější vlevo
+    var td = function (d, extra) { return '<td class="' + (d === todayIso ? "today" : "") + (extra ? " " + extra : "") + '">'; };
     var byKey = {}; marks.forEach(function (m) { byKey[m.player.toLowerCase() + "|" + m.date] = m; });
-    var head = "<tr><th>Hráč</th>" + dates.map(function (d) { var dd = day(d); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "</th>"; }).join("") + "</tr>";
+    var head = "<tr><th>Hráč</th>" + dates.map(function (d) { var dd = day(d); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + (d === todayIso ? " today" : "") + '"' + (d === todayIso ? ' title="dnes"' : "") + ">" + esc(dd.txt) + "</th>"; }).join("") + "</tr>";
     var rows = [];
     state.roster.forEach(function (p) {
       rows.push("<tr>" + nameCell(p.name) + dates.map(function (d) {
         var m = byKey[p.name.toLowerCase() + "|" + d];
-        if (!m) return "<td></td>";
-        return '<td><span class="m ' + esc(m.type) + (state.token ? " del" : "") + '" data-id="' + m.id + '" title="nahlášeno ' + esc(new Date(m.createdAt).toLocaleString("cs-CZ")) + (state.token ? " · klik = smazat" : "") + '">' + (m.type === "late" ? "pozdě" : "X") + "</span></td>";
+        if (!m) return td(d) + "</td>";
+        return td(d) + '<span class="m ' + esc(m.type) + (state.token ? " del" : "") + '" data-id="' + m.id + '" title="nahlášeno ' + esc(new Date(m.createdAt).toLocaleString("cs-CZ")) + (state.token ? " · klik = smazat" : "") + '">' + (m.type === "late" ? "pozdě" : "X") + "</span></td>";
       }).join("") + "</tr>");
     });
-    var foot = "<tr><td>Chybí / pozdě</td>" + dates.map(function (d) { var n = marks.filter(function (m) { return m.date === d && m.type === "absent"; }).length, l = marks.filter(function (m) { return m.date === d && m.type === "late"; }).length; return "<td>" + n + (l ? " / " + l : "") + "</td>"; }).join("") + "</tr>";
+    var foot = "<tr><td>Chybí / pozdě</td>" + dates.map(function (d) { var n = marks.filter(function (m) { return m.date === d && m.type === "absent"; }).length, l = marks.filter(function (m) { return m.date === d && m.type === "late"; }).length; return td(d) + n + (l ? " / " + l : "") + "</td>"; }).join("") + "</tr>";
     $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (dates.length + 1) + '" class="cnt">Žádné nahlášené absence v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = dates.length ? foot : "";
-    $("#hint").textContent = "X = nepřijde, pozdě = přijde pozdě (nahlášeno formulářem Omluvenky). Zobrazují se jen dny, kdy někdo něco nahlásil." + (state.token ? " Kliknutím na značku ji smažeš." : " Špatný záznam smaže přihlášený raid leader.");
+    $("#hint").textContent = "X = nepřijde, pozdě = přijde pozdě (nahlášeno formulářem Omluvenky). Zobrazují se jen dny, kdy někdo něco nahlásil, plus dnešek (červený rámeček)." + (state.token ? " Kliknutím na značku ji smažeš." : " Špatný záznam smaže přihlášený raid leader.");
   }
   function render() {
     document.querySelectorAll(".seg button").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); });
