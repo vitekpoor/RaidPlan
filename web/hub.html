@@ -107,7 +107,7 @@
       <label>Hráč <select id="abs-player"><option value="">– vyber –</option></select></label>
       <label>Od <input type="date" id="abs-from" required></label>
       <label>Do (nepovinné) <input type="date" id="abs-to"></label>
-      <span class="seg"><label><input type="radio" name="abs-type" value="absent" checked> ✖ Nepřijdu</label><label><input type="radio" name="abs-type" value="late"> ⏰ Přijdu pozdě</label></span>
+      <span class="seg"><label><input type="radio" name="abs-type" value="absent" checked> ✖ Nepřijdu</label><label><input type="radio" name="abs-type" value="late"> ⏰ Přijdu dýl</label></span>
     </div>
     <button class="btn" id="abs-send" type="button">Odeslat</button>
     <div class="status" id="abs-status"></div>
@@ -221,7 +221,7 @@
       $("#abs-meta").textContent = marks.length ? marks.length + " záznamů od dneška do " + fmtDay(toIso) : "Žádné nahlášené absence od dneška do " + fmtDay(toIso) + ".";
       $("#abs-acth").hidden = !adminToken;
       $("#abs-body").innerHTML = marks.map(function (m) {
-        return "<tr><td><b>" + esc(m.player) + "</b></td><td>" + esc(fmtDay(m.date)) + "</td><td><span class=\"mark " + esc(m.type) + "\">" + (m.type === "late" ? "přijde pozdě" : "nepřijde") + "</span></td>" +
+        return "<tr><td><b>" + esc(m.player) + "</b></td><td>" + esc(fmtDay(m.date)) + "</td><td><span class=\"mark " + esc(m.type) + "\">" + (m.type === "late" ? "přijde dýl" : "nepřijde") + "</span></td>" +
           "<td class=\"note\">" + esc(fmt(m.createdAt)) + "</td>" + (adminToken ? "<td><button class=\"mini\" data-id=\"" + m.id + "\" title=\"smazat záznam\">✕</button></td>" : "") + "</tr>";
       }).join("");
     }).catch(function (err) { $("#abs-meta").textContent = "Přehled se nenačetl: " + err.message; });

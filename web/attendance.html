@@ -188,12 +188,12 @@
       rows.push("<tr>" + nameCell(p.name) + dates.map(function (d) {
         var m = byKey[p.name.toLowerCase() + "|" + d];
         if (!m) return td(d) + "</td>";
-        return td(d) + '<span class="m ' + esc(m.type) + (state.token ? " del" : "") + '" data-id="' + m.id + '" title="nahlášeno ' + esc(new Date(m.createdAt).toLocaleString("cs-CZ")) + (state.token ? " · klik = smazat" : "") + '">' + (m.type === "late" ? "pozdě" : "X") + "</span></td>";
+        return td(d) + '<span class="m ' + esc(m.type) + (state.token ? " del" : "") + '" data-id="' + m.id + '" title="nahlášeno ' + esc(new Date(m.createdAt).toLocaleString("cs-CZ")) + (state.token ? " · klik = smazat" : "") + '">' + (m.type === "late" ? "dýl" : "X") + "</span></td>";
       }).join("") + "</tr>");
     });
-    var foot = "<tr><td>Chybí / pozdě</td>" + dates.map(function (d) { var n = marks.filter(function (m) { return m.date === d && m.type === "absent"; }).length, l = marks.filter(function (m) { return m.date === d && m.type === "late"; }).length; return td(d) + n + (l ? " / " + l : "") + "</td>"; }).join("") + "</tr>";
+    var foot = "<tr><td>Chybí / dýl</td>" + dates.map(function (d) { var n = marks.filter(function (m) { return m.date === d && m.type === "absent"; }).length, l = marks.filter(function (m) { return m.date === d && m.type === "late"; }).length; return td(d) + n + (l ? " / " + l : "") + "</td>"; }).join("") + "</tr>";
     $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (dates.length + 1) + '" class="cnt">Žádné nahlášené absence v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = dates.length ? foot : "";
-    $("#hint").textContent = "X = nepřijde, pozdě = přijde pozdě (nahlášeno formulářem Omluvenky). Zobrazují se jen dny, kdy někdo něco nahlásil, plus dnešek (červený rámeček)." + (state.token ? " Kliknutím na značku ji smažeš." : " Špatný záznam smaže přihlášený raid leader.");
+    $("#hint").textContent = "X = nepřijde, dýl = přijde dýl (nahlášeno formulářem Omluvenky). Zobrazují se jen dny, kdy někdo něco nahlásil, plus dnešek (červený rámeček)." + (state.token ? " Kliknutím na značku ji smažeš." : " Špatný záznam smaže přihlášený raid leader.");
   }
   function render() {
     document.querySelectorAll(".seg button").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); });

@@ -12,7 +12,7 @@ import { loadRoster } from "./roster.js";
 const MAX_DAYS = 62;
 const TYPES = { "nepřijdu": "absent", "přijdu pozdě": "late", absent: "absent", late: "late", x: "absent", "pozdě": "late" };
 const MARK = { absent: "X", late: "pozdě" };
-const LABEL = { absent: "Nepřijdu", late: "Přijdu pozdě" };
+const LABEL = { absent: "Nepřijdu", late: "Přijdu dýl" };   // form confirmation text (the type keys / CSV mark "pozdě" stay)
 
 function isoDate(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")) && !isNaN(Date.parse(s + "T00:00:00Z")) ? s : null;
