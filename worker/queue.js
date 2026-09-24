@@ -16,7 +16,7 @@
 // DISCORD_SIM_CHANNEL (shared channel id for players without a room),
 // DISCORD_PLAYERS_CATEGORY ("TVOJE ROMKA, Players"), SIM_PAGE_URL (link in Discord messages).
 
-import { json, nameKey, specKey, numOrNull, nowIso, whenText, requireAuth, requireAdmin, fetchRoster, playerOf } from "./lib.js";
+import { json, nameKey, specKey, numOrNull, nowIso, whenText, requireAuth, requireAdmin, fetchRoster, playerOf, CORS } from "./lib.js";
 import { simSummary } from "./results.js";
 
 const SIM_MAX_SIMC = 200000;
@@ -27,6 +27,8 @@ const GITHUB_REPO_DEFAULT = "vitekpoor/RaidPlan";
 const GITHUB_WORKFLOW = "sims.yml";
 const GITHUB_BRANCH = "main";
 const EXTRAS_CACHE_SECONDS = 60;
+let extrasMemo = { at: 0, text: "" };   // in-isolate memo (the Cache API is a no-op on *.workers.dev – see results.js)
+export function resetExtrasMemo() { extrasMemo = { at: 0, text: "" }; }
 const DISCORD_PENDING_NOTE = "Discord ⏳ bot přes runner";
 const DISCORD_CREATE_ROOM_CHANNEL = "1544826757956247764";   // channel with the "Create Room" button
 const DISCORD_NO_ROOM_HINT = "ℹ️ Nemáš vlastní místnost – vytvoř si ji tlačítkem v <#" + DISCORD_CREATE_ROOM_CHANNEL + ">, příště ti přijde zpráva přímo tam.";
@@ -162,7 +164,7 @@ export async function submit(request, env, ctx, url) {
     ).bind(ck, ch.name, now, c("3442"), c("3443"), c("3444"), c("3445"), c("3446"), p.server, p.region));
   }
   await env.DB.batch(stmts);
-  ctx.waitUntil(caches.default.delete(extrasCacheKey(url)));
+  resetExtrasMemo(); ctx.waitUntil(caches.default.delete(extrasCacheKey(url)));
   const pending = await countPending(env);
   const run = await dispatchRunner(env, "form:" + ch.name);
   let vaultMsg = "";
@@ -450,7 +452,7 @@ export async function discordRooms(request, env, ctx, url) {
     matched.push(`${player} ← #${ch.name}` + (userId ? "" : " (user ID nenalezeno)"));
   }
   if (stmts.length) await env.DB.batch(stmts);
-  ctx.waitUntil(caches.default.delete(extrasCacheKey(url)));
+  resetExtrasMemo(); ctx.waitUntil(caches.default.delete(extrasCacheKey(url)));
   const noRoom = roster.filter((r) => !matchedPlayers.has(nameKey(r.player))).map((r) => r.player);
   const message = `Načteno ${matched.length} místností z kategorie „${cats.map((c) => c.name).join(", ")}“.\n\n${matched.join("\n")}` +
     (unmatched.length ? "\n\nNespárované místnosti (jméno neodpovídá hráči v Rosteru): " + unmatched.join(", ") : "") +
@@ -469,10 +471,15 @@ export async function getExtras(env, ctx, url) {
   const cache = caches.default, key = extrasCacheKey(url);
   const hit = await cache.match(key);
   if (hit) return hit;
+  const hdr = { "cache-control": `public, max-age=0, s-maxage=${EXTRAS_CACHE_SECONDS}` };
+  if (extrasMemo.text && Date.now() - extrasMemo.at < EXTRAS_CACHE_SECONDS * 1000) {
+    return new Response(extrasMemo.text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", ...CORS, ...hdr } });
+  }
   const vault = (await env.DB.prepare("SELECT character, time, item_id AS itemId, item, slot, ilvl, bonus_id AS bonusId FROM vault_items ORDER BY character_key, id").all()).results;
   const crests = (await env.DB.prepare("SELECT character, time, adventurer, veteran, champion, hero, myth, server, region FROM crests ORDER BY character_key").all()).results;
   const discord = (await env.DB.prepare("SELECT player, channel_url AS channelUrl FROM discord_rooms WHERE channel_url <> '' ORDER BY player_key").all()).results;
-  const res = json({ ok: true, generated: nowIso(), vault, crests, discord }, 200, { "cache-control": `public, max-age=0, s-maxage=${EXTRAS_CACHE_SECONDS}` });
+  const res = json({ ok: true, generated: nowIso(), vault, crests, discord }, 200, hdr);
+  extrasMemo = { at: Date.now(), text: await res.clone().text() };
   ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 }
@@ -513,6 +520,6 @@ export async function importExtras(request, env, ctx, url) {
     await env.DB.batch(stmts);
     out.discord = stmts.length - 1;
   }
-  ctx.waitUntil(caches.default.delete(extrasCacheKey(url)));
+  resetExtrasMemo(); ctx.waitUntil(caches.default.delete(extrasCacheKey(url)));
   return json({ ok: true, imported: out });
 }

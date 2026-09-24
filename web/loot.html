@@ -399,10 +399,19 @@ a.best:hover .open { color: var(--ink-strong); }
   }
 
   // výsledky simů z API (JSON) → { text }
+  // ETag / 304: the API answers "nothing new" with a ~100-row check instead of re-reading all sim rows (D1 daily limit)
+  var resultsEtag = "", resultsText = "";
   function loadResults() {
-    return fetch(API_URL, { cache: "no-store" })
-      .then(function (r) { if (!r.ok) throw new Error("API HTTP " + r.status); return r.text(); })
-      .then(function (t) { if (t.charAt(0) !== "{") throw new Error("API: ne JSON"); return { text: t }; });
+    return fetch(API_URL, { cache: "no-store", headers: resultsEtag ? { "If-None-Match": resultsEtag } : {} })
+      .then(function (r) {
+        if (r.status === 304 && resultsText) return { text: resultsText };
+        if (!r.ok) throw new Error("API HTTP " + r.status);
+        return r.text().then(function (t) {
+          if (t.charAt(0) !== "{") throw new Error("API: ne JSON");
+          resultsEtag = r.headers.get("ETag") || ""; resultsText = t;
+          return { text: t };
+        });
+      });
   }
 
   // vault + cresty + Discord z API (JSON) → { text }

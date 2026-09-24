@@ -1,13 +1,24 @@
 // Sim results (Raidbots Droptimizer / Top Gear, QE Live) – tables sim_reports + sim_results (0001).
-//   GET    /api/sims/results[?character=X]   all rows (edge-cached 60 s) – read by loot.html
+//   GET    /api/sims/results[?character=X]   all rows – read by loot.html every 60 s. The Cache API is a NO-OP on
+//                                            *.workers.dev, so the "edge cache" never worked and every poll re-read all
+//                                            ~4.5k rows (D1 free tier = 5M rows/day, hit 2026-09-24). Now: cheap stamp
+//                                            (COUNT + MAX(stored_at) of sim_reports, ~100 rows) → ETag/304 for the page
+//                                            and an in-isolate memo of the full JSON keyed by that stamp.
 //   POST   /api/sims/results                 (auth) store report(s): latest sim per character+spec+origin wins
 //   DELETE /api/sims/results?character=X[&spec=Y][&origin=Z]   (auth)
 // Writers: tools/roster/sim_results.py (the Raidbots data.json parsing stays in Python – free-plan CPU limit).
 
-import { json, nameKey, specKey, numOrNull } from "./lib.js";
+import { json, nameKey, specKey, numOrNull, CORS } from "./lib.js";
 
 export const ORIGINS = ["raid", "mplus", "topgear", "raidhc"];
 const RESULTS_CACHE_SECONDS = 60;
+
+let resultsMemo = { stamp: "", text: "" };   // per isolate; a write changes the stamp, so no explicit invalidation needed
+export function resetResultsMemo() { resultsMemo = { stamp: "", text: "" }; }
+async function resultsStamp(env) {
+  const r = await env.DB.prepare("SELECT COUNT(*) AS n, MAX(stored_at) AS s FROM sim_reports").first();
+  return `${(r && r.n) || 0}|${(r && r.s) || ""}`;
+}
 
 const RESULTS_SQL = `
   SELECT p.character, p.spec, p.origin, p.source, p.report_url AS report, p.char_ilvl AS charIlvl,
@@ -20,9 +31,15 @@ export async function getResults(request, env, ctx, url) {
   const character = (url.searchParams.get("character") || "").trim();
   const cache = caches.default;
   const cacheKey = resultsCacheKey(url);
+  let etag = null;
   if (!character) {
     const hit = await cache.match(cacheKey);
     if (hit) return hit;
+    const stamp = await resultsStamp(env);
+    etag = `"${stamp}"`;
+    const headers = { "content-type": "application/json; charset=utf-8", "cache-control": `public, max-age=0, s-maxage=${RESULTS_CACHE_SECONDS}`, etag, ...CORS };
+    if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
+    if (resultsMemo.stamp === stamp && resultsMemo.text) return new Response(resultsMemo.text, { status: 200, headers });
   }
   let rows, reports;
   if (character) {
@@ -37,9 +54,13 @@ export async function getResults(request, env, ctx, url) {
   let stored = null;
   reports.forEach((p) => { if (!stored || p.stored_at > stored) stored = p.stored_at; });
   const body = { ok: true, generated: new Date().toISOString(), stored, count: rows.length, reports, rows };
-  const res = json(body, 200, {
+  const text = JSON.stringify(body);
+  if (!character) resultsMemo = { stamp: etag.slice(1, -1), text };
+  const res = new Response(text, { status: 200, headers: {
+    "content-type": "application/json; charset=utf-8", ...CORS,
     "cache-control": character ? "no-store" : `public, max-age=0, s-maxage=${RESULTS_CACHE_SECONDS}`,
-  });
+    ...(etag ? { etag } : {}),
+  } });
   if (!character) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
 }
@@ -82,7 +103,7 @@ export async function postResults(request, env, ctx, url) {
     await env.DB.batch(stmts);
     stored.push({ character: rep.character, spec: rep.spec, origin: rep.origin, rows: (rep.rows || []).length });
   }
-  ctx.waitUntil(caches.default.delete(resultsCacheKey(url)));
+  resetResultsMemo(); ctx.waitUntil(caches.default.delete(resultsCacheKey(url)));
   return json({ ok: true, stored });
 }
 
@@ -97,7 +118,7 @@ export async function deleteResults(env, ctx, url) {
   if (spec) { args.push(specKey(spec)); sql += ` AND spec_key = ?${args.length}`; }
   if (origin) { args.push(origin); sql += ` AND origin = ?${args.length}`; }
   const res = await env.DB.prepare(sql).bind(...args).run();
-  ctx.waitUntil(caches.default.delete(resultsCacheKey(url)));
+  resetResultsMemo(); ctx.waitUntil(caches.default.delete(resultsCacheKey(url)));
   return json({ ok: true, deleted: (res.meta && res.meta.changes) || 0 });
 }
 
