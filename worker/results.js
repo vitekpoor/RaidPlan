@@ -38,7 +38,10 @@ export async function getResults(request, env, ctx, url) {
     const stamp = await resultsStamp(env);
     etag = `"${stamp}"`;
     const headers = { "content-type": "application/json; charset=utf-8", "cache-control": `public, max-age=0, s-maxage=${RESULTS_CACHE_SECONDS}`, etag, ...CORS };
-    if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
+    // weak comparison: Cloudflare may hand the ETag back as W/"…" once it compressed the response
+    const inm = request.headers.get("if-none-match") || "";
+    headers["x-inm"] = inm || "-";
+    if (inm.split(",").some((v) => v.trim().replace(/^W\//, "") === etag)) return new Response(null, { status: 304, headers });
     if (resultsMemo.stamp === stamp && resultsMemo.text) return new Response(resultsMemo.text, { status: 200, headers });
   }
   let rows, reports;
