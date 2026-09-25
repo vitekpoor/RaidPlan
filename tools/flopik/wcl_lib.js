@@ -20,16 +20,38 @@ export function reportCode(s) {
 /**
  * GraphQL client with client-credentials token. store = { get(): {access_token, exp} | null, set(tok) } – optional
  * persistence (Worker: meta table; runner: memory). Returns async gql(query, variables) → data.
+ * opts.retries – how many times a 429 (per-IP rate limit, common on shared GitHub Actions runners) or 5xx answer is
+ * retried with exponential backoff (Retry-After header wins), opts.maxWaitMs caps one wait (default 120 s),
+ * opts.log(msg) reports the waits. Default retries = 0 (the Worker must answer quickly).
  */
-export function makeWcl(clientId, clientSecret, store) {
+export function makeWcl(clientId, clientSecret, store, opts) {
   if (!clientId || !clientSecret) throw new Error("Warcraft Logs API klient není nastavený (WCL_CLIENT_ID / WCL_CLIENT_SECRET)");
+  const retries = Math.max(0, Number(opts && opts.retries) || 0);
+  const maxWait = Number(opts && opts.maxWaitMs) || 120000;
+  const log = (opts && opts.log) || (() => {});
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
   let cached = null;
+
+  // fetch that retries 429 / 5xx answers; the 401 handling (token refresh) stays in gql()
+  async function fetchRetry(what, url, init) {
+    for (let n = 0; ; n++) {
+      const r = await fetch(url, init);
+      const retryable = r.status === 429 || (r.status >= 500 && r.status < 600);
+      if (!retryable || n >= retries) return r;
+      const text = (await r.text()).slice(0, 200);
+      const after = Number(r.headers.get("retry-after")) * 1000;
+      const wait = Math.min(maxWait, after > 0 ? after : 10000 * 2 ** n + Math.floor(Math.random() * 3000));
+      log(`WCL ${what}: HTTP ${r.status} ${text} – čekám ${Math.round(wait / 1000)} s (pokus ${n + 1}/${retries})`);
+      await sleep(wait);
+    }
+  }
+
   async function token(force) {
     if (!force) {
       const t = cached || (store && (await store.get()));
       if (t && t.access_token && t.exp > Date.now() + 60000) { cached = t; return t.access_token; }
     }
-    const r = await fetch(WCL_TOKEN_URL, {
+    const r = await fetchRetry("token", WCL_TOKEN_URL, {
       method: "POST",
       headers: { authorization: "Basic " + btoa(clientId + ":" + clientSecret), "content-type": "application/x-www-form-urlencoded" },
       body: "grant_type=client_credentials",
@@ -43,7 +65,7 @@ export function makeWcl(clientId, clientSecret, store) {
   return async function gql(query, variables) {
     let tk = await token(false);
     for (let attempt = 0; attempt < 2; attempt++) {
-      const r = await fetch(WCL_API, {
+      const r = await fetchRetry("API", WCL_API, {
         method: "POST", headers: { authorization: "Bearer " + tk, "content-type": "application/json" },
         body: JSON.stringify({ query, variables: variables || {} }),
       });

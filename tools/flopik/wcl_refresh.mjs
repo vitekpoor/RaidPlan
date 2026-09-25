@@ -21,6 +21,7 @@ const MIN_DUR = 30;              // s – shorter pulls are not recorded
 const LIVE_MS = 90 * 60000;      // --live: reports whose last fight ended less than this ago
 const REF_MAX_AGE_MS = 7 * 86400000, REF_ERR_AGE_MS = 86400000;
 const PARSE_RETRY_MS = 2 * 86400000;
+const WCL_RETRIES = 6;           // 429/5xx backoff: 10 s, 20 s, 40 s, 80 s, 120 s, 120 s (≈ 6.5 min max, job timeout is 30 min)
 
 const engine = new Function(readFileSync(path.join(HERE, "engine.js"), "utf8") + "\nreturn { flopikAnalyze, flopikBossFor, flopikFilterFor, FLOPIK_BOSSES };")();
 
@@ -134,7 +135,7 @@ async function refreshReport(gql, code) {
 
 async function main() {
   if (!ENV.token && !opt.dryRun) throw new Error("chybí ES_API_TOKEN (nebo api_token v tools/roster/sim_runner.config.json)");
-  const gql = W.makeWcl(ENV.wclId, ENV.wclSecret, null);
+  const gql = W.makeWcl(ENV.wclId, ENV.wclSecret, null, { retries: WCL_RETRIES, log });   // 429 = shared runner IP is rate-limited – wait it out
   const reports = await W.guildReports(gql);
   await post("/api/flopik/reports", { reports });
   log(`Warcraft Logs: ${reports.length} reportů guildy → uloženo`);
