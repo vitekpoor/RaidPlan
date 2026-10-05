@@ -44,14 +44,21 @@ var FLOPIK_BOSSES = {
   // Axegrinder (NPC "Axegrinder", spell 1285017): its damage is logged almost only as periodic ticks 0.2–0.3 s apart while a
   // player stands in it (ES HC kill 23.9.: 10/10 ticks, Fierce Mythic kill 6md7JTqgjcw3fkpL: 185/197) → ticks: true + 1.5 s
   // clustering = one "hit" per time a player got caught. ver 3 = Axegrinder column added (2026-09-24).
-  3429: { key: "coiledaltar", name: "The Coiled Altar", ver: 3, sortBy: "orbs", metrics: [
+  // Malevolent Resonance (Mythic only): two Unnerving Fixation ghosts (Manifestations of Dread) touch → both fixated players
+  // get debuff 1310744 (damage 1312132 every 1 s while they stay in contact); one applydebuff = one collision of the player's
+  // ghost. Verified on our Mythic prog YhcgM6CqbjVwPT7y + rank log b4jTp13RfXPVm7cB f32 (2026-10-05). ver 4 = Resonance column.
+  3429: { key: "coiledaltar", name: "The Coiled Altar", ver: 4, sortBy: "orbs", metrics: [
     flopikDebuff_("orbs", "Orby", [1282419], { avoid: false, cls: "orb", castIds: [1299960], castLabel: "Toxic Deluge", spawnIds: [1299781], spawnNoun: "spawnutých orbů",
       note: "sebrání orbu Coalesced Venom (debuff Volatile Venom 1282419 při každém sebrání) – orb se nese 5 s, pak se položí a může ho sebrat někdo další, " +
         "takže sebrání může být víc než spawnutých orbů; smrt s orbem v ruce se počítá jako sebrání" }),
     flopikHits_("axe", "Axegrinder", [1285017], { ticks: true, window: 1.5, hot: [1, 2], hotAll: [3, 6],
-      note: "zásah od addky Axegrinder (1285017) – dmg se loguje jako rychlé ticky, dokud v tom hráč stojí; souvislá série ticků (mezera do 1,5 s) = jeden zásah" })
+      note: "zásah od addky Axegrinder (1285017) – dmg se loguje jako rychlé ticky, dokud v tom hráč stojí; souvislá série ticků (mezera do 1,5 s) = jeden zásah" }),
+    flopikDebuff_("reson", "Resonance", [1310744], { hot: [1, 2], hotAll: [2, 4],
+      note: "Malevolent Resonance (debuff 1310744, jen Mythic) – duch (Manifestation of Dread) hráče se dotkl ducha někoho jiného; oba fixnutí hráči dostávají dmg každou 1 s, " +
+        "dokud se duchové dotýkají; počítá se každý nový dotek (debuff znovu aplikován)" })
   ], description: "Zelené orby (<b>Coalesced Venom</b>) po každém <b>Toxic Deluge</b> se sbírají přeběhnutím a nosí doprostřed, kde je tank zničí Severem. " +
-    "<b>Orby</b> = kolikrát hráč orb sebral (počítá se i další sebrání po položení). <b>Axegrinder</b> = kolikrát hráče chytla addka Axegrinder." },
+    "<b>Orby</b> = kolikrát hráč orb sebral (počítá se i další sebrání po položení). <b>Axegrinder</b> = kolikrát hráče chytla addka Axegrinder. " +
+    "<b>Resonance</b> (Mythic) = kolikrát se duch hráče (Unnerving Fixation) srazil s cizím duchem – Malevolent Resonance." },
   3492: { key: "ulatek", name: "Ula'tek", metrics: [] },
   3379: { key: "nymrissa", name: "Nymrissa Wavecaller", metrics: [] }
 };
