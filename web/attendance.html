@@ -2,7 +2,7 @@
 <!--
   attendance.html - Docházka (záznamy z addonu ES Attendance, GET /api/attendance) a přehled absencí
   (GET /api/absence) jako matice hráči × dny – náhrada listů „Docházka“ a „Absence přehled“.
-  Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance (přihlášený admin – tlačítko vpravo nahoře).
+  Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance – formulář vidí jen přihlášený admin (tlačítko vpravo nahoře).
   Přihlášený admin může docházku upravovat (Upravit → buňky jako dropdown ano/ne/omluvenka/pozdě → Uložit = PATCH /api/attendance),
   smazat den docházky nebo jednotlivou absenci. Dny jsou od nejnovějšího; sloupce Absence / Bez oml. = podíl raidů, kde hráč chyběl
   (vůbec / bez omluvenky) z raidů, kde je v záznamu, jako skóre od 100 %. Absence: nejnovější datum vlevo. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
@@ -120,11 +120,11 @@
 <div class="wrap"><table class="mx" id="mx"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
 <p class="hint" id="hint"></p>
 
-<div class="form" id="attform">
+<div class="form" id="attform" hidden>
   <div class="heading-section"><h4><em>Zapsat</em> docházku</h4></div>
   <p class="steps">Ve hře <code>/esa</code> → <b>Zapsat docházku</b> → <code>Ctrl+C</code> a sem <code>Ctrl+V</code>. Druhý zápis ve stejný den ten první přepíše. Chybějící hráč, který ten den nahlásil omluvenku nebo pozdní příchod, se ukáže jako <span class="m omluvenka">omluvenka</span> / <span class="m pozdě">pozdě</span>.</p>
   <textarea id="rec" placeholder="ESA1;2026-09-16;20:05;Hráč=1:Postava;Hráč=0;…" spellcheck="false"></textarea>
-  <div class="row"><button class="btn" id="send" type="button">Zapsat</button><span id="rechint" class="cnt" hidden>Zápis docházky vyžaduje přihlášení raid leadera (vpravo nahoře).</span></div>
+  <div class="row"><button class="btn" id="send" type="button">Zapsat</button></div>
   <div class="status" id="recstatus"></div>
 </div>
 </div>
@@ -221,7 +221,7 @@
   }
   function render() {
     document.querySelectorAll(".seg button").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); });
-    $("#send").hidden = !state.token; $("#rec").disabled = !state.token; $("#rechint").hidden = !!state.token;
+    $("#attform").hidden = !state.token;   // zápis docházky vidí jen přihlášený raid leader
     if (state.view === "abs") { state.edit = false; state.draft = {}; state.rtDraft = null; }
     var rt = state.view === "rt";
     $("#daterange").hidden = rt; $("#rtnav").hidden = !rt; $("#mx").classList.toggle("rt", rt);
