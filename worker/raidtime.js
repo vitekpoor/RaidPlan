@@ -227,14 +227,14 @@ export async function announceText(env, offset = 0, siteUrl = "") {
     const when = d.start || d.end ? ` · 🕖 ${d.start}–${d.end}` : "";
     lines.push(`⚔️ **${czDayCap(d.date)}**${when}${d.plan ? ` — *${d.plan}*` : ""}`);
   }
-  if (siteUrl) lines.push("", `🔗 Omluvenky a kdo chybí: <${siteUrl}>`);
+  if (siteUrl) lines.push("", `📝 Nemůžeš? Napiš omluvenku: <${siteUrl}/index.html#omluvenky>`, `🔗 Kdo chybí: <${siteUrl}/attendance.html#raidtime>`);
   return { text: lines.join("\n"), roleId, week: w.week };
 }
 
 /** POST /api/raidtime/announce?offset=&dry=1 (admin). */
 export async function postAnnounce(env, url) {
   const offset = Math.max(-52, Math.min(52, Number(url.searchParams.get("offset")) || 0));
-  const { text, roleId, week } = await announceText(env, offset, `${url.origin}/attendance.html#raidtime`);
+  const { text, roleId, week } = await announceText(env, offset, url.origin);
   if (url.searchParams.get("dry") === "1") return json({ ok: true, dry: true, text, roleId, week });
   try {
     const via = await postDiscord(env, { webhook: env.DISCORD_ANNOUNCE_WEBHOOK, channelId: env.DISCORD_ANNOUNCE_CHANNEL, text, roles: roleId ? [roleId] : [] });
