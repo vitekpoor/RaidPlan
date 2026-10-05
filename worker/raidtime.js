@@ -217,15 +217,15 @@ async function raiderRoleId(env) {
 
 function czDayCap(iso) { const s = czDayLong(iso); return s.charAt(0).toUpperCase() + s.slice(1); }
 
-/** "@Raider / raidy next week (7.–13. 10.) / Středa 7.10. 19:00–23:00 — plan / Neděle 11.10. — zrušeno". */
+/** "📣 RAIDY PŘÍŠTÍ TÝDEN · 7.–13. 10. / @Raider / ⚔️ Středa 7.10. · 🕖 19:00–23:00 — plan / ❌ ~~Neděle 11.10.~~ — zrušeno". */
 export async function announceText(env, offset = 0) {
   const [w, roleId] = await Promise.all([raidWeek(env, { offset }), raiderRoleId(env)]);
-  const lines = [roleId ? `<@&${roleId}>` : "@Raider", `raidy ${w.week.current ? "this" : "next"} week (${w.week.label})`];
-  if (!w.days.length) lines.push("žádný raid");
+  const lines = [`📣 **RAIDY ${w.week.current ? "TENTO" : "PŘÍŠTÍ"} TÝDEN** · ${w.week.label}`, roleId ? `<@&${roleId}>` : "@Raider", ""];
+  if (!w.days.length) lines.push("• žádný raid");
   for (const d of w.days) {
-    if (d.off) { lines.push(`${czDayCap(d.date)} — zrušeno`); continue; }
-    const when = d.start || d.end ? ` ${d.start}–${d.end}` : "";
-    lines.push(`${czDayCap(d.date)}${when}${d.plan ? ` — ${d.plan}` : ""}`);
+    if (d.off) { lines.push(`❌ ~~${czDayCap(d.date)}~~ — zrušeno`); continue; }
+    const when = d.start || d.end ? ` · 🕖 ${d.start}–${d.end}` : "";
+    lines.push(`⚔️ **${czDayCap(d.date)}**${when}${d.plan ? ` — *${d.plan}*` : ""}`);
   }
   return { text: lines.join("\n"), roleId, week: w.week };
 }

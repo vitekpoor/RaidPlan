@@ -347,7 +347,7 @@
     $("#announce").disabled = true; msg(true, "Připravuji náhled…");
     fetch(API_BASE + "/api/raidtime/announce" + q + "&dry=1", { method: "POST", headers: hdr }).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) throw new Error(d.error || "náhled selhal");
-      var preview = d.text.replace(/^<@&\d+>/, "@Raider");
+      var preview = d.text.replace(/<@&\d+>/, "@Raider").replace(/\*\*|~~|(^|\s)\*|\*(\s|$)/g, "$1$2");
       msg(true, "");
       if (!confirm("Poslat do kanálu oznámení?\n\n" + preview + (d.roleId ? "" : "\n\n(⚠ role Raider nenalezena – pošle se jen text @Raider bez pingu)"))) return null;
       msg(true, "Posílám…");
