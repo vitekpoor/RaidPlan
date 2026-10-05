@@ -11,10 +11,14 @@
   "workers_dev": true,
   "preview_urls": false,
   "observability": { "enabled": true },
+  // Daily absence report to Discord at 18:00 Europe/Prague (worker/raidtime.js scheduled): cron is UTC-only, so it fires
+  // at 16:00 and 17:00 UTC and the handler keeps the firing that is 18:xx in Prague (summer = 16 UTC, winter = 17 UTC).
+  "triggers": { "crons": ["0 16 * * *", "0 17 * * *"] },
   // Plain vars (secrets API_TOKEN / GITHUB_TOKEN / RUN_PASSWORD live only in the dashboard). Vars set in the dashboard
   // are replaced on every deploy, so keep them here.
   "vars": {
     "DISCORD_SIM_CHANNEL": "1549744240370782260",  // shared Discord channel (id) for sim notifications of players without a room
+    "DISCORD_ABSENCE_CHANNEL": "1545064822192738465",  // absence messages + daily 18:00 report (secret DISCORD_ABSENCE_WEBHOOK = webhook of this channel, or DISCORD_BOT_TOKEN)
     "WCL_CLIENT_ID": "01a0b464-cd4e-7149-9abb-0a0888814556"   // Warcraft Logs API client (the secret WCL_CLIENT_SECRET stays in the dashboard)
   },
   // worker/migrations/*.sql are imported as text modules (POST /api/admin/migrate runs them)

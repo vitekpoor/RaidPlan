@@ -117,6 +117,15 @@ export function todayPrague(d = new Date()) {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
+/** "19:30" / "19.30" / "1930" / "19" → "19:30", anything else → null. */
+export function normTime(v) {
+  const m = /^\s*(\d{1,2})(?:[:.h]?(\d{2}))?\s*$/.exec(String(v || ""));
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2] || 0);
+  if (h > 23 || mi > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+}
+
 export function addDays(iso, n) {
   return new Date(Date.parse(iso + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 }

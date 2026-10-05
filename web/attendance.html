@@ -6,6 +6,9 @@
   Přihlášený admin může docházku upravovat (Upravit → buňky jako dropdown ano/ne/omluvenka/pozdě → Uložit = PATCH /api/attendance),
   smazat den docházky nebo jednotlivou absenci. Dny jsou od nejnovějšího; sloupce Absence / Bez oml. = podíl raidů, kde hráč chyběl
   (vůbec / bez omluvenky) z raidů, kde je v záznamu, jako skóre od 100 %. Absence: nejnovější datum vlevo. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
+  Raid time (GET /api/raidtime?offset=): raidový týden (st–út) s nejbližším raidem – den + čas, co se děje (plán), kdo chybí
+  (z Omluvenek). Admin: Upravit → časy / plán / zrušení dne, den navíc, šablona pravidelných dnů (PUT /api/raidtime);
+  „Poslat report“ = POST /api/raidtime/report (stejná zpráva, kterou Worker posílá do Discordu v 18:00 a po každé omluvence).
 -->
 <html lang="cs">
 <head>
@@ -63,6 +66,24 @@
   .form .status { margin-top: 10px; font-weight: 600; min-height: 1.3em; } .form .status.ok { color: var(--accent); } .form .status.err { color: var(--dps); }
   .hint { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
   .x { color: var(--muted); cursor: pointer; font-size: 11px; margin-left: 4px; } .x:hover { color: var(--dps); }
+  /* Raid time */
+  #rtnav b { color: var(--ink-strong); font-size: 14px; margin: 0 4px; }
+  #rtnav button { padding: 4px 11px; }
+  table.mx.rt th, table.mx.rt td { text-align: left; white-space: normal; vertical-align: top; padding: 9px 12px; }
+  table.mx.rt td:first-child, table.mx.rt th:first-child { position: static; width: auto; }
+  table.mx.rt th:first-child { width: 30%; } table.mx.rt th:nth-child(2) { width: 30%; }
+  table.mx.rt td:first-child { font-size: 14px; }
+  .rtday .cnt { font-weight: 400; }
+  .rtday.off, .rtday.off .cnt { text-decoration: line-through; color: var(--muted); }
+  .rtday .m { text-decoration: none; margin-left: 6px; }
+  .rt .who { display: inline-block; margin: 0 8px 4px 0; }
+  .rt .who small { color: var(--muted); font-weight: 400; margin-left: 2px; }
+  .rt input.t { width: 4.6rem; text-align: center; } .rt input.plan { width: 100%; min-width: 12rem; }
+  .rt input[type=text], .rt input[type=date] { background: var(--ground); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px; font: inherit; font-size: 13px; }
+  .rt label.chk { color: var(--muted); font-size: 12.5px; margin-left: 8px; white-space: nowrap; }
+  .rt tr.sect th { padding-top: 22px; color: var(--ink); text-transform: none; font-size: 13px; letter-spacing: 0; }
+  .rt tr.sect th small { display: inline; font-size: 12px; }
+  .rt .tpl td:first-child { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -81,13 +102,15 @@
 </div>
 
 <div class="bar">
-  <span class="seg"><button data-view="att" class="active">Docházka</button><button data-view="abs">Absence</button></span>
-  <label>od <input type="date" id="from"></label>
-  <label>do <input type="date" id="to"></label>
+  <span class="seg"><button data-view="att" class="active">Docházka</button><button data-view="abs">Absence</button><button data-view="rt">Raid time</button></span>
+  <span id="daterange"><label>od <input type="date" id="from"></label>
+  <label>do <input type="date" id="to"></label></span>
+  <span id="rtnav" hidden><button class="btn-outline" id="rtprev" type="button" title="předchozí týden">‹</button><b id="rtlabel"></b><button class="btn-outline" id="rtnext" type="button" title="další týden">›</button></span>
   <span id="status"></span>
   <span class="sp"></span>
   <span id="msg"></span>
   <span id="adminbox" hidden>
+    <button class="btn-outline" id="report" type="button" hidden title="pošle do Discordu stejný přehled jako denní report v 18:00">Poslat report</button>
     <button class="btn-outline" id="edit" type="button">Upravit</button>
     <button class="btn" id="save" type="button" hidden>Uložit</button>
     <button class="btn-outline" id="cancel" type="button" hidden>Zrušit</button>
@@ -120,7 +143,8 @@
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
   var $ = function (s) { return document.querySelector(s); };
   var STATES = ["ano", "ne", "omluvenka", "pozdě"];
-  var state = { view: "att", token: window.esAuth ? esAuth.token() : null, roster: [], att: null, abs: null, edit: false, draft: {} };
+  var state = { view: "att", token: window.esAuth ? esAuth.token() : null, roster: [], att: null, abs: null, edit: false, draft: {}, rt: null, rtOffset: 0, rtStatus: null, rtDraft: null };
+  var CZ_LONG = ["neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota"], WD_ORDER = [3, 4, 5, 6, 0, 1, 2];   // raidový týden st → út
   if (window.esAuth) esAuth.onChange(function (t) { state.token = t; if (!t) { state.edit = false; state.draft = {}; } render(); });
   try { state.view = localStorage.getItem("attView") || "att"; } catch (e) {}
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -198,10 +222,129 @@
   function render() {
     document.querySelectorAll(".seg button").forEach(function (b) { b.classList.toggle("active", b.dataset.view === state.view); });
     $("#send").hidden = !state.token; $("#rec").disabled = !state.token; $("#rechint").hidden = !!state.token;
-    if (state.view !== "att") { state.edit = false; state.draft = {}; }
-    $("#adminbox").hidden = !(state.token && state.view === "att"); $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
-    if (state.view === "abs") renderAbs(); else renderAtt();
+    if (state.view === "abs") { state.edit = false; state.draft = {}; state.rtDraft = null; }
+    var rt = state.view === "rt";
+    $("#daterange").hidden = rt; $("#rtnav").hidden = !rt; $("#mx").classList.toggle("rt", rt);
+    $("#adminbox").hidden = !(state.token && state.view !== "abs"); $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
+    $("#report").hidden = !(rt && !state.edit);
+    if (state.view === "abs") renderAbs(); else if (rt) renderRt(); else renderAtt();
   }
+
+  // ---- Raid time: raidový týden (st–út) s nejbližším raidem, plán a kdo chybí (GET /api/raidtime)
+  function loadRt() {
+    $("#status").textContent = "načítám…";
+    return Promise.all([
+      fetch(API_BASE + "/api/raidtime?offset=" + state.rtOffset, { cache: "no-store" }).then(function (r) { return r.json(); }),
+      fetch(API_BASE + "/api/raidtime/status", { cache: "no-store" }).then(function (r) { return r.json(); }).catch(function () { return null; })
+    ]).then(function (res) {
+      if (!res[0].ok) throw new Error(res[0].error || "chyba");
+      state.rt = res[0]; state.rtStatus = res[1]; $("#status").textContent = ""; render();
+    }).catch(function (err) { $("#status").textContent = "Raid time se nenačetl: " + err.message; });
+  }
+  function rtTime(d) { return d.start || d.end ? d.start + "–" + d.end : ""; }
+  function fmtWhen(iso) { try { return new Date(iso).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return iso; } }
+  function missingHtml(d) {
+    if (d.off) return '<span class="cnt">–</span>';
+    if (!d.missing.length) return '<span class="cnt">nikdo nechybí ✅</span>';
+    return d.missing.map(function (m) {
+      return '<span class="who"><span class="m ' + esc(m.type) + '">' + esc(m.player) + (m.type === "late" ? ' · dýl' + (m.time ? " " + esc(m.time) : "") : "") + "</span></span>";
+    }).join("");
+  }
+  function startRtDraft() {
+    var rt = state.rt, tpl = {};
+    (rt.template || []).forEach(function (t) { tpl[t.wd] = t; });
+    state.rtDraft = {
+      days: rt.days.map(function (d) { return { date: d.date, day: d.day, start: d.start, end: d.end, plan: d.plan, off: d.off, custom: d.custom }; }),
+      template: WD_ORDER.map(function (wd) { var t = tpl[wd]; return { wd: wd, on: !!t, start: t ? t.start : "19:00", end: t ? t.end : "23:00", plan: t ? t.plan : "" }; })
+    };
+  }
+  function renderRt() {
+    var rt = state.rt, edit = state.edit && !!state.token && state.rtDraft;
+    $("#mx thead").innerHTML = "<tr><th>Raid time</th><th>Co se děje</th><th>Kdo chybí</th></tr>";
+    if (!rt) { $("#mx tbody").innerHTML = '<tr><td colspan="3" class="cnt">načítám…</td></tr>'; $("#mx tfoot").innerHTML = ""; $("#rtlabel").textContent = ""; return; }
+    $("#rtlabel").textContent = (rt.week.current ? "tento týden " : state.rtOffset === 0 ? "příští týden " : "") + rt.week.label;
+    var rows = [];
+    var byDate = {}; rt.days.forEach(function (d) { byDate[d.date] = d; });
+    if (edit) {
+      state.rtDraft.days.forEach(function (d) {
+        var live = byDate[d.date] || { missing: [], off: false };
+        rows.push('<tr data-date="' + d.date + '"><td class="rtday' + (d.off ? " off" : "") + '">' + esc(d.day) + (d.custom ? ' <span class="cnt">(navíc)</span>' : "") + "<br>" +
+          '<input type="text" class="t" data-f="start" value="' + esc(d.start) + '" placeholder="19:00"> – <input type="text" class="t" data-f="end" value="' + esc(d.end) + '" placeholder="23:00">' +
+          '<label class="chk"><input type="checkbox" data-f="off"' + (d.off ? " checked" : "") + "> " + (d.custom ? "odebrat" : "zrušit raid") + "</label></td>" +
+          '<td><input type="text" class="plan" data-f="plan" value="' + esc(d.plan) + '" placeholder="co se bude dělat (mythic progress, hc last…)"></td><td>' + missingHtml(live) + "</td></tr>");
+      });
+      rows.push('<tr><td colspan="3"><input type="date" id="rtnewdate" min="' + esc(rt.week.from) + '" max="' + esc(rt.week.to) + '"> <button class="btn-outline" id="rtadd" type="button">Přidat den navíc</button> <span class="cnt">(jiný den v tomhle týdnu, např. pondělí)</span></td></tr>');
+      rows.push('<tr class="sect"><th colspan="3">Pravidelné raidové dny <small class="cnt">– šablona pro každý týden; řádky nahoře ji pro konkrétní datum přebíjejí</small></th></tr>');
+      state.rtDraft.template.forEach(function (t) {
+        rows.push('<tr class="tpl" data-wd="' + t.wd + '"><td><label class="chk" style="margin:0"><input type="checkbox" data-f="on"' + (t.on ? " checked" : "") + "> <b>" + esc(CZ_LONG[t.wd]) + "</b></label><br>" +
+          '<input type="text" class="t" data-f="start" value="' + esc(t.start) + '" placeholder="19:00"> – <input type="text" class="t" data-f="end" value="' + esc(t.end) + '" placeholder="23:00"></td>' +
+          '<td><input type="text" class="plan" data-f="plan" value="' + esc(t.plan) + '" placeholder="výchozí plán pro tenhle den"></td><td></td></tr>');
+      });
+    } else {
+      rt.days.forEach(function (d) {
+        rows.push('<tr><td class="rtday' + (d.off ? " off" : "") + '">' + esc(d.day) + (rtTime(d) ? ' <span class="cnt">' + esc(rtTime(d)) + "</span>" : "") +
+          (d.off ? ' <span class="m ne">zrušeno</span>' : "") + (d.custom && !d.off ? ' <span class="cnt">(navíc)</span>' : "") + "</td><td>" + (d.off ? "" : esc(d.plan) || '<span class="cnt">–</span>') + "</td><td>" + missingHtml(d) + "</td></tr>");
+      });
+      if (!rows.length) rows.push('<tr><td colspan="3" class="cnt">V tomhle týdnu není žádný raidový den.</td></tr>');
+    }
+    $("#mx tbody").innerHTML = rows.join(""); $("#mx tfoot").innerHTML = "";
+    var st = state.rtStatus, dis = "";
+    if (st && st.ok) {
+      dis = st.configured ? "" : " ⚠ Discord není nastavený (Worker secret DISCORD_ABSENCE_WEBHOOK nebo DISCORD_BOT_TOKEN).";
+      if (st.lastReport && st.lastReport.at) dis += " Poslední denní report: " + fmtWhen(st.lastReport.at) + (st.lastReport.via === "failed" ? " ✖ " + (st.lastReport.error || "selhal") : st.lastReport.via === "pending" ? " ⏳" : " ✔") + ".";
+      if (st.lastNotify && st.lastNotify.at) dis += " Poslední zpráva o omluvence: " + fmtWhen(st.lastNotify.at) + " (" + esc(st.lastNotify.player || "") + ")" + (st.lastNotify.ok ? " ✔" : " ✖ " + (st.lastNotify.error || "selhala")) + ".";
+    }
+    $("#hint").textContent = (edit
+      ? "Čas a plán platí pro to jedno datum, prázdné = podle šablony. „Zrušit raid“ = ten den se neraiduje (zůstane škrtnutý). Přidat den navíc = raid mimo pravidelné dny. Šablona dole určuje, které dny v týdnu se raiduje, výchozí časy a plán. Nic se neuloží, dokud nedáš Uložit."
+      : "Raidový týden = středa až úterý (reset). Ukazuje se týden s nejbližším raidem, ‹ › přepíná týdny. Kdo chybí se bere z Omluvenek (červeně nepřijde, oranžově přijde dýl + čas). Každá nová omluvenka a každý den v 18:00 jde tenhle přehled do Discordu.") + dis;
+  }
+  // editace raid time: inputy zapisují do draftu (řádek = datum nebo den šablony)
+  $("#mx").addEventListener("input", function (ev) {
+    var inp = ev.target.closest("input[data-f]"); if (!inp || state.view !== "rt" || !state.rtDraft) return;
+    var tr = inp.closest("tr"), f = inp.dataset.f, val = inp.type === "checkbox" ? inp.checked : inp.value;
+    var item = tr.dataset.wd != null ? state.rtDraft.template.filter(function (t) { return String(t.wd) === tr.dataset.wd; })[0]
+                                     : state.rtDraft.days.filter(function (d) { return d.date === tr.dataset.date; })[0];
+    if (item) { item[f] = val; if (f === "off") tr.querySelector(".rtday").classList.toggle("off", !!val); }
+  });
+  $("#mx").addEventListener("click", function (ev) {
+    if (!ev.target.closest("#rtadd") || !state.rtDraft) return;
+    var date = $("#rtnewdate").value, rt = state.rt;
+    if (!date) return msg(false, "⚠ Vyber datum dne navíc.");
+    if (date < rt.week.from || date > rt.week.to) return msg(false, "⚠ Datum musí být v tomhle týdnu (" + rt.week.label + ").");
+    if (state.rtDraft.days.some(function (d) { return d.date === date; })) return msg(false, "⚠ Tenhle den už v týdnu je.");
+    var dt = new Date(date + "T00:00:00"), wd = dt.getDay();
+    state.rtDraft.days.push({ date: date, day: CZ_LONG[wd] + " " + dt.getDate() + "." + (dt.getMonth() + 1) + ".", start: "19:00", end: "23:00", plan: "", off: false, custom: true });
+    state.rtDraft.days.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    msg(true, ""); render();
+  });
+  function saveRt() {
+    var dr = state.rtDraft, template = dr.template.filter(function (t) { return t.on; }).map(function (t) { return { wd: t.wd, start: t.start, end: t.end, plan: t.plan }; });
+    if (!template.length) return msg(false, "⚠ V šabloně musí zůstat aspoň jeden raidový den.");
+    var tpl = {}; template.forEach(function (t) { tpl[t.wd] = t; });
+    var days = [], remove = [];
+    dr.days.forEach(function (d) {
+      var t = tpl[new Date(d.date + "T00:00:00").getDay()];
+      if (!t) { if (d.off) remove.push(d.date); else days.push({ date: d.date, start: d.start, end: d.end, plan: d.plan, off: false }); return; }
+      var same = !d.off && (d.start || "") === (t.start || "") && (d.end || "") === (t.end || "") && (d.plan || "").trim() === (t.plan || "").trim();
+      if (same) remove.push(d.date); else days.push({ date: d.date, start: d.start, end: d.end, plan: d.plan, off: !!d.off });
+    });
+    $("#save").disabled = true; msg(true, "Ukládám…");
+    fetch(API_BASE + "/api/raidtime", { method: "PUT", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + state.token }, body: JSON.stringify({ template: template, days: days, remove: remove }) })
+      .then(function (r) { return r.json().then(function (d) { d._status = r.status; return d; }); }).then(function (d) {
+        if (d._status === 401) { esAuth.logout(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); }
+        if (!d.ok) throw new Error(d.error || "uložení selhalo");
+        state.edit = false; state.rtDraft = null; msg(true, "✔ Uloženo."); return loadRt();
+      }).catch(function (err) { msg(false, "⚠ " + err.message); }).then(function () { $("#save").disabled = false; });
+  }
+  $("#rtprev").addEventListener("click", function () { state.rtOffset--; state.edit = false; state.rtDraft = null; loadRt(); });
+  $("#rtnext").addEventListener("click", function () { state.rtOffset++; state.edit = false; state.rtDraft = null; loadRt(); });
+  $("#report").addEventListener("click", function () {
+    if (!state.token || !confirm("Poslat teď přehled raidového týdne do Discordu?")) return;
+    $("#report").disabled = true; msg(true, "Posílám…");
+    fetch(API_BASE + "/api/raidtime/report", { method: "POST", headers: { "Authorization": "Bearer " + state.token } }).then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.ok) throw new Error(d.error || "odeslání selhalo"); msg(true, "✔ Odesláno do Discordu (" + d.via + ")."); return loadRt(); })
+      .catch(function (err) { msg(false, "⚠ " + err.message); }).then(function () { $("#report").disabled = false; });
+  });
   // editace docházky: změny se sbírají do draftu (datum|hráč → stav), uloží se najednou
   $("#mx").addEventListener("change", function (ev) {
     var sel = ev.target.closest("select.cell"); if (!sel || !state.edit) return;
@@ -209,9 +352,10 @@
     if (sel.value === orig) delete state.draft[key]; else state.draft[key] = sel.value;
     sel.className = "cell" + (sel.value ? " " + sel.value : "");
   });
-  $("#edit").addEventListener("click", function () { state.edit = true; state.draft = {}; msg(true, ""); render(); });
-  $("#cancel").addEventListener("click", function () { state.edit = false; state.draft = {}; render(); });
+  $("#edit").addEventListener("click", function () { if (state.view === "rt" && !state.rt) return; state.edit = true; state.draft = {}; if (state.view === "rt") startRtDraft(); msg(true, ""); render(); });
+  $("#cancel").addEventListener("click", function () { state.edit = false; state.draft = {}; state.rtDraft = null; render(); });
   $("#save").addEventListener("click", function () {
+    if (state.view === "rt") return saveRt();
     var changes = Object.keys(state.draft).map(function (k) { var i = k.indexOf("|"); return { date: k.slice(0, i), player: k.slice(i + 1), state: state.draft[k] }; });
     if (!changes.length) { state.edit = false; render(); return; }
     $("#save").disabled = true; msg(true, "Ukládám…");
@@ -222,8 +366,8 @@
         state.edit = false; state.draft = {}; msg(true, "✔ Uloženo: " + d.changed + " změn."); return load();
       }).catch(function (err) { msg(false, "⚠ " + err.message); }).then(function () { $("#save").disabled = false; });
   });
-  window.addEventListener("beforeunload", function (ev) { if (state.edit && Object.keys(state.draft).length) { ev.preventDefault(); ev.returnValue = ""; } });
-  document.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { state.view = b.dataset.view; try { localStorage.setItem("attView", state.view); } catch (e) {} render(); }); });
+  window.addEventListener("beforeunload", function (ev) { if (state.edit && (Object.keys(state.draft).length || state.rtDraft)) { ev.preventDefault(); ev.returnValue = ""; } });
+  document.querySelectorAll(".seg button").forEach(function (b) { b.addEventListener("click", function () { state.view = b.dataset.view; state.edit = false; state.draft = {}; state.rtDraft = null; try { localStorage.setItem("attView", state.view); } catch (e) {} render(); if (state.view === "rt" && !state.rt) loadRt(); }); });
   $("#from").addEventListener("change", load); $("#to").addEventListener("change", load);
   $("#mx").addEventListener("click", function (ev) {
     var del = ev.target.closest("[data-del]"), mark = ev.target.closest(".m.del");
@@ -244,7 +388,9 @@
       .catch(function (err) { s.className = "status err"; s.textContent = "⚠ Chyba spojení: " + err.message; }).then(function () { $("#send").disabled = false; });
   });
   if (location.hash === "#absence") state.view = "abs";
+  if (location.hash === "#raidtime") state.view = "rt";
   load();
+  if (state.view === "rt") loadRt();
 })();
 </script>
 </body>

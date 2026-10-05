@@ -6,9 +6,13 @@
 //                                    cells "X" (absent) / "pozdě 19:30" (late + time) – read by tools/attendance/attendance.py
 //   DELETE /api/absence?id=N | ?player&date   (admin) remove a wrong entry
 //   POST   /api/absence/import       (admin) { marks: [{ player, date, type }] } – one-time import, replaces everything
+// A new report and an admin delete post a Discord message with the raid-week overview (worker/raidtime.js notifyAbsenceChange,
+// in ctx.waitUntil so the form answer is not delayed; failures only land in meta raidtime_notify / the log).
 
-import { json, nameKey, nowIso, csvLine, CORS, todayPrague, addDays } from "./lib.js";
+import { json, nameKey, nowIso, csvLine, CORS, todayPrague, addDays, normTime } from "./lib.js";
 import { loadRoster } from "./roster.js";
+import { notifyAbsenceChange } from "./raidtime.js";
+export { normTime };
 
 const MAX_DAYS = 62;
 const TYPES = { "nepřijdu": "absent", "přijdu pozdě": "late", absent: "absent", late: "late", x: "absent", "pozdě": "late" };
@@ -19,7 +23,7 @@ function isoDate(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")) && !isNaN(Date.parse(s + "T00:00:00Z")) ? s : null;
 }
 
-export async function postAbsence(request, env) {
+export async function postAbsence(request, env, ctx) {
   let body;
   try { body = await request.json(); } catch (e) { return json({ ok: false, message: "⚠ Tělo požadavku musí být JSON." }, 400); }
   const player = String(body.player || "").trim();
@@ -48,18 +52,11 @@ export async function postAbsence(request, env) {
     ).bind(hit.name, nameKey(hit.name), d, type, time, now));
   }
   await env.DB.batch(stmts);
+  const change = { action: "new", player: hit.name, from, to, type, time, days };
+  if (ctx && ctx.waitUntil) ctx.waitUntil(notifyAbsenceChange(env, change)); else await notifyAbsenceChange(env, change);
   let range = czDate(from);
   if (days > 1) range += ` – ${czDate(to)} (${days} ${days >= 5 ? "dní" : "dny"})`;
   return json({ ok: true, message: `✔ Uloženo: ${hit.name} – ${range} – ${LABEL[type]}${time ? ` (od ${time})` : ""}`, player: hit.name, from, to, type, time, days });
-}
-
-/** "19:30" / "19.30" / "1930" / "19" → "19:30", anything else → null. */
-export function normTime(v) {
-  const m = /^\s*(\d{1,2})(?:[:.h]?(\d{2}))?\s*$/.exec(String(v || ""));
-  if (!m) return null;
-  const h = Number(m[1]), mi = Number(m[2] || 0);
-  if (h > 23 || mi > 59) return null;
-  return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
 }
 
 /** CSV / sheet cell for a mark: "X" or "pozdě 19:30". */
@@ -103,14 +100,21 @@ export async function getAbsenceCsv(env, url) {
   return new Response(lines.join("\r\n") + "\r\n", { headers: { "content-type": "text/csv; charset=utf-8", "cache-control": "no-store", ...CORS } });
 }
 
-export async function deleteAbsence(env, url) {
+export async function deleteAbsence(env, url, ctx) {
   const id = Number(url.searchParams.get("id"));
   const player = (url.searchParams.get("player") || "").trim(), date = isoDate(url.searchParams.get("date"));
-  let res;
-  if (id >= 1) res = await env.DB.prepare("DELETE FROM absences WHERE id = ?1").bind(id).run();
-  else if (player && date) res = await env.DB.prepare("DELETE FROM absences WHERE player_key = ?1 AND date = ?2").bind(nameKey(player), date).run();
+  let row;
+  if (id >= 1) row = await env.DB.prepare("SELECT id, player, date, type, time FROM absences WHERE id = ?1").bind(id).first();
+  else if (player && date) row = await env.DB.prepare("SELECT id, player, date, type, time FROM absences WHERE player_key = ?1 AND date = ?2").bind(nameKey(player), date).first();
   else return json({ ok: false, error: "id or player+date required" }, 400);
-  return json({ ok: true, deleted: (res.meta && res.meta.changes) || 0 });
+  if (!row) return json({ ok: true, deleted: 0 });
+  const res = await env.DB.prepare("DELETE FROM absences WHERE id = ?1").bind(row.id).run();
+  const deleted = (res.meta && res.meta.changes) || 0;
+  if (deleted && row.date >= todayPrague()) {   // only upcoming days matter for the raid-week message
+    const change = { action: "removed", player: row.player, from: row.date, to: row.date, type: row.type, time: row.time, days: 1 };
+    if (ctx && ctx.waitUntil) ctx.waitUntil(notifyAbsenceChange(env, change)); else await notifyAbsenceChange(env, change);
+  }
+  return json({ ok: true, deleted });
 }
 
 export async function importAbsence(request, env) {

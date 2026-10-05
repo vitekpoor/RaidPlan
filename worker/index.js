@@ -12,6 +12,7 @@
 //   lineups      → worker/lineups.js    /api/lineups (+ .csv), PUT (admin)
 //   raidplan     → worker/raidplan.js   /api/lineups/sync (admin → GitHub Actions raidplan.yml), /sync-result (auth), /sync-status
 //   meta comps   → worker/comps.js      /api/comps (GET, POST auth), /api/comps/refresh (admin), /api/comps/status
+//   raid time    → worker/raidtime.js   /api/raidtime (GET, PUT admin), /report (admin), /status; Cron Trigger 18:00 Prague → Discord
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -23,6 +24,7 @@ import migration0004 from "./migrations/0004_flopik.sql";
 import migration0005 from "./migrations/0005_attendance_lineups.sql";
 import migration0006 from "./migrations/0006_rio_comps.sql";
 import migration0007 from "./migrations/0007_absence_time.sql";
+import migration0008 from "./migrations/0008_raid_days.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
@@ -31,10 +33,11 @@ import { postAttendance, getAttendance, getAttendanceCsv, deleteAttendance, patc
 import { getLineups, putLineups, getLineupsCsv } from "./lineups.js";
 import * as comps from "./comps.js";
 import * as raidplan from "./raidplan.js";
+import * as raidtime from "./raidtime.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007], ["0008_raid_days", migration0008]];
 
 export default {
   async fetch(request, env, ctx) {
@@ -46,6 +49,10 @@ export default {
     } catch (e) {
       return json({ ok: false, error: String((e && e.message) || e) }, 500);
     }
+  },
+  // Cron Triggers (wrangler.jsonc "triggers.crons"): daily absence report to Discord (worker/raidtime.js)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(raidtime.scheduled(event, env, ctx));
   },
 };
 
@@ -115,10 +122,10 @@ async function route(request, env, ctx, url) {
   if (path === "/api/roster" && method === "PUT") return admin(() => putRoster(request, env, ctx, url));
 
   // ---- absence (worker/absence.js)
-  if (path === "/api/absence" && method === "POST") return postAbsence(request, env);
+  if (path === "/api/absence" && method === "POST") return postAbsence(request, env, ctx);
   if (path === "/api/absence" && method === "GET") return getAbsence(env, url);
   if (path === "/api/absence.csv" && method === "GET") return getAbsenceCsv(env, url);
-  if (path === "/api/absence" && method === "DELETE") return admin(() => deleteAbsence(env, url));
+  if (path === "/api/absence" && method === "DELETE") return admin(() => deleteAbsence(env, url, ctx));
   if (path === "/api/absence/import" && method === "POST") return admin(() => importAbsence(request, env));
 
   // ---- Flopik (worker/flopik.js)
@@ -148,6 +155,12 @@ async function route(request, env, ctx, url) {
   if (path === "/api/lineups/sync" && method === "POST") return admin(() => raidplan.sync(request, env));
   if (path === "/api/lineups/sync-result" && method === "POST") return auth() || raidplan.syncResult(request, env);
   if (path === "/api/lineups/sync-status" && method === "GET") return raidplan.syncStatus(env);
+
+  // ---- raid time (worker/raidtime.js)
+  if (path === "/api/raidtime" && method === "GET") return raidtime.getRaidtime(env, url);
+  if (path === "/api/raidtime" && method === "PUT") return admin(() => raidtime.putRaidtime(request, env));
+  if (path === "/api/raidtime/report" && method === "POST") return admin(() => raidtime.postReport(env, url));
+  if (path === "/api/raidtime/status" && method === "GET") return raidtime.status(env);
 
   // ---- meta sestavy: raider.io first-kill rosters (worker/comps.js)
   if (path === "/api/comps" && method === "GET") return comps.getComps(env, url);
