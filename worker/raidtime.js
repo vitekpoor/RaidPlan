@@ -218,7 +218,7 @@ async function raiderRoleId(env) {
 function czDayCap(iso) { const s = czDayLong(iso); return s.charAt(0).toUpperCase() + s.slice(1); }
 
 /** "📣 RAIDY PŘÍŠTÍ TÝDEN · 7.–13. 10. / @Raider / ⚔️ Středa 7.10. · 🕖 19:00–23:00 — plan / ❌ ~~Neděle 11.10.~~ — zrušeno". */
-export async function announceText(env, offset = 0) {
+export async function announceText(env, offset = 0, siteUrl = "") {
   const [w, roleId] = await Promise.all([raidWeek(env, { offset }), raiderRoleId(env)]);
   const lines = [`📣 **RAIDY ${w.week.current ? "TENTO" : "PŘÍŠTÍ"} TÝDEN** · ${w.week.label}`, roleId ? `<@&${roleId}>` : "@Raider", ""];
   if (!w.days.length) lines.push("• žádný raid");
@@ -227,13 +227,14 @@ export async function announceText(env, offset = 0) {
     const when = d.start || d.end ? ` · 🕖 ${d.start}–${d.end}` : "";
     lines.push(`⚔️ **${czDayCap(d.date)}**${when}${d.plan ? ` — *${d.plan}*` : ""}`);
   }
+  if (siteUrl) lines.push("", `🔗 Omluvenky a kdo chybí: <${siteUrl}>`);
   return { text: lines.join("\n"), roleId, week: w.week };
 }
 
 /** POST /api/raidtime/announce?offset=&dry=1 (admin). */
 export async function postAnnounce(env, url) {
   const offset = Math.max(-52, Math.min(52, Number(url.searchParams.get("offset")) || 0));
-  const { text, roleId, week } = await announceText(env, offset);
+  const { text, roleId, week } = await announceText(env, offset, `${url.origin}/attendance.html#raidtime`);
   if (url.searchParams.get("dry") === "1") return json({ ok: true, dry: true, text, roleId, week });
   try {
     const via = await postDiscord(env, { webhook: env.DISCORD_ANNOUNCE_WEBHOOK, channelId: env.DISCORD_ANNOUNCE_CHANNEL, text, roles: roleId ? [roleId] : [] });
