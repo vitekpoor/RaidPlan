@@ -166,7 +166,7 @@ export async function overviewText(env, { anchor, offset = 0 } = {}) {
     try {
       const bosses = await loadLineups(env);
       const names = new Map();
-      w.days.forEach((d) => d.missing.forEach((m) => names.set(nameKey(m.player), m.player)));
+      w.days.filter((d) => !d.off).forEach((d) => d.missing.forEach((m) => names.set(nameKey(m.player), m.player)));
       const hits = [];
       for (const [key, name] of names) {
         const inB = bosses.filter((b) => b.slots.some((s) => nameKey(s.replace(/\s*\([^)]*\)\s*$/, "")) === key)).map((b) => b.name);
