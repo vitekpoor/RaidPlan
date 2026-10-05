@@ -220,14 +220,16 @@ function czDayCap(iso) { const s = czDayLong(iso); return s.charAt(0).toUpperCas
 /** "📣 RAIDY PŘÍŠTÍ TÝDEN · 7.–13. 10. / @Raider / ⚔️ Středa 7.10. · 🕖 19:00–23:00 — plan / ❌ ~~Neděle 11.10.~~ — zrušeno". */
 export async function announceText(env, offset = 0, siteUrl = "") {
   const [w, roleId] = await Promise.all([raidWeek(env, { offset }), raiderRoleId(env)]);
-  const lines = [`📣 **RAIDY ${w.week.current ? "TENTO" : "PŘÍŠTÍ"} TÝDEN** · ${w.week.label}`, roleId ? `<@&${roleId}>` : "@Raider", ""];
+  const title = `RAIDY ${w.week.current ? "TENTO" : "PŘÍŠTÍ"} TÝDEN · ${w.week.label}`;
+  // masked links [text](<url>) work for bot/webhook messages; <…> keeps Discord from adding a link preview
+  const lines = [`📣 **${siteUrl ? `[${title}](<${siteUrl}/attendance.html#raidtime>)` : title}**`, roleId ? `<@&${roleId}>` : "@Raider", ""];
   if (!w.days.length) lines.push("• žádný raid");
   for (const d of w.days) {
     if (d.off) { lines.push(`❌ ~~${czDayCap(d.date)}~~ — zrušeno`); continue; }
     const when = d.start || d.end ? ` · 🕖 ${d.start}–${d.end}` : "";
     lines.push(`⚔️ **${czDayCap(d.date)}**${when}${d.plan ? ` — *${d.plan}*` : ""}`);
   }
-  if (siteUrl) lines.push("", `📝 Nemůžeš? Napiš omluvenku: <${siteUrl}/index.html#omluvenky>`, `🔗 Kdo chybí: <${siteUrl}/attendance.html#raidtime>`);
+  if (siteUrl) lines.push("", `📝 Nemůžeš? [Napiš omluvenku](<${siteUrl}/index.html#omluvenky>)`);
   return { text: lines.join("\n"), roleId, week: w.week };
 }
 
