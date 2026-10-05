@@ -19,6 +19,8 @@
   "vars": {
     "DISCORD_SIM_CHANNEL": "1549744240370782260",  // shared Discord channel (id) for sim notifications of players without a room
     "DISCORD_ABSENCE_CHANNEL": "1545064822192738465",  // absence messages + daily 18:00 report (secret DISCORD_ABSENCE_WEBHOOK = webhook of this channel, or DISCORD_BOT_TOKEN)
+    "DISCORD_ANNOUNCE_CHANNEL": "1342560916369313965", // "Oznámit raidy" button → "@Raider raidy next week …" (secret DISCORD_ANNOUNCE_WEBHOOK or the bot)
+    "DISCORD_GUILD_ID": "1336363121660657717",         // guild – the @Raider role is looked up here by name (or set var DISCORD_RAIDER_ROLE = role id)
     "WCL_CLIENT_ID": "01a0b464-cd4e-7149-9abb-0a0888814556"   // Warcraft Logs API client (the secret WCL_CLIENT_SECRET stays in the dashboard)
   },
   // worker/migrations/*.sql are imported as text modules (POST /api/admin/migrate runs them)

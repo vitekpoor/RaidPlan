@@ -8,7 +8,8 @@
   (vůbec / bez omluvenky) z raidů, kde je v záznamu, jako skóre od 100 %. Absence: nejnovější datum vlevo. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
   Raid time (GET /api/raidtime?offset=): raidový týden (st–út) s nejbližším raidem – den + čas, co se děje (plán), kdo chybí
   (z Omluvenek). Admin: Upravit → časy / plán / zrušení dne, den navíc, šablona pravidelných dnů (PUT /api/raidtime);
-  „Poslat report“ = POST /api/raidtime/report (stejná zpráva, kterou Worker posílá do Discordu v 18:00 a po každé omluvence).
+  „Poslat report“ = POST /api/raidtime/report (stejná zpráva, kterou Worker posílá do Discordu v 18:00 a po každé omluvence);
+  „Oznámit raidy“ = POST /api/raidtime/announce (náhled → potvrzení → „@Raider raidy next week …“ do kanálu oznámení).
 -->
 <html lang="cs">
 <head>
@@ -110,6 +111,7 @@
   <span class="sp"></span>
   <span id="msg"></span>
   <span id="adminbox" hidden>
+    <button class="btn-outline" id="announce" type="button" hidden title="pošle do kanálu oznámení „@Raider raidy next week …“ s dny zobrazeného týdne">Oznámit raidy</button>
     <button class="btn-outline" id="report" type="button" hidden title="pošle do Discordu stejný přehled jako denní report v 18:00">Poslat report</button>
     <button class="btn-outline" id="edit" type="button">Upravit</button>
     <button class="btn" id="save" type="button" hidden>Uložit</button>
@@ -226,7 +228,7 @@
     var rt = state.view === "rt";
     $("#daterange").hidden = rt; $("#rtnav").hidden = !rt; $("#mx").classList.toggle("rt", rt);
     $("#adminbox").hidden = !(state.token && state.view !== "abs"); $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
-    $("#report").hidden = !(rt && !state.edit);
+    $("#report").hidden = !(rt && !state.edit); $("#announce").hidden = !(rt && !state.edit);
     if (state.view === "abs") renderAbs(); else if (rt) renderRt(); else renderAtt();
   }
 
@@ -292,6 +294,7 @@
     if (st && st.ok) {
       dis = st.configured ? "" : " ⚠ Discord není nastavený (Worker secret DISCORD_ABSENCE_WEBHOOK nebo DISCORD_BOT_TOKEN).";
       if (st.lastReport && st.lastReport.at) dis += " Poslední denní report: " + fmtWhen(st.lastReport.at) + (st.lastReport.via === "failed" ? " ✖ " + (st.lastReport.error || "selhal") : st.lastReport.via === "pending" ? " ⏳" : " ✔") + ".";
+      if (st.lastAnnounce && st.lastAnnounce.at) dis += " Poslední oznámení raidů: " + fmtWhen(st.lastAnnounce.at) + " (" + esc(st.lastAnnounce.week || "") + ") ✔.";
       if (st.lastNotify && st.lastNotify.at) dis += " Poslední zpráva o omluvence: " + fmtWhen(st.lastNotify.at) + " (" + esc(st.lastNotify.player || "") + ")" + (st.lastNotify.ok ? " ✔" : " ✖ " + (st.lastNotify.error || "selhala")) + ".";
     }
     $("#hint").textContent = (edit
@@ -338,6 +341,20 @@
   }
   $("#rtprev").addEventListener("click", function () { state.rtOffset--; state.edit = false; state.rtDraft = null; loadRt(); });
   $("#rtnext").addEventListener("click", function () { state.rtOffset++; state.edit = false; state.rtDraft = null; loadRt(); });
+  $("#announce").addEventListener("click", function () {
+    if (!state.token || !state.rt) return;
+    var q = "?offset=" + state.rtOffset, hdr = { "Authorization": "Bearer " + state.token };
+    $("#announce").disabled = true; msg(true, "Připravuji náhled…");
+    fetch(API_BASE + "/api/raidtime/announce" + q + "&dry=1", { method: "POST", headers: hdr }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "náhled selhal");
+      var preview = d.text.replace(/^<@&\d+>/, "@Raider");
+      msg(true, "");
+      if (!confirm("Poslat do kanálu oznámení?\n\n" + preview + (d.roleId ? "" : "\n\n(⚠ role Raider nenalezena – pošle se jen text @Raider bez pingu)"))) return null;
+      msg(true, "Posílám…");
+      return fetch(API_BASE + "/api/raidtime/announce" + q, { method: "POST", headers: hdr }).then(function (r) { return r.json(); })
+        .then(function (d2) { if (!d2.ok) throw new Error(d2.error || "odeslání selhalo"); msg(true, "✔ Oznámení odesláno (" + d2.via + ")."); return loadRt(); });
+    }).catch(function (err) { msg(false, "⚠ " + err.message); }).then(function () { $("#announce").disabled = false; });
+  });
   $("#report").addEventListener("click", function () {
     if (!state.token || !confirm("Poslat teď přehled raidového týdne do Discordu?")) return;
     $("#report").disabled = true; msg(true, "Posílám…");

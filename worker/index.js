@@ -12,7 +12,7 @@
 //   lineups      → worker/lineups.js    /api/lineups (+ .csv), PUT (admin)
 //   raidplan     → worker/raidplan.js   /api/lineups/sync (admin → GitHub Actions raidplan.yml), /sync-result (auth), /sync-status
 //   meta comps   → worker/comps.js      /api/comps (GET, POST auth), /api/comps/refresh (admin), /api/comps/status
-//   raid time    → worker/raidtime.js   /api/raidtime (GET, PUT admin), /report (admin), /status; Cron Trigger 18:00 Prague → Discord
+//   raid time    → worker/raidtime.js   /api/raidtime (GET, PUT admin), /report, /announce (admin), /status; Cron Trigger 18:00 Prague → Discord
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -160,6 +160,7 @@ async function route(request, env, ctx, url) {
   if (path === "/api/raidtime" && method === "GET") return raidtime.getRaidtime(env, url);
   if (path === "/api/raidtime" && method === "PUT") return admin(() => raidtime.putRaidtime(request, env));
   if (path === "/api/raidtime/report" && method === "POST") return admin(() => raidtime.postReport(env, url));
+  if (path === "/api/raidtime/announce" && method === "POST") return admin(() => raidtime.postAnnounce(env, url));
   if (path === "/api/raidtime/status" && method === "GET") return raidtime.status(env);
 
   // ---- meta sestavy: raider.io first-kill rosters (worker/comps.js)

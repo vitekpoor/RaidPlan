@@ -19,15 +19,16 @@ export function splitMessage(text, limit = LIMIT) {
   return chunks;
 }
 
-/** Posts `text` to the channel; { webhook, channelId, mentions: [user ids] }. Returns "webhook" | "bot". Throws when nothing is configured or Discord refuses. */
-export async function postDiscord(env, { webhook, channelId, text, mentions = [] }) {
+/** Posts `text` to the channel; { webhook, channelId, mentions: [user ids], roles: [role ids] }. Returns "webhook" | "bot". Throws when nothing is configured or Discord refuses. */
+export async function postDiscord(env, { webhook, channelId, text, mentions = [], roles = [] }) {
   const users = [...new Set(mentions.filter(Boolean).map(String))].slice(0, 100);
+  const roleIds = [...new Set(roles.filter(Boolean).map(String))].slice(0, 100);
   const hook = String(webhook || "").trim(), token = String(env.DISCORD_BOT_TOKEN || "").trim(), ch = String(channelId || "").replace(/\D/g, "");
   if (!/^https:\/\/(?:\w+\.)?discord(?:app)?\.com\/api\/webhooks\//.test(hook) && !(token && ch)) {
     throw new Error("Discord není nastavený (Worker secret DISCORD_ABSENCE_WEBHOOK nebo DISCORD_BOT_TOKEN + kanál)");
   }
   for (const chunk of splitMessage(text)) {
-    const payload = JSON.stringify({ content: chunk, allowed_mentions: { parse: [], users } });
+    const payload = JSON.stringify({ content: chunk, allowed_mentions: { parse: [], users, roles: roleIds } });
     let r;
     if (/^https:\/\//.test(hook)) {
       r = await fetch(hook + (hook.includes("?") ? "&" : "?") + "wait=true", { method: "POST", headers: { "content-type": "application/json" }, body: payload });

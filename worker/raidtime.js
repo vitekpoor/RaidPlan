@@ -8,6 +8,10 @@
 //   PUT  /api/raidtime                   (admin) { template?: [{ wd 0-6, start, end, plan }], days?: [{ date, start, end, plan, off }],
 //                                        remove?: [dates] } – template = meta key "raidtime", days = table raid_days (0008)
 //   POST /api/raidtime/report[?dry=1]    (admin) post the report now (dry = only return the text)
+//   POST /api/raidtime/announce?offset=&dry=1 (admin) "@Raider raidy next week (7.–13. 10.) + one line per day (incl. cancelled)"
+//                                        to the announcements channel (var DISCORD_ANNOUNCE_CHANNEL, secret DISCORD_ANNOUNCE_WEBHOOK
+//                                        or the bot); role = var DISCORD_RAIDER_ROLE or looked up by name "Raider" via the bot
+//                                        (var DISCORD_GUILD_ID), cached in meta discord_raider_role
 //   GET  /api/raidtime/status            { lastReport, lastNotify, configured } (meta raidtime_report / raidtime_notify)
 //
 // Discord target: var DISCORD_ABSENCE_CHANNEL (channel id) + secret DISCORD_ABSENCE_WEBHOOK (webhook of that channel) or
@@ -189,6 +193,58 @@ async function send(env, text, mentions) {
   return postDiscord(env, { webhook: env.DISCORD_ABSENCE_WEBHOOK, channelId: env.DISCORD_ABSENCE_CHANNEL, text, mentions });
 }
 
+// ---- announcement of the raid days ("@Raider raidy next week …") – attendance.html button "Oznámit raidy"
+
+const RAIDER_ROLE_NAME = "raider";
+
+/** Role id of @Raider: var DISCORD_RAIDER_ROLE, else guild roles via the bot (cached). "" when unknown. */
+async function raiderRoleId(env) {
+  const fixed = String(env.DISCORD_RAIDER_ROLE || "").replace(/\D/g, "");
+  if (fixed) return fixed;
+  const cached = await metaGet(env, "discord_raider_role");
+  if (cached && cached.id) return cached.id;
+  const guild = String(env.DISCORD_GUILD_ID || "").replace(/\D/g, "");
+  if (!guild || !env.DISCORD_BOT_TOKEN) return "";
+  try {
+    const r = await fetch(`https://discord.com/api/v10/guilds/${guild}/roles`, { headers: { authorization: `Bot ${env.DISCORD_BOT_TOKEN}`, "user-agent": "eternal-shadows-worker (https://eternal-shadows.vitek-poor.workers.dev, 1.0)" } });
+    if (!r.ok) return "";
+    const roles = await r.json();
+    const hit = (Array.isArray(roles) ? roles : []).find((x) => String(x.name || "").trim().toLowerCase() === RAIDER_ROLE_NAME);
+    if (hit) { await metaSet(env, "discord_raider_role", { id: String(hit.id), name: hit.name, at: nowIso() }); return String(hit.id); }
+  } catch (e) { /* no role → plain text */ }
+  return "";
+}
+
+function czDayCap(iso) { const s = czDayLong(iso); return s.charAt(0).toUpperCase() + s.slice(1); }
+
+/** "@Raider / raidy next week (7.–13. 10.) / Středa 7.10. 19:00–23:00 — plan / Neděle 11.10. — zrušeno". */
+export async function announceText(env, offset = 0) {
+  const [w, roleId] = await Promise.all([raidWeek(env, { offset }), raiderRoleId(env)]);
+  const lines = [roleId ? `<@&${roleId}>` : "@Raider", `raidy ${w.week.current ? "this" : "next"} week (${w.week.label})`];
+  if (!w.days.length) lines.push("žádný raid");
+  for (const d of w.days) {
+    if (d.off) { lines.push(`${czDayCap(d.date)} — zrušeno`); continue; }
+    const when = d.start || d.end ? ` ${d.start}–${d.end}` : "";
+    lines.push(`${czDayCap(d.date)}${when}${d.plan ? ` — ${d.plan}` : ""}`);
+  }
+  return { text: lines.join("\n"), roleId, week: w.week };
+}
+
+/** POST /api/raidtime/announce?offset=&dry=1 (admin). */
+export async function postAnnounce(env, url) {
+  const offset = Math.max(-52, Math.min(52, Number(url.searchParams.get("offset")) || 0));
+  const { text, roleId, week } = await announceText(env, offset);
+  if (url.searchParams.get("dry") === "1") return json({ ok: true, dry: true, text, roleId, week });
+  try {
+    const via = await postDiscord(env, { webhook: env.DISCORD_ANNOUNCE_WEBHOOK, channelId: env.DISCORD_ANNOUNCE_CHANNEL, text, roles: roleId ? [roleId] : [] });
+    const rec = { at: nowIso(), via, week: week.label, offset };
+    await metaSet(env, "raidtime_announce", rec);
+    return json({ ok: true, ...rec, text });
+  } catch (e) {
+    return json({ ok: false, error: String((e && e.message) || e), text }, 502);
+  }
+}
+
 /** Daily report text (the old attendance.py message, now built here). */
 export async function reportText(env) {
   const o = await overviewText(env, {});
@@ -211,8 +267,8 @@ export async function postReport(env, url) {
 }
 
 export async function status(env) {
-  const [lastReport, lastNotify] = await Promise.all([metaGet(env, "raidtime_report"), metaGet(env, "raidtime_notify")]);
-  return json({ ok: true, lastReport, lastNotify, channel: String(env.DISCORD_ABSENCE_CHANNEL || ""), configured: !!(env.DISCORD_ABSENCE_WEBHOOK || env.DISCORD_BOT_TOKEN) });
+  const [lastReport, lastNotify, lastAnnounce] = await Promise.all([metaGet(env, "raidtime_report"), metaGet(env, "raidtime_notify"), metaGet(env, "raidtime_announce")]);
+  return json({ ok: true, lastReport, lastNotify, lastAnnounce, channel: String(env.DISCORD_ABSENCE_CHANNEL || ""), announceChannel: String(env.DISCORD_ANNOUNCE_CHANNEL || ""), configured: !!(env.DISCORD_ABSENCE_WEBHOOK || env.DISCORD_BOT_TOKEN) });
 }
 
 /**
