@@ -17,11 +17,13 @@
   // Plain vars (secrets API_TOKEN / GITHUB_TOKEN / RUN_PASSWORD live only in the dashboard). Vars set in the dashboard
   // are replaced on every deploy, so keep them here.
   "vars": {
-    "DISCORD_SIM_CHANNEL": "1549744240370782260",  // shared Discord channel (id) for sim notifications of players without a room
-    "DISCORD_ABSENCE_CHANNEL": "1545064822192738465",  // absence messages + daily 18:00 report (secret DISCORD_ABSENCE_WEBHOOK = webhook of this channel, or DISCORD_BOT_TOKEN)
-    "DISCORD_ANNOUNCE_CHANNEL": "1342560916369313965", // "Oznámit raidy" button → "@Raider raidy next week …" (secret DISCORD_ANNOUNCE_WEBHOOK or the bot)
-    "DISCORD_GUILD_ID": "1336363121660657717",         // guild – the @Raider role is looked up here by name (or set var DISCORD_RAIDER_ROLE = role id)
-    "WCL_CLIENT_ID": "01a0b464-cd4e-7149-9abb-0a0888814556"   // Warcraft Logs API client (the secret WCL_CLIENT_SECRET stays in the dashboard)
+    "DISCORD_ABSENCE_CHANNEL": "1545064822192738465",
+    "DISCORD_ABSENCE_WEBHOOK": "https://discord.com/api/webhooks/1545064867612860447/68KvTnVQwVZyddmpl6qjn4Ah33jh6Ud6eCCx2AnNkiHzFszDFbLwBqoLQgT0sfjUYZJk",
+    "DISCORD_ANNOUNCE_CHANNEL": "1342560916369313965",
+    "DISCORD_ANNOUNCE_WEBHOOK": "https://discord.com/api/webhooks/1556661494274592769/m5oXsQ0m4Iuyq1iJu7pKuFQPsve9zQZ6az8oCzGj9QV6dcMW4bejXCh1d3l-WCbprbvj",
+    "DISCORD_GUILD_ID": "1336363121660657717",
+    "DISCORD_SIM_CHANNEL": "1549744240370782260",
+    "WCL_CLIENT_ID": "01a0b464-cd4e-7149-9abb-0a0888814556"
   },
   // worker/migrations/*.sql are imported as text modules (POST /api/admin/migrate runs them)
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
