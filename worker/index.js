@@ -13,6 +13,7 @@
 //   raidplan     → worker/raidplan.js   /api/lineups/sync (admin → GitHub Actions raidplan.yml), /sync-result (auth), /sync-status
 //   meta comps   → worker/comps.js      /api/comps (GET, POST auth), /api/comps/refresh (admin), /api/comps/status
 //   raid time    → worker/raidtime.js   /api/raidtime (GET, PUT admin), /report, /announce (admin), /status; Cron Trigger 18:00 Prague → Discord
+//   timelines    → worker/timeline.js   /api/timeline[?boss=] (GET), PUT / DELETE (admin), /api/timeline/lorrgs?p= (proxy) – lorrgs.io cooldown timelines
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -25,6 +26,7 @@ import migration0005 from "./migrations/0005_attendance_lineups.sql";
 import migration0006 from "./migrations/0006_rio_comps.sql";
 import migration0007 from "./migrations/0007_absence_time.sql";
 import migration0008 from "./migrations/0008_raid_days.sql";
+import migration0009 from "./migrations/0009_timelines.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
@@ -34,10 +36,11 @@ import { getLineups, putLineups, getLineupsCsv } from "./lineups.js";
 import * as comps from "./comps.js";
 import * as raidplan from "./raidplan.js";
 import * as raidtime from "./raidtime.js";
+import { getTimeline, putTimeline, deleteTimeline, lorrgsProxy } from "./timeline.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007], ["0008_raid_days", migration0008]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007], ["0008_raid_days", migration0008], ["0009_timelines", migration0009]];
 
 export default {
   async fetch(request, env, ctx) {
@@ -162,6 +165,12 @@ async function route(request, env, ctx, url) {
   if (path === "/api/raidtime/report" && method === "POST") return admin(() => raidtime.postReport(env, url));
   if (path === "/api/raidtime/announce" && method === "POST") return admin(() => raidtime.postAnnounce(env, url));
   if (path === "/api/raidtime/status" && method === "GET") return raidtime.status(env);
+
+  // ---- boss timelines: lorrgs.io cooldown casts per spec (worker/timeline.js)
+  if (path === "/api/timeline" && method === "GET") return getTimeline(env, url);
+  if (path === "/api/timeline" && method === "PUT") return admin(() => putTimeline(request, env));
+  if (path === "/api/timeline" && method === "DELETE") return admin(() => deleteTimeline(env, url));
+  if (path === "/api/timeline/lorrgs" && method === "GET") return lorrgsProxy(env, url);
 
   // ---- meta sestavy: raider.io first-kill rosters (worker/comps.js)
   if (path === "/api/comps" && method === "GET") return comps.getComps(env, url);
