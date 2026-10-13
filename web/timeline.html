@@ -6,7 +6,8 @@
   všichni ho vidí, přihlášený admin (es-auth) ho edituje: tažení castu po ose = posun v čase, klik = detail (čas, poznámka,
   smazat, duplikovat), klik do prázdného místa řádku = výběr schopnosti (ikony: spelly specu / externals / potions / trinkets /
   "Vlastní" (první dlaždice) = všechny aktivní talenty specu/classy/hero z raidbots talents.json + spelly ostatních speců z lorrgs + vlastní text; talent bez známého CD otevře dialog s předvyplněným názvem/ikonou/ID) a cast se přidá v tom čase, ＋ u řádku = totéž s časem 0:00, ✕ u dráhy = skrýt dráhu, ⟳ = znovu importovat řádek
-  z jiného parse, Import = všechny specy najednou.
+  z jiného parse, Import = všechny specy najednou. ✕ u dráhy maže dráhu i casty; přidání schopnosti z katalogu zahodí
+  skryté casty téhož spellu z logu (jinak by se s dráhou vynořily) – skryté casty z logu se vrací jen přes dlaždici "Skryté dráhy z logu".
   Formát dokumentu: { v, boss, duration, phases:[{ts,phase_id}], ref:{report_id,fight_id,…}, bossRow:{lanes,events},
   rows:[{spec, source, lanes:[spellId], events:[{u,id,ts,d?,note?}]}], spells:{id:{name,icon,cooldown,duration,color,show}} }.
   ＋ u řádku Boss nabízí kromě lorrgs spellů i "NSRT timeline" – všechny schopnosti bosse z BossTimelines/MidnightS2/*.lua
@@ -200,7 +201,7 @@
 <div id="bosschips" hidden></div>
 <div class="tlwrap" id="tlwrap"><div class="tl" id="tl"></div><div id="cursor"></div></div>
 <div class="legend"><span><i style="background:#3fd68a;opacity:.85"></i>trvání efektu</span><span><i style="background:#3fd68a;opacity:.25"></i>cooldown</span><span><i style="background:none;border:1px solid var(--gold);height:4px"></i>zlatý rámeček = ručně posunutý / přidaný cast</span><span>zlatý obrys = má poznámku (najeď myší)</span></div>
-<p class="hint" id="edithint" hidden><b>Úpravy:</b> táhni ikonu po ose = posun v čase · klik na ikonu = čas, poznámka, smazat, duplikovat · klik do prázdného místa řádku = vyber schopnost a přidá se v tom čase · ＋ u řádku = totéž od 0:00 · ✕ u dráhy = skrýt (casty zůstanou) · ⟳ = jiný parse z lorrgs.</p>
+<p class="hint" id="edithint" hidden><b>Úpravy:</b> táhni ikonu po ose = posun v čase · klik na ikonu = čas, poznámka, smazat, duplikovat · klik do prázdného místa řádku = vyber schopnost a přidá se v tom čase · ＋ u řádku = totéž od 0:00 · ✕ u dráhy = smazat dráhu i její casty · ⟳ = jiný parse z lorrgs.</p>
 
 </div>
 </div>
@@ -579,6 +580,8 @@
     if (state.edit) { state.doc.bossHide = h.slice(); markDirty(); }
     render();
   }
+  /** remove every cast of a spell from a row (in place – the events array is shared) */
+  function dropCasts(r, id) { var evs = eventsOf(r), keep = evs.filter(function (e) { return e.id !== id; }); evs.length = 0; keep.forEach(function (e) { evs.push(e); }); }
   var HEAD_B = 24, LANE_B = 24;
   function eventsOf(r) { return r ? r.events : state.doc.bossRow.events; }
   var HEAD = 36, LANE = 28;
@@ -610,7 +613,10 @@
       var sp = d.spells[id] || {}, ln = el("div", "lane"), n = eventsOf(r).filter(function (e) { return e.id === id; }).length;
       var wh = /^\d+$/.test(String(id)) ? "<a href='https://www.wowhead.com/spell=" + id + "' data-wowhead='spell=" + id + "' target='_blank' rel='noopener'>" + esc(sp.name || id) + "</a>" : esc(sp.name || id);
       ln.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt=''>" : "<span style='display:inline-block;width:16px;height:16px;border-radius:3px;background:" + esc(sp.color || "#888") + "'></span>") + "<span title='" + esc(sp.name) + (sp.cooldown ? " · CD " + sp.cooldown + " s" : "") + "'>" + wh + "</span><small>" + n + "×</small>";
-      ln.appendChild(btn("✕", "skrýt dráhu (casty zůstanou, vrátíš ji přes ＋)", function () { lanes.splice(lanes.indexOf(id), 1); markDirty(); render(); }, "x"));
+      ln.appendChild(btn("✕", "smazat dráhu i všechny její casty", function () {
+        if (!confirm("Smazat dráhu " + (sp.name || id) + " včetně " + n + " castů?")) return;
+        lanes.splice(lanes.indexOf(id), 1); dropCasts(r, id); markDirty(); render();
+      }, "x"));
       lbl.appendChild(ln);
     });
     if (!lanes.length) lbl.appendChild(el("div", "lane", "<small>žádná dráha</small>"));
@@ -833,7 +839,7 @@
     if (it.custom) { showClassAbilities(r); return; }
     if (it.hidden) { lanes.push(it.id); markDirty(); render(); closePick(); msg("Dráha " + (it.sp.name || it.id) + " zobrazena.", "ok"); return; }
     keepSpell(it.id, it.sp);
-    if (lanes.indexOf(it.id) < 0) lanes.push(it.id);
+    if (lanes.indexOf(it.id) < 0) { dropCasts(r, it.id); lanes.push(it.id); } // hidden log casts of the spell would reappear with the lane
     evs.push({ u: uid(), id: it.id, ts: ts, m: 1 }); markDirty(); render(); closePick();
     msg((it.sp.name || it.id) + " přidáno v " + fmt(ts, true) + ".", "ok");
   }
@@ -980,7 +986,7 @@
     var sid = parseInt($("cId").value, 10), id = sid > 0 ? sid : "c" + uid(), icon = $("cIcon").value.trim();
     if (icon && !/^https?:/.test(icon) && !/\./.test(icon)) icon = ZAM_ICON + icon + ".jpg";
     d.spells[id] = { name: name, icon: icon, cooldown: Number($("cCd").value) || 0, duration: Number($("cDur").value) || 0, color: $("cColor").value.trim() || "#cfd8d2", show: true, type: sid > 0 ? "talent" : "custom" };
-    if (lanes.indexOf(id) < 0) lanes.push(id); evs.push({ u: uid(), id: id, ts: ts, m: 1 });
+    if (lanes.indexOf(id) < 0) { dropCasts(r, id); lanes.push(id); } evs.push({ u: uid(), id: id, ts: ts, m: 1 });
     markDirty(); render(); $("dlgLane").close();
   });
 
