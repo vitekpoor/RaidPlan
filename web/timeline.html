@@ -5,7 +5,7 @@
   parse; healeři metric hps) přes proxy Workeru /api/timeline/lorrgs?p= (CORS lorrgs je nespolehlivý), ikony z assets2.lorrgs.io. Dokument se ukládá do D1 (GET/PUT /api/timeline?boss=<lorrgs slug>),
   všichni ho vidí, přihlášený admin (es-auth) ho edituje: tažení castu po ose = posun v čase, klik = detail (čas, poznámka,
   smazat, duplikovat), klik do prázdného místa řádku = výběr schopnosti (ikony: spelly specu / externals / potions / trinkets /
-  "Vlastní" = spelly ostatních speců classy + vlastní text) a cast se přidá v tom čase, ＋ u řádku = totéž s časem 0:00, ✕ u dráhy = skrýt dráhu, ⟳ = znovu importovat řádek
+  "Vlastní" (první dlaždice) = všechny aktivní talenty specu/classy/hero z raidbots talents.json + spelly ostatních speců z lorrgs + vlastní text; talent bez známého CD otevře dialog s předvyplněným názvem/ikonou/ID) a cast se přidá v tom čase, ＋ u řádku = totéž s časem 0:00, ✕ u dráhy = skrýt dráhu, ⟳ = znovu importovat řádek
   z jiného parse, Import = všechny specy najednou.
   Formát dokumentu: { v, boss, duration, phases:[{ts,phase_id}], ref:{report_id,fight_id,…}, bossRow:{lanes,events},
   rows:[{spec, source, lanes:[spellId], events:[{u,id,ts,d?,note?}]}], spells:{id:{name,icon,cooldown,duration,color,show}} }.
@@ -119,6 +119,7 @@
   #pick .tile .t small { display: block; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #pick .tile.inlane { box-shadow: inset 3px 0 0 var(--accent); }
   #pick .tile.custom { border-style: dashed; border-color: var(--line); }
+  #pick .tile.custom.first { grid-column: 1 / -1; border-color: var(--accent); background: var(--accent-soft); }
   #nsrtOut { width: 100%; box-sizing: border-box; min-height: 14rem; background: var(--ground, #0a0c0b); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.45 ui-monospace, Consolas, monospace; padding: 8px; white-space: pre; }
   /* casty */
   .ev { position: absolute; height: var(--lane); display: flex; align-items: center; z-index: 1; }
@@ -252,8 +253,9 @@
     </div>
     <div class="two">
       <label>Barva <input type="text" id="cColor" value="#cfd8d2"></label>
-      <label>Ikona (wowhead název, volitelné) <input type="text" id="cIcon" placeholder="inv_misc_questionmark.jpg"></label>
+      <label title="s ID funguje wowhead tooltip a NSRT export jako spellid:">Spell ID (wowhead, volitelné) <input type="number" id="cId" placeholder="108416" min="1" step="1"></label>
     </div>
+    <label>Ikona (URL nebo wowhead název ikony, volitelné) <input type="text" id="cIcon" placeholder="spell_shadow_deathpact"></label>
   </div>
   <label>Čas použití (m:ss) <input type="text" id="laneTime" value="0:00"></label>
   <div class="prog" id="laneProg"></div>
@@ -309,6 +311,8 @@
   var NSRT_RAW = "https://raw.githubusercontent.com/Reloe/NorthernSkyRaidTools/main/NorthernSkyRaidTools/BossTimelines/MidnightS2/";
   var NSRT_FILES = { "nekzali-the-soulcoiler": "NekzaliTheSoulcoiler.lua", "entombed-sentinels": "EntombedSentinels.lua", "vashnik-the-malignant": "VashnikTheMalignant.lua",
     "the-lost-explorers": "TheLostExplorers.lua", "sszorak": "Sszorak.lua", "the-twin-fangs": "TheTwinFangs.lua", "the-coiled-altar": "TheCoiledAltar.lua", "ulatek": "Ulatek.lua" };
+  // all talents of every spec (active ones = castable abilities) with icon names: Raidbots public data, CORS *
+  var TALENTS_URL = "https://www.raidbots.com/static/data/live/talents.json", ZAM_ICON = "https://wow.zamimg.com/images/wow/icons/small/";
   var PALETTE = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#e6beff", "#9a6324", "#fffac8", "#800000", "#aaffc3", "#808000", "#ffd8b1", "#000075"];
   var OTHER = [["other-externals", "Externals"], ["other-potions", "Potions"], ["other-trinkets", "Trinkets"]];
   var CLASS_COLOR = { deathknight: "#C41E3A", demonhunter: "#A330C9", druid: "#FF7C0A", evoker: "#33937F", hunter: "#AAD372", mage: "#3FC7EB",
@@ -342,6 +346,18 @@
     var k = "boss:" + boss;
     if (state.spellCache[k]) return Promise.resolve(state.spellCache[k]);
     return lorrgsJson("/api/bosses/" + boss + "/spells").then(function (d) { state.spellCache[k] = d || {}; return state.spellCache[k]; });
+  }
+  /** Raidbots talents.json → { specId: { spec: [entries], cls: [entries], hero: [entries] } } (active entries only) */
+  function fetchTalents() {
+    if (state.spellCache.talents) return Promise.resolve(state.spellCache.talents);
+    return fetch(TALENTS_URL).then(function (r) { if (!r.ok) throw new Error("raidbots " + r.status); return r.json(); }).then(function (list) {
+      var out = {};
+      (list || []).forEach(function (t) {
+        var pick = function (nodes) { var a = []; (nodes || []).forEach(function (n) { (n.entries || []).forEach(function (e) { if (e.type === "active" && e.spellId && e.name) a.push({ name: e.name, id: e.spellId, icon: e.icon }); }); }); return a; };
+        out[t.specId] = { spec: pick(t.specNodes), cls: pick(t.classNodes), hero: pick(t.heroNodes), className: t.className, specName: t.specName };
+      });
+      state.spellCache.talents = out; return out;
+    });
   }
   /** NSRT mythic timeline of the boss: { phases: {id: startSec}, abilities: [{name, id, phase, times[], duration, category}] } */
   function fetchNsrtBoss(boss) {
@@ -726,7 +742,7 @@
           if (seen[id]) return; var sp = list[id]; items.push({ grp: s[1], id: Number(id), sp: sp, n: 0 });
         });
       });
-      items.push({ grp: "Vlastní", custom: true, sp: { name: r ? "Vlastní – schopnosti celé classy…" : "Vlastní schopnost…", color: "#cfd8d2" } });
+      items.unshift({ grp: "Vlastní", custom: true, sp: { name: r ? "Všechny schopnosti specu a classy (talenty) + vlastní…" : "Vlastní schopnost…", color: "#cfd8d2" } });
       pick.items = items; pick.specItems = items; renderPick();
       $("pickSearch").focus();
       if (!r) fetchNsrtBoss(state.boss).then(function (nsrt) {
@@ -747,7 +763,7 @@
         var add = Object.keys(byId).map(function (k) { return byId[k]; }).filter(function (it) { return it.casts.length; });
         add.sort(function (a, b) { return a.sp.name.localeCompare(b.sp.name); });
         // NSRT sequence tiles go before the single-cast lorrgs "Boss" group
-        var at = pick.items.length - 1; pick.items.forEach(function (it, i) { if (it.grp === "Boss – jeden cast v čase" && i < at) at = i; });
+        var at = pick.items.length; pick.items.forEach(function (it, i) { if (it.grp === "Boss – jeden cast v čase" && i < at) at = i; });
         pick.items = pick.items.slice(0, at).concat(add, pick.items.slice(at)); pick.specItems = pick.items; renderPick();
       }).catch(function (e) { msg("NSRT timeline: " + e.message, "err"); });
     });
@@ -757,10 +773,11 @@
     pick.items.forEach(function (it) {
       if (q && !it.custom && !it.customText && !it.back && String(it.sp.name || "").toLowerCase().indexOf(q) < 0) return;
       if (it.grp !== last) { g.appendChild(el("div", "grp", esc(it.grp))); last = it.grp; }
-      var t = el("div", "tile" + (it.inlane ? " inlane" : "") + (it.custom || it.customText || it.back ? " custom" : "")), sp = it.sp;
+      var t = el("div", "tile" + (it.inlane ? " inlane" : "") + (it.custom || it.customText || it.back ? " custom" : "") + (it.custom ? " first" : "")), sp = it.sp;
       t.style.setProperty("--c", sp.color || "#666");
-      var sub = it.nsrt ? it.parts.join(", ") + (eventsOf(pick.row).some(function (e) { return e.id === it.id; }) ? " · klik = nahradit casty" : " · klik = přidat všechny casty") : it.back ? "zpět na spelly specu" : it.customText ? "název, CD, trvání, barva" : it.custom ? (pick.row ? "spelly ostatních speců classy + vlastní text" : "název, CD, trvání, barva") : it.hidden ? it.n + "× v logu · klik = zobrazit dráhu" : (sp.cooldown ? "CD " + sp.cooldown + " s" : "") + (it.n ? " · " + it.n + "×" : "");
-      t.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt='' loading='lazy'>" : "<span class='no'>" + esc(String(sp.name || "?").slice(0, 2)) + "</span>") +
+      var sub = it.talent ? "talent · klik = nastavit CD a přidat" : it.nsrt ? it.parts.join(", ") + (eventsOf(pick.row).some(function (e) { return e.id === it.id; }) ? " · klik = nahradit casty" : " · klik = přidat všechny casty") : it.back ? "zpět na spelly specu" : it.customText ? "název, CD, trvání, barva" : it.custom ? (pick.row ? "spelly ostatních speců classy + vlastní text" : "název, CD, trvání, barva") : it.hidden ? it.n + "× v logu · klik = zobrazit dráhu" : (sp.cooldown ? "CD " + sp.cooldown + " s" : "") + (it.n ? " · " + it.n + "×" : "");
+      var glyph = it.back ? "←" : (it.custom || it.customText) ? "＋" : esc(String(sp.name || "?").slice(0, 2));
+      t.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt='' loading='lazy'>" : "<span class='no'>" + glyph + "</span>") +
         "<span class='t'><span>" + esc(sp.name || it.id) + "</span><small>" + sub + "</small></span>";
       t.title = sp.name || "";
       t.addEventListener("click", function () { addPicked(it); });
@@ -773,19 +790,28 @@
   $("pickClose").addEventListener("click", closePick);
   /** "Vlastní" tile: abilities of the other specs of the same class (lorrgs spell lists, deduplicated), then free text */
   function showClassAbilities(r) {
-    var my = pick.seq, cls = SPEC[r.spec] ? SPEC[r.spec].cls : null, others = SPECS.filter(function (x) { return x[3] === cls && x[0] !== r.spec; });
-    $("pickGrid").innerHTML = "<div class='grp'>Načítám schopnosti classy…</div>"; $("pickSearch").value = "";
-    Promise.all(others.map(function (x) { return fetchSpells(x[0]).catch(function () { return {}; }); })).then(function (lists) {
+    var my = pick.seq, sp0 = SPEC[r.spec] || {}, cls = sp0.cls || null, others = SPECS.filter(function (x) { return x[3] === cls && x[0] !== r.spec; });
+    $("pickGrid").innerHTML = "<div class='grp'>Načítám schopnosti specu a classy…</div>"; $("pickSearch").value = "";
+    Promise.all([fetchTalents().catch(function (e) { msg("Talenty (raidbots): " + e.message, "err"); return {}; })].concat(others.map(function (x) { return fetchSpells(x[0]).catch(function () { return {}; }); }))).then(function (res) {
       if (my !== pick.seq) return;
-      var seen = {}; pick.specItems.forEach(function (it) { if (it.id != null) seen[it.id] = 1; });
+      var tal = res[0][SPEC_ID[r.spec]] || { spec: [], cls: [], hero: [] }, lists = res.slice(1);
+      // full catalogue: every active talent (only lanes already in the row are left out); lorrgs lists of the other specs after
+      var lanes = lanesOf(r), seen = {}; lanes.forEach(function (id) { seen[id] = 1; });
       var items = [{ grp: "Classa " + (cls || ""), back: true, sp: { name: "← Zpět", color: "#cfd8d2" } }];
+      items.push({ grp: "Vlastní", customText: true, sp: { name: "Vlastní text…", color: "#cfd8d2" } });
+      var color = CLASS_COLOR[cls] || "#cfd8d2";
+      [["spec", "Talenty – " + (sp0.name || r.spec)], ["cls", "Talenty – " + (tal.className || cls)], ["hero", "Hero talenty"]].forEach(function (g) {
+        (tal[g[0]] || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (e) {
+          if (seen[e.id]) return; seen[e.id] = 1;
+          items.push({ grp: g[1], talent: true, id: e.id, n: 0, sp: { name: e.name, icon: e.icon ? ZAM_ICON + e.icon + ".jpg" : "", cooldown: 0, duration: 0, color: color, show: true, type: "talent" } });
+        });
+      });
       others.forEach(function (x, i) {
         var list = lists[i] || {};
         Object.keys(list).sort(function (a, b) { return String(list[a].name).localeCompare(String(list[b].name)); }).forEach(function (id) {
           if (seen[id]) return; seen[id] = 1; items.push({ grp: x[1], id: Number(id), sp: list[id], n: 0 });
         });
       });
-      items.push({ grp: "Vlastní", customText: true, sp: { name: "Vlastní text…", color: "#cfd8d2" } });
       pick.items = items; renderPick(); $("pickSearch").focus();
     });
   }
@@ -803,6 +829,7 @@
       markDirty(); render(); closePick(); msg(it.sp.name + ": " + it.casts.length + " castů z NSRT timeline.", "ok"); return;
     }
     if (it.customText || (it.custom && !r)) { closePick(); openCustom(r, ts); return; }
+    if (it.talent && !state.doc.spells[it.id]) { closePick(); openCustom(r, ts, it); return; }
     if (it.custom) { showClassAbilities(r); return; }
     if (it.hidden) { lanes.push(it.id); markDirty(); render(); closePick(); msg("Dráha " + (it.sp.name || it.id) + " zobrazena.", "ok"); return; }
     keepSpell(it.id, it.sp);
@@ -938,19 +965,22 @@
 
   // custom ability (name / cooldown / duration / colour / icon) – opened from the picker's last tile
   var customRow = null;
-  function openCustom(r, ts) {
+  function openCustom(r, ts, pre) {
     customRow = r;
-    $("laneTitle").textContent = "Vlastní schopnost – " + (r ? (SPEC[r.spec] ? SPEC[r.spec].name : r.spec) : "Boss");
-    $("laneProg").textContent = ""; $("laneTime").value = fmt(ts || 0, true); $("cName").value = "";
-    $("dlgLane").showModal(); $("cName").focus();
+    $("laneTitle").textContent = (pre ? "Přidat " + pre.sp.name + " – " : "Vlastní schopnost – ") + (r ? (SPEC[r.spec] ? SPEC[r.spec].name : r.spec) : "Boss");
+    $("laneProg").textContent = pre ? "Cooldown / trvání z raidbots neznáme – doplň (CD určuje šedý pruh na ose)." : "";
+    $("laneTime").value = fmt(ts || 0, true); $("cName").value = pre ? pre.sp.name : ""; $("cId").value = pre ? pre.id : "";
+    $("cIcon").value = pre ? pre.sp.icon : ""; $("cColor").value = pre ? pre.sp.color : "#cfd8d2"; $("cCd").value = "0"; $("cDur").value = "0";
+    $("dlgLane").showModal(); (pre ? $("cCd") : $("cName")).focus(); if (pre) $("cCd").select();
   }
   $("laneGo").addEventListener("click", function () {
     var r = customRow, lanes = lanesOf(r), evs = eventsOf(r), d = state.doc;
     var ts = parseTime($("laneTime").value); if (ts == null) { $("laneProg").textContent = "Čas zadej jako m:ss."; return; }
     var name = $("cName").value.trim(); if (!name) { $("laneProg").textContent = "Zadej název."; return; }
-    var id = "c" + uid();
-    d.spells[id] = { name: name, icon: $("cIcon").value.trim(), cooldown: Number($("cCd").value) || 0, duration: Number($("cDur").value) || 0, color: $("cColor").value.trim() || "#cfd8d2", show: true, type: "custom" };
-    lanes.push(id); evs.push({ u: uid(), id: id, ts: ts, m: 1 });
+    var sid = parseInt($("cId").value, 10), id = sid > 0 ? sid : "c" + uid(), icon = $("cIcon").value.trim();
+    if (icon && !/^https?:/.test(icon) && !/\./.test(icon)) icon = ZAM_ICON + icon + ".jpg";
+    d.spells[id] = { name: name, icon: icon, cooldown: Number($("cCd").value) || 0, duration: Number($("cDur").value) || 0, color: $("cColor").value.trim() || "#cfd8d2", show: true, type: sid > 0 ? "talent" : "custom" };
+    if (lanes.indexOf(id) < 0) lanes.push(id); evs.push({ u: uid(), id: id, ts: ts, m: 1 });
     markDirty(); render(); $("dlgLane").close();
   });
 
