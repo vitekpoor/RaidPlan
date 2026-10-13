@@ -5,11 +5,14 @@
   parse; healeři metric hps) přes proxy Workeru /api/timeline/lorrgs?p= (CORS lorrgs je nespolehlivý), ikony z assets2.lorrgs.io. Dokument se ukládá do D1 (GET/PUT /api/timeline?boss=<lorrgs slug>),
   všichni ho vidí, přihlášený admin (es-auth) ho edituje: tažení castu po ose = posun v čase, klik = detail (čas, poznámka,
   smazat, duplikovat), klik do prázdného místa řádku = výběr schopnosti (ikony: spelly specu / externals / potions / trinkets /
-  vlastní) a cast se přidá v tom čase, ＋ u řádku = totéž s časem 0:00, ✕ u dráhy = skrýt dráhu, ⟳ = znovu importovat řádek
+  "Vlastní" = spelly ostatních speců classy + vlastní text) a cast se přidá v tom čase, ＋ u řádku = totéž s časem 0:00, ✕ u dráhy = skrýt dráhu, ⟳ = znovu importovat řádek
   z jiného parse, Import = všechny specy najednou.
   Formát dokumentu: { v, boss, duration, phases:[{ts,phase_id}], ref:{report_id,fight_id,…}, bossRow:{lanes,events},
   rows:[{spec, source, lanes:[spellId], events:[{u,id,ts,d?,note?}]}], spells:{id:{name,icon,cooldown,duration,color,show}} }.
-  Řádek Boss je kompaktní (casty nabalené do co nejmíň drah) a přilepený pod pravítkem při scrollu; chipy nad osou filtrují
+  ＋ u řádku Boss nabízí kromě lorrgs spellů i "NSRT timeline" – všechny schopnosti bosse z BossTimelines/MidnightS2/*.lua
+  (raw.githubusercontent.com, mythicData; časy jsou relativní k fázi → přepočet na fáze referenčního killu), klik = přidá všechny casty.
+  Ikony mají wowhead tooltip (wow.zamimg.com/js/tooltips.js, $WowheadPower.refreshLinks() po každém renderu), čas + poznámka
+  castu se při najetí ukazují v popisku kurzoru na pravítku. Zoom = Ctrl + kolečko nad osou (čas pod kurzorem zůstává) nebo tlačítka −/+. Řádek Boss je kompaktní (jen ikony bez textu, nabalené do co nejmíň drah) a přilepený pod pravítkem při scrollu; chipy nad osou filtrují
   schopnosti bosse (volba diváka v localStorage, admin v režimu úprav ukládá výchozí filtr do dokumentu bossHide).
   Tlačítko NSRT u řádku = export castů jako reminder string pro Northern Sky Raid Tools
   (EncounterID:<id>;Name:<boss> + řádky time:<s od začátku fáze>;ph:<fáze>;tag:<kdo>;spellid:<id>; – formát z Reminders.lua addonu;
@@ -26,6 +29,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/site.css">
+<script>const whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false, iconSize: "small" };</script>
+<script src="https://wow.zamimg.com/js/tooltips.js" async></script>
 <style>
   :root { --wrap: 1900px; --lbl: 250px; --lane: 28px; --head: 36px; }
   .bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
@@ -56,6 +61,7 @@
   .tl .ruler .tick span { position: absolute; left: 3px; bottom: 2px; color: var(--muted); font-size: 11px; white-space: nowrap; }
   .tl .ruler .tick.m span { color: var(--ink); font-weight: 600; }
   .tl .ruler .phl { position: absolute; top: 2px; padding: 0 5px; font-size: 10.5px; font-weight: 700; color: #07110c; background: var(--accent); border-radius: 999px; white-space: nowrap; }
+  .tl .ruler .cur.info { color: var(--ink-strong); border-color: var(--accent); background: var(--surface2); transform: none; z-index: 6; }
   .tl .ruler .cur { position: absolute; top: 2px; padding: 0 5px; font-size: 10.5px; font-weight: 700; color: var(--ink-strong); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; transform: translateX(-50%); white-space: nowrap; display: none; }
   /* kurzor myši */
   #cursor { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid rgba(255,255,255,.35); pointer-events: none; display: none; z-index: 2; }
@@ -102,7 +108,7 @@
   #pick input { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; font: inherit; font-size: 12px; }
   #pick input#pickTime { width: 5rem; }
   #pick input#pickSearch { width: 100%; box-sizing: border-box; }
-  #pick .grid { overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 4px; align-content: start; }
+  #pick .grid { overflow: auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 4px; align-content: start; }
   #pick .grp { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
   #pick .tile { display: flex; flex-direction: row; gap: 6px; align-items: center; text-align: left; padding: 3px 6px; margin: 0; background: none; border: 1px solid transparent; border-radius: 6px; cursor: pointer; min-width: 0; box-shadow: none; }
   #pick .tile:hover { border-color: var(--accent); background: var(--accent-soft); }
@@ -118,6 +124,9 @@
   .ev { position: absolute; height: var(--lane); display: flex; align-items: center; z-index: 1; }
   .ev .cd { position: absolute; left: 0; height: 6px; bottom: 2px; width: var(--cdw); background: var(--c); opacity: .22; border-radius: 0 3px 3px 0; pointer-events: none; }
   .ev .du { position: absolute; left: 0; height: 6px; bottom: 2px; width: var(--duw); background: var(--c); opacity: .85; border-radius: 0 2px 2px 0; pointer-events: none; }
+  .ev a.wh { display: block; line-height: 0; }
+  .tl .lbl .lane a { color: inherit; text-decoration: none; }
+  .tl .lbl .lane a:hover { color: var(--accent); }
   .ev img { width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(0,0,0,.6); box-shadow: 0 0 0 1px var(--c); position: relative; z-index: 1; display: block; }
   .ev .lab { position: absolute; left: 26px; top: 2px; font-size: 10.5px; color: var(--ink); white-space: nowrap; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   .ev .no { width: 22px; height: 22px; border-radius: 4px; background: var(--c); color: #07110c; font-weight: 800; font-size: 11px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
@@ -174,7 +183,7 @@
   <span id="status">Načítám…</span>
   <a id="lorrgs" href="#" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">lorrgs ↗</a>
   <span class="sp"></span>
-  <label title="přiblížení osy">Zoom <input type="range" id="zoom" min="2" max="16" step="1" value="6"></label>
+  <span title="Ctrl + kolečko myši nad osou přiblíží / oddálí (zůstane čas pod kurzorem)">Zoom: <b style="color:var(--ink)">Ctrl + kolečko</b> <button class="mini" id="zoomOut" type="button" title="oddálit">−</button><span id="zoomVal" style="min-width:3.5em;display:inline-block;text-align:center"></span><button class="mini" id="zoomIn" type="button" title="přiblížit">+</button></span>
   <label title="zobrazit jen specy, které máme v rosteru"><input type="checkbox" id="onlyRoster"> jen roster</label>
   <span id="msg"></span>
   <span id="adminbox" hidden>
@@ -295,6 +304,12 @@
     ["evoker-devastation", "Devastation Evoker", "rdps", "evoker"]];
   var SPEC = {}; SPECS.forEach(function (s, i) { SPEC[s[0]] = { slug: s[0], name: s[1], role: s[2], cls: s[3], order: i }; });
   var ROLE = { tank: "Tank", heal: "Heal", mdps: "Melee DPS", rdps: "Ranged DPS" };
+  // NSRT boss timelines (github Reloe/NorthernSkyRaidTools, BossTimelines/MidnightS2/*.lua): every boss ability with
+  // phase-relative cast times – the second source for the Boss row (lorrgs only has the casts it tracks)
+  var NSRT_RAW = "https://raw.githubusercontent.com/Reloe/NorthernSkyRaidTools/main/NorthernSkyRaidTools/BossTimelines/MidnightS2/";
+  var NSRT_FILES = { "nekzali-the-soulcoiler": "NekzaliTheSoulcoiler.lua", "entombed-sentinels": "EntombedSentinels.lua", "vashnik-the-malignant": "VashnikTheMalignant.lua",
+    "the-lost-explorers": "TheLostExplorers.lua", "sszorak": "Sszorak.lua", "the-twin-fangs": "TheTwinFangs.lua", "the-coiled-altar": "TheCoiledAltar.lua", "ulatek": "Ulatek.lua" };
+  var PALETTE = ["#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4", "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#e6beff", "#9a6324", "#fffac8", "#800000", "#aaffc3", "#808000", "#ffd8b1", "#000075"];
   var OTHER = [["other-externals", "Externals"], ["other-potions", "Potions"], ["other-trinkets", "Trinkets"]];
   var CLASS_COLOR = { deathknight: "#C41E3A", demonhunter: "#A330C9", druid: "#FF7C0A", evoker: "#33937F", hunter: "#AAD372", mage: "#3FC7EB",
     monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B6D" };
@@ -327,6 +342,28 @@
     var k = "boss:" + boss;
     if (state.spellCache[k]) return Promise.resolve(state.spellCache[k]);
     return lorrgsJson("/api/bosses/" + boss + "/spells").then(function (d) { state.spellCache[k] = d || {}; return state.spellCache[k]; });
+  }
+  /** NSRT mythic timeline of the boss: { phases: {id: startSec}, abilities: [{name, id, phase, times[], duration, category}] } */
+  function fetchNsrtBoss(boss) {
+    var k = "nsrt:" + boss;
+    if (state.spellCache[k]) return Promise.resolve(state.spellCache[k]);
+    var f = NSRT_FILES[boss]; if (!f) return Promise.reject(new Error("NSRT timeline pro tohoto bosse neznám"));
+    return fetch(NSRT_RAW + f).then(function (r) { if (!r.ok) throw new Error("github " + r.status); return r.text(); }).then(function (lua) {
+      var m = /local mythicData = \{([\s\S]*?)\n\}/.exec(lua) || /local heroicData = \{([\s\S]*?)\n\}/.exec(lua);
+      if (!m) throw new Error("NSRT soubor nemá mythicData");
+      var body = m[1], phases = {}, abilities = [], re = /\[(\d+\.?\d*)\]\s*=\s*\{\s*start\s*=\s*([\d.]+)/g, x;
+      while ((x = re.exec(body))) phases[x[1]] = Number(x[2]);
+      re = /\{\s*name\s*=\s*"([^"]*)",\s*spellID\s*=\s*(\d+),\s*category\s*=\s*"([^"]*)",\s*phase\s*=\s*([\d.]+),\s*times\s*=\s*\{([^}]*)\},\s*duration\s*=\s*([\d.]+)/g;
+      while ((x = re.exec(body))) abilities.push({ name: x[1], id: Number(x[2]), category: x[3], phase: x[4], times: x[5].split(",").map(function (t) { return Number(t.trim()); }).filter(function (n) { return !isNaN(n); }), duration: Number(x[6]) });
+      var out = { phases: phases, abilities: abilities }; state.spellCache[k] = out; return out;
+    });
+  }
+  /** start (ms from pull) of NSRT phase id in our document: lorrgs phases of the reference kill, else NSRT's own averages */
+  function phaseStartMs(phaseId, nsrt) {
+    if (String(phaseId) === "1") return 0;
+    var p = (state.doc.phases || []).filter(function (q) { return String(q.phase_id) === String(phaseId); })[0];
+    if (p) return p.ts;
+    return nsrt.phases[phaseId] != null ? nsrt.phases[phaseId] * 1000 : null;
   }
   /** top parses of a spec on the boss: [{report_id, fight_id, region, start_time, duration, phases, boss, player}] */
   function fetchRanking(spec, boss) {
@@ -449,7 +486,7 @@
     // ruler
     var rl = el("div", "ruler lbl", "<span>Čas</span>");
     var rt = el("div", "ruler trk");
-    var step = pps >= 8 ? 10 : pps >= 4 ? 30 : 60, major = pps >= 8 ? 30 : 60;
+    var step = pps >= 16 ? 5 : pps >= 8 ? 10 : pps >= 4 ? 30 : 60, major = pps >= 16 ? 10 : pps >= 8 ? 30 : 60;
     for (var t = 0; t <= d.duration / 1000; t += step) {
       var tk = el("div", "tick" + (t % major === 0 ? " m" : "")); tk.style.left = (t * pps) + "px";
       if (t % major === 0) tk.appendChild(el("span", "", fmt(t * 1000)));
@@ -468,6 +505,8 @@
       var e = el("div", "lbl", "<i style='color:var(--muted)'>Zatím prázdné</i>"), t2 = el("div", "trk", "<div style='padding:10px;color:var(--muted)'>Timeline pro tohoto bosse ještě není. " + (state.token ? "Klikni na <b>Upravit → Import z lorrgs</b>." : "Admin ji naimportuje z lorrgs.io.") + "</div>");
       e.style.height = "60px"; tl.appendChild(e); tl.appendChild(t2);
     }
+    try { if (window.$WowheadPower && $WowheadPower.refreshLinks) $WowheadPower.refreshLinks(); } catch (e) {}
+    $("zoomVal").textContent = state.pps.toFixed(1) + " px/s";
     setStatus((state.updatedAt ? "Uloženo " + new Date(state.updatedAt).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "Neuloženo") + " · " + d.rows.length + " speců · " + fmt(d.duration));
   }
   function phaseBands(trk, labels) {
@@ -491,7 +530,7 @@
   function packBoss(events) {
     var pps = state.pps, ends = [], laneOf = {}, maxLanes = 6;
     events.slice().sort(function (a, b) { return a.ts - b.ts; }).forEach(function (e) {
-      var sp = state.doc.spells[e.id] || {}, w = (30 + String(sp.name || "").length * 6.3) / pps * 1000;
+      var w = 26 / pps * 1000; // icon only (no label) on the boss row
       var l = -1;
       for (var i = 0; i < ends.length; i++) if (ends[i] <= e.ts) { l = i; break; }
       if (l < 0) { if (ends.length < maxLanes) { l = ends.length; ends.push(0); } else { l = 0; for (i = 1; i < ends.length; i++) if (ends[i] < ends[l]) l = i; } }
@@ -553,7 +592,8 @@
     var lanes = lanesOf(r);
     lanes.forEach(function (id) {
       var sp = d.spells[id] || {}, ln = el("div", "lane"), n = eventsOf(r).filter(function (e) { return e.id === id; }).length;
-      ln.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt=''>" : "<span style='display:inline-block;width:16px;height:16px;border-radius:3px;background:" + esc(sp.color || "#888") + "'></span>") + "<span title='" + esc(sp.name) + (sp.cooldown ? " · CD " + sp.cooldown + " s" : "") + "'>" + esc(sp.name || id) + "</span><small>" + n + "×</small>";
+      var wh = /^\d+$/.test(String(id)) ? "<a href='https://www.wowhead.com/spell=" + id + "' data-wowhead='spell=" + id + "' target='_blank' rel='noopener'>" + esc(sp.name || id) + "</a>" : esc(sp.name || id);
+      ln.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt=''>" : "<span style='display:inline-block;width:16px;height:16px;border-radius:3px;background:" + esc(sp.color || "#888") + "'></span>") + "<span title='" + esc(sp.name) + (sp.cooldown ? " · CD " + sp.cooldown + " s" : "") + "'>" + wh + "</span><small>" + n + "×</small>";
       ln.appendChild(btn("✕", "skrýt dráhu (casty zůstanou, vrátíš ji přes ＋)", function () { lanes.splice(lanes.indexOf(id), 1); markDirty(); render(); }, "x"));
       lbl.appendChild(ln);
     });
@@ -574,8 +614,11 @@
       ev.style.setProperty("--c", sp.color || "#cfd8d2");
       ev.style.setProperty("--cdw", ((sp.cooldown || 0) * pps) + "px");
       ev.style.setProperty("--duw", (((e.d != null ? e.d / 1000 : sp.duration) || 0) * pps) + "px");
-      ev.title = (sp.name || e.id) + " · " + fmt(e.ts, true) + (sp.cooldown ? " · CD " + sp.cooldown + " s" : "") + (e.note ? "\n" + e.note : "");
-      ev.innerHTML = "<span class='cd'></span><span class='du'></span>" + (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt='' draggable='false'>" : "<span class='no'>" + esc(String(sp.name || "?").slice(0, 2)) + "</span>") + (!r || pps >= 8 ? "<span class='lab'>" + esc(sp.name || "") + "</span>" : "");
+      var numId = /^\d+$/.test(String(e.id));
+      if (!numId) ev.title = (sp.name || e.id) + " · " + fmt(e.ts, true) + (sp.cooldown ? " · CD " + sp.cooldown + " s" : "") + (e.note ? "\n" + e.note : "");
+      var icon = iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt='' draggable='false'>" : "<span class='no'>" + esc(String(sp.name || "?").slice(0, 2)) + "</span>";
+      if (numId) icon = "<a class='wh' href='https://www.wowhead.com/spell=" + e.id + "' data-wowhead='spell=" + e.id + "' draggable='false' tabindex='-1'>" + icon + "</a>";
+      ev.innerHTML = "<span class='cd'></span><span class='du'></span>" + icon + (r && pps >= 8 ? "<span class='lab'>" + esc(sp.name || "") + "</span>" : "");
       ev.__ev = e; ev.__row = r;
       trk.appendChild(ev);
     });
@@ -604,6 +647,7 @@
     else openPop(dr.el, dr.e, dr.el.__row);
   });
   $("tl").addEventListener("click", function (ev) {
+    if (ev.target.closest("a.wh")) ev.preventDefault();
     if (!state.edit || (drag && drag.moved)) return;
     var trk = ev.target.closest(".trk"); if (!trk || ev.target.closest(".ev") || trk.classList.contains("ruler") || trk.__row === undefined) return;
     var rect = trk.getBoundingClientRect(), ts = Math.round((ev.clientX - rect.left) / state.pps * 10) * 100;
@@ -612,13 +656,19 @@
   // hover cursor + time label
   $("tl").addEventListener("mousemove", function (ev) {
     var trk = ev.target.closest(".trk"); if (!trk || drag) { if (!drag) hideCursor(); return; }
+    var evEl = ev.target.closest(".ev");
+    if (evEl && evEl.__ev) {
+      var e = evEl.__ev, sp = state.doc.spells[e.id] || {};
+      showCursor(e.ts, true, (sp.name || e.id) + " · " + fmt(e.ts, true) + (sp.cooldown ? " · CD " + sp.cooldown + " s" : "") + (e.note ? " · " + e.note : ""));
+      return;
+    }
     var rect = trk.getBoundingClientRect(); showCursor((ev.clientX - rect.left) / state.pps * 1000, false);
   });
   $("tlwrap").addEventListener("mouseleave", hideCursor);
-  function showCursor(ms, strong) {
+  function showCursor(ms, strong, text) {
     var tl = $("tl"), c = $("cursor"), lab = $("curlab"), x = ms / 1000 * state.pps;
     c.style.display = "block"; c.style.left = (250 + x) + "px"; c.style.top = "0"; c.style.height = tl.offsetHeight + "px";
-    if (lab) { lab.style.display = "block"; lab.style.left = x + "px"; lab.textContent = fmt(ms, strong); }
+    if (lab) { lab.style.display = "block"; lab.style.left = x + "px"; lab.textContent = text || fmt(ms, strong); lab.classList.toggle("info", !!text); }
   }
   function hideCursor() { $("cursor").style.display = "none"; var l = $("curlab"); if (l) l.style.display = "none"; }
 
@@ -652,7 +702,7 @@
   document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") { hidePop(); closePick(); } });
 
   // ---------- ability picker: click into a row (time = click position) or ＋ (time 0:00) ----------
-  var pick = { row: null, items: [], seq: 0 };
+  var pick = { row: null, items: [], specItems: [], seq: 0 };
   function openPick(r, ts, x, y) {
     pick.row = r; pick.seq++; var my = pick.seq, p = $("pick");
     $("pickTitle").textContent = (r ? (SPEC[r.spec] ? SPEC[r.spec].name : r.spec) : "Boss") + " – přidat cast";
@@ -660,9 +710,9 @@
     $("pickGrid").innerHTML = "<div class='grp'>Načítám schopnosti…</div>";
     p.style.display = "flex";
     p.style.left = Math.max(4, Math.min(window.innerWidth - p.offsetWidth - 8, x)) + "px";
-    p.style.top = Math.max(4, Math.min(window.innerHeight - Math.min(window.innerHeight * .6, 420) - 8, y + 8)) + "px";
+    p.style.top = Math.max(4, Math.min(window.innerHeight * .4 - 8, y + 8)) + "px"; // popup is at most 60vh tall → always fully on screen
     var d = state.doc, lanes = lanesOf(r), evs = eventsOf(r);
-    var srcs = r ? [["spec", "Spec", fetchSpells(r.spec)]] : [["boss", "Boss", fetchBossSpells(state.boss)]];
+    var srcs = r ? [["spec", "Spec", fetchSpells(r.spec)]] : [["boss", "Boss – jeden cast v čase", fetchBossSpells(state.boss)]];
     if (r) OTHER.forEach(function (o) { srcs.push([o[0], o[1], fetchSpells(o[0])]); });
     Promise.all(srcs.map(function (s) { return s[2].catch(function () { return {}; }); })).then(function (lists) {
       if (my !== pick.seq) return;
@@ -676,20 +726,42 @@
           if (seen[id]) return; var sp = list[id]; items.push({ grp: s[1], id: Number(id), sp: sp, n: 0 });
         });
       });
-      items.push({ grp: "Vlastní", custom: true, sp: { name: "Vlastní schopnost…", color: "#cfd8d2" } });
-      pick.items = items; renderPick();
+      items.push({ grp: "Vlastní", custom: true, sp: { name: r ? "Vlastní – schopnosti celé classy…" : "Vlastní schopnost…", color: "#cfd8d2" } });
+      pick.items = items; pick.specItems = items; renderPick();
       $("pickSearch").focus();
+      if (!r) fetchNsrtBoss(state.boss).then(function (nsrt) {
+        if (my !== pick.seq) return;
+        var bossList = lists[0] || {}, byId = {};
+        nsrt.abilities.forEach(function (a) {
+          var k = a.id, it = byId[k];
+          if (!it) {
+            var known = bossList[a.id] || d.spells[a.id] || {};
+            byId[k] = it = { grp: "NSRT timeline – celá sekvence castů", nsrt: true, id: a.id, casts: [], parts: [], n: 0,
+              sp: { name: a.name, icon: known.icon || "", cooldown: 0, duration: a.duration, color: known.color || PALETTE[Object.keys(byId).length % PALETTE.length], show: true, type: "nsrt" } };
+          }
+          var start = phaseStartMs(a.phase, nsrt);
+          if (start == null) return;
+          a.times.forEach(function (t) { it.casts.push(Math.round(start + t * 1000)); });
+          it.parts.push("P" + a.phase + " " + a.times.length + "×"); it.n += a.times.length;
+        });
+        var add = Object.keys(byId).map(function (k) { return byId[k]; }).filter(function (it) { return it.casts.length; });
+        add.sort(function (a, b) { return a.sp.name.localeCompare(b.sp.name); });
+        // NSRT sequence tiles go before the single-cast lorrgs "Boss" group
+        var at = pick.items.length - 1; pick.items.forEach(function (it, i) { if (it.grp === "Boss – jeden cast v čase" && i < at) at = i; });
+        pick.items = pick.items.slice(0, at).concat(add, pick.items.slice(at)); pick.specItems = pick.items; renderPick();
+      }).catch(function (e) { msg("NSRT timeline: " + e.message, "err"); });
     });
   }
   function renderPick() {
     var q = $("pickSearch").value.trim().toLowerCase(), g = $("pickGrid"), last = null; g.innerHTML = "";
     pick.items.forEach(function (it) {
-      if (q && !it.custom && String(it.sp.name || "").toLowerCase().indexOf(q) < 0) return;
+      if (q && !it.custom && !it.customText && !it.back && String(it.sp.name || "").toLowerCase().indexOf(q) < 0) return;
       if (it.grp !== last) { g.appendChild(el("div", "grp", esc(it.grp))); last = it.grp; }
-      var t = el("div", "tile" + (it.inlane ? " inlane" : "") + (it.custom ? " custom" : "")), sp = it.sp;
+      var t = el("div", "tile" + (it.inlane ? " inlane" : "") + (it.custom || it.customText || it.back ? " custom" : "")), sp = it.sp;
       t.style.setProperty("--c", sp.color || "#666");
+      var sub = it.nsrt ? it.parts.join(", ") + (eventsOf(pick.row).some(function (e) { return e.id === it.id; }) ? " · klik = nahradit casty" : " · klik = přidat všechny casty") : it.back ? "zpět na spelly specu" : it.customText ? "název, CD, trvání, barva" : it.custom ? (pick.row ? "spelly ostatních speců classy + vlastní text" : "název, CD, trvání, barva") : it.hidden ? it.n + "× v logu · klik = zobrazit dráhu" : (sp.cooldown ? "CD " + sp.cooldown + " s" : "") + (it.n ? " · " + it.n + "×" : "");
       t.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt='' loading='lazy'>" : "<span class='no'>" + esc(String(sp.name || "?").slice(0, 2)) + "</span>") +
-        "<span class='t'><span>" + esc(sp.name || it.id) + "</span><small>" + (it.custom ? "název, CD, trvání, barva" : it.hidden ? it.n + "× v logu · klik = zobrazit dráhu" : (sp.cooldown ? "CD " + sp.cooldown + " s" : "") + (it.n ? " · " + it.n + "×" : "")) + "</small></span>";
+        "<span class='t'><span>" + esc(sp.name || it.id) + "</span><small>" + sub + "</small></span>";
       t.title = sp.name || "";
       t.addEventListener("click", function () { addPicked(it); });
       g.appendChild(t);
@@ -699,11 +771,39 @@
   $("pickSearch").addEventListener("input", renderPick);
   $("pickSearch").addEventListener("keydown", function (ev) { if (ev.key === "Enter") { var t = $("pickGrid").querySelector(".tile"); if (t) t.click(); } });
   $("pickClose").addEventListener("click", closePick);
+  /** "Vlastní" tile: abilities of the other specs of the same class (lorrgs spell lists, deduplicated), then free text */
+  function showClassAbilities(r) {
+    var my = pick.seq, cls = SPEC[r.spec] ? SPEC[r.spec].cls : null, others = SPECS.filter(function (x) { return x[3] === cls && x[0] !== r.spec; });
+    $("pickGrid").innerHTML = "<div class='grp'>Načítám schopnosti classy…</div>"; $("pickSearch").value = "";
+    Promise.all(others.map(function (x) { return fetchSpells(x[0]).catch(function () { return {}; }); })).then(function (lists) {
+      if (my !== pick.seq) return;
+      var seen = {}; pick.specItems.forEach(function (it) { if (it.id != null) seen[it.id] = 1; });
+      var items = [{ grp: "Classa " + (cls || ""), back: true, sp: { name: "← Zpět", color: "#cfd8d2" } }];
+      others.forEach(function (x, i) {
+        var list = lists[i] || {};
+        Object.keys(list).sort(function (a, b) { return String(list[a].name).localeCompare(String(list[b].name)); }).forEach(function (id) {
+          if (seen[id]) return; seen[id] = 1; items.push({ grp: x[1], id: Number(id), sp: list[id], n: 0 });
+        });
+      });
+      items.push({ grp: "Vlastní", customText: true, sp: { name: "Vlastní text…", color: "#cfd8d2" } });
+      pick.items = items; renderPick(); $("pickSearch").focus();
+    });
+  }
   function closePick() { $("pick").style.display = "none"; pick.seq++; }
   function addPicked(it) {
     var r = pick.row, lanes = lanesOf(r), evs = eventsOf(r), ts = parseTime($("pickTime").value);
     if (ts == null) { msg("Čas zadej jako m:ss", "err"); $("pickTime").focus(); return; }
-    if (it.custom) { closePick(); openCustom(r, ts); return; }
+    if (it.back) { pick.items = pick.specItems; $("pickSearch").value = ""; renderPick(); return; }
+    if (it.nsrt) {
+      // all casts of the ability from the NSRT timeline (replaces casts of the same spell already in the row)
+      var keep = evs.filter(function (e) { return e.id !== it.id; }); evs.length = 0; keep.forEach(function (e) { evs.push(e); });
+      if (!state.doc.spells[it.id]) state.doc.spells[it.id] = it.sp; else { var ex = state.doc.spells[it.id]; if (!ex.icon && it.sp.icon) ex.icon = it.sp.icon; }
+      if (lanes.indexOf(it.id) < 0) lanes.push(it.id);
+      it.casts.forEach(function (t) { evs.push({ u: uid(), id: it.id, ts: t, m: 1, src: "nsrt" }); });
+      markDirty(); render(); closePick(); msg(it.sp.name + ": " + it.casts.length + " castů z NSRT timeline.", "ok"); return;
+    }
+    if (it.customText || (it.custom && !r)) { closePick(); openCustom(r, ts); return; }
+    if (it.custom) { showClassAbilities(r); return; }
     if (it.hidden) { lanes.push(it.id); markDirty(); render(); closePick(); msg("Dráha " + (it.sp.name || it.id) + " zobrazena.", "ok"); return; }
     keepSpell(it.id, it.sp);
     if (lanes.indexOf(it.id) < 0) lanes.push(it.id);
@@ -870,7 +970,24 @@
   }
   bsel.addEventListener("change", function () { switchBoss(bsel.value); });
   window.addEventListener("hashchange", function () { var b = bossFromHash(); if (b && b !== state.boss) switchBoss(b); });
-  $("zoom").addEventListener("input", function () { state.pps = Number($("zoom").value); try { localStorage.setItem("tlZoom", state.pps); } catch (e) {} if (state.doc) render(); });
+  var ZOOM_MIN = 1.5, ZOOM_MAX = 30;
+  /** change zoom; anchorX = clientX whose time stays put (undefined = keep the left edge) */
+  function setZoom(pps, anchorX) {
+    pps = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pps)); if (pps === state.pps) return;
+    var wrap = $("tlwrap"), rect = wrap.getBoundingClientRect(), old = state.pps;
+    var x = anchorX == null ? rect.left + 250 : anchorX;                   // viewport x of the anchor
+    var ts = (wrap.scrollLeft + (x - rect.left) - 250) / old * 1000;      // time under the anchor
+    state.pps = pps; try { localStorage.setItem("tlZoom", pps); } catch (e) {}
+    if (state.doc) render();
+    wrap.scrollLeft = Math.max(0, ts / 1000 * pps + 250 - (x - rect.left));
+  }
+  $("tlwrap").addEventListener("wheel", function (ev) {
+    if (!ev.ctrlKey) return;
+    ev.preventDefault();
+    setZoom(state.pps * (ev.deltaY < 0 ? 1.2 : 1 / 1.2), ev.clientX);
+  }, { passive: false });
+  $("zoomIn").addEventListener("click", function () { setZoom(state.pps * 1.2); });
+  $("zoomOut").addEventListener("click", function () { setZoom(state.pps / 1.2); });
   $("onlyRoster").addEventListener("change", function () { state.onlyRoster = $("onlyRoster").checked; try { localStorage.setItem("tlRoster", state.onlyRoster ? "1" : ""); } catch (e) {} if (state.doc) render(); });
   $("edit").addEventListener("click", function () { state.edit = true; msg(""); render(); });
   $("cancel").addEventListener("click", function () {
@@ -884,7 +1001,7 @@
   window.addEventListener("beforeunload", function (ev) { if (state.dirty) { ev.preventDefault(); ev.returnValue = ""; } });
 
   try { state.pps = Number(localStorage.getItem("tlZoom")) || 6; state.onlyRoster = localStorage.getItem("tlRoster") === "1"; } catch (e) {}
-  $("zoom").value = state.pps; $("onlyRoster").checked = state.onlyRoster;
+  $("onlyRoster").checked = state.onlyRoster;
   state.boss = bossFromHash() || "the-coiled-altar"; bsel.value = state.boss;
   loadRoster().then(load);
 })();
