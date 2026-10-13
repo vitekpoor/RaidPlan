@@ -5,9 +5,9 @@
   parse; healeři metric hps) přes proxy Workeru /api/timeline/lorrgs?p= (CORS lorrgs je nespolehlivý), ikony z assets2.lorrgs.io. Dokument se ukládá do D1 (GET/PUT /api/timeline?boss=<lorrgs slug>),
   všichni ho vidí, přihlášený admin (es-auth) ho edituje: tažení castu po ose = posun v čase, klik = detail (čas, poznámka,
   smazat, duplikovat), klik do prázdného místa řádku = výběr schopnosti (ikony: spelly specu / externals / potions / trinkets /
-  "Vlastní" (první dlaždice) = všechny aktivní talenty specu/classy/hero z raidbots talents.json + spelly ostatních speců z lorrgs + vlastní text; talent bez známého CD otevře dialog s předvyplněným názvem/ikonou/ID) a cast se přidá v tom čase, ＋ u řádku = totéž s časem 0:00, ✕ u dráhy = skrýt dráhu, ⟳ = znovu importovat řádek
-  z jiného parse, Import = všechny specy najednou. ✕ u dráhy maže dráhu i casty; přidání schopnosti z katalogu zahodí
-  skryté casty téhož spellu z logu (jinak by se s dráhou vynořily) – skryté casty z logu se vrací jen přes dlaždici "Skryté dráhy z logu".
+  "Vlastní" (první dlaždice) = všechny aktivní talenty specu/classy/hero z raidbots talents.json + spelly ostatních speců z lorrgs + vlastní text; talent bez známého CD otevře dialog s předvyplněným názvem/ikonou/ID) a cast se přidá v tom čase, ＋ u řádku = totéž s časem 0:00, ✕ u timeline = smazat timeline, ⟳ = znovu importovat řádek
+  z jiného parse, Import = všechny specy najednou. ✕ u timeline maže timeline i casty; přidání schopnosti z katalogu zahodí
+  skryté casty téhož spellu z logu (jinak by se s timeline vynořily) – skryté casty z logu se vrací jen přes dlaždici "Skryté timeliny z logu".
   Formát dokumentu: { v, boss, duration, phases:[{ts,phase_id}], ref:{report_id,fight_id,…}, bossRow:{lanes,events},
   rows:[{spec, source, lanes:[spellId], events:[{u,id,ts,d?,note?}]}], spells:{id:{name,icon,cooldown,duration,color,show}} }.
   ＋ u řádku Boss nabízí kromě lorrgs spellů i "NSRT timeline" – všechny schopnosti bosse z BossTimelines/MidnightS2/*.lua
@@ -201,7 +201,7 @@
 <div id="bosschips" hidden></div>
 <div class="tlwrap" id="tlwrap"><div class="tl" id="tl"></div><div id="cursor"></div></div>
 <div class="legend"><span><i style="background:#3fd68a;opacity:.85"></i>trvání efektu</span><span><i style="background:#3fd68a;opacity:.25"></i>cooldown</span><span><i style="background:none;border:1px solid var(--gold);height:4px"></i>zlatý rámeček = ručně posunutý / přidaný cast</span><span>zlatý obrys = má poznámku (najeď myší)</span></div>
-<p class="hint" id="edithint" hidden><b>Úpravy:</b> táhni ikonu po ose = posun v čase · klik na ikonu = čas, poznámka, smazat, duplikovat · klik do prázdného místa řádku = vyber schopnost a přidá se v tom čase · ＋ u řádku = totéž od 0:00 · ✕ u dráhy = smazat dráhu i její casty · ⟳ = jiný parse z lorrgs.</p>
+<p class="hint" id="edithint" hidden><b>Úpravy:</b> táhni ikonu po ose = posun v čase · klik na ikonu = čas, poznámka, smazat, duplikovat · klik do prázdného místa řádku = vyber schopnost a přidá se v tom čase · ＋ u řádku = totéž od 0:00 · ✕ u timeline = smazat timeline i její casty · ⟳ = jiný parse z lorrgs.</p>
 
 </div>
 </div>
@@ -613,13 +613,13 @@
       var sp = d.spells[id] || {}, ln = el("div", "lane"), n = eventsOf(r).filter(function (e) { return e.id === id; }).length;
       var wh = /^\d+$/.test(String(id)) ? "<a href='https://www.wowhead.com/spell=" + id + "' data-wowhead='spell=" + id + "' target='_blank' rel='noopener'>" + esc(sp.name || id) + "</a>" : esc(sp.name || id);
       ln.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt=''>" : "<span style='display:inline-block;width:16px;height:16px;border-radius:3px;background:" + esc(sp.color || "#888") + "'></span>") + "<span title='" + esc(sp.name) + (sp.cooldown ? " · CD " + sp.cooldown + " s" : "") + "'>" + wh + "</span><small>" + n + "×</small>";
-      ln.appendChild(btn("✕", "smazat dráhu i všechny její casty", function () {
-        if (!confirm("Smazat dráhu " + (sp.name || id) + " včetně " + n + " castů?")) return;
+      ln.appendChild(btn("✕", "smazat timeline i všechny její casty", function () {
+        if (!confirm("Smazat timeline " + (sp.name || id) + " včetně " + n + " castů?")) return;
         lanes.splice(lanes.indexOf(id), 1); dropCasts(r, id); markDirty(); render();
       }, "x"));
       lbl.appendChild(ln);
     });
-    if (!lanes.length) lbl.appendChild(el("div", "lane", "<small>žádná dráha</small>"));
+    if (!lanes.length) lbl.appendChild(el("div", "lane", "<small>žádná timeline</small>"));
     lbl.style.height = rowHeight(r) + "px";
     return lbl;
   }
@@ -741,7 +741,7 @@
       var items = [], seen = {};
       var counts = {}; evs.forEach(function (e) { counts[e.id] = (counts[e.id] || 0) + 1; });
       lanes.forEach(function (id) { var sp = d.spells[id]; if (sp) { items.push({ grp: "V řádku", id: id, sp: sp, inlane: true, n: counts[id] || 0 }); seen[id] = 1; } });
-      Object.keys(counts).forEach(function (id) { if (!seen[id]) { var k = /^c\d+$/.test(id) ? id : Number(id), sp = d.spells[k]; if (sp) { items.push({ grp: "Skryté dráhy z logu", id: k, sp: sp, hidden: true, n: counts[id] }); seen[id] = 1; } } });
+      Object.keys(counts).forEach(function (id) { if (!seen[id]) { var k = /^c\d+$/.test(id) ? id : Number(id), sp = d.spells[k]; if (sp) { items.push({ grp: "Skryté timeliny z logu", id: k, sp: sp, hidden: true, n: counts[id] }); seen[id] = 1; } } });
       srcs.forEach(function (s, i) {
         var list = lists[i] || {};
         Object.keys(list).sort(function (a, b) { return String(list[a].name).localeCompare(String(list[b].name)); }).forEach(function (id) {
@@ -781,7 +781,7 @@
       if (it.grp !== last) { g.appendChild(el("div", "grp", esc(it.grp))); last = it.grp; }
       var t = el("div", "tile" + (it.inlane ? " inlane" : "") + (it.custom || it.customText || it.back ? " custom" : "") + (it.custom ? " first" : "")), sp = it.sp;
       t.style.setProperty("--c", sp.color || "#666");
-      var sub = it.talent ? "talent · klik = nastavit CD a přidat" : it.nsrt ? it.parts.join(", ") + (eventsOf(pick.row).some(function (e) { return e.id === it.id; }) ? " · klik = nahradit casty" : " · klik = přidat všechny casty") : it.back ? "zpět na spelly specu" : it.customText ? "název, CD, trvání, barva" : it.custom ? (pick.row ? "spelly ostatních speců classy + vlastní text" : "název, CD, trvání, barva") : it.hidden ? it.n + "× v logu · klik = zobrazit dráhu" : (sp.cooldown ? "CD " + sp.cooldown + " s" : "") + (it.n ? " · " + it.n + "×" : "");
+      var sub = it.talent ? "talent · klik = nastavit CD a přidat" : it.nsrt ? it.parts.join(", ") + (eventsOf(pick.row).some(function (e) { return e.id === it.id; }) ? " · klik = nahradit casty" : " · klik = přidat všechny casty") : it.back ? "zpět na spelly specu" : it.customText ? "název, CD, trvání, barva" : it.custom ? (pick.row ? "spelly ostatních speců classy + vlastní text" : "název, CD, trvání, barva") : it.hidden ? it.n + "× v logu · klik = zobrazit timeline" : (sp.cooldown ? "CD " + sp.cooldown + " s" : "") + (it.n ? " · " + it.n + "×" : "");
       var glyph = it.back ? "←" : (it.custom || it.customText) ? "＋" : esc(String(sp.name || "?").slice(0, 2));
       t.innerHTML = (iconUrl(sp) ? "<img src='" + esc(iconUrl(sp)) + "' alt='' loading='lazy'>" : "<span class='no'>" + glyph + "</span>") +
         "<span class='t'><span>" + esc(sp.name || it.id) + "</span><small>" + sub + "</small></span>";
@@ -837,7 +837,7 @@
     if (it.customText || (it.custom && !r)) { closePick(); openCustom(r, ts); return; }
     if (it.talent && !state.doc.spells[it.id]) { closePick(); openCustom(r, ts, it); return; }
     if (it.custom) { showClassAbilities(r); return; }
-    if (it.hidden) { lanes.push(it.id); markDirty(); render(); closePick(); msg("Dráha " + (it.sp.name || it.id) + " zobrazena.", "ok"); return; }
+    if (it.hidden) { lanes.push(it.id); markDirty(); render(); closePick(); msg("Timeline " + (it.sp.name || it.id) + " zobrazena.", "ok"); return; }
     keepSpell(it.id, it.sp);
     if (lanes.indexOf(it.id) < 0) { dropCasts(r, it.id); lanes.push(it.id); } // hidden log casts of the spell would reappear with the lane
     evs.push({ u: uid(), id: it.id, ts: ts, m: 1 }); markDirty(); render(); closePick();
