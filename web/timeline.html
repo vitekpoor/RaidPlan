@@ -19,6 +19,9 @@
   castu se při najetí ukazují v popisku kurzoru na pravítku. Zoom = Ctrl + kolečko nad osou (čas pod kurzorem zůstává) nebo tlačítka −/+. Levý sloupec: řádek 1 = ikona + spec + tlačítka (NSRT; v úpravách ＋ ⟳ ✕, vždy vpravo), řádek 2 = hráči z rosteru · top parse (WCL odkaz),
   pak timeline schopností. Řádek Boss je kompaktní (jen ikony bez textu, nabalené do co nejmíň drah) a přilepený pod pravítkem při scrollu; chipy nad osou filtrují
   schopnosti bosse (volba diváka v localStorage, admin v režimu úprav ukládá výchozí filtr do dokumentu bossHide).
+  Tlačítko "NSRT export" v liště = jeden společný reminder string pro všechny zaškrtnuté řádky (výchozí = řádky, jejichž spec je
+  v rosteru; tag se předvyplní z rosteru: hráč řádku → jeho postava, bez hráče → všechny postavy toho specu oddělené mezerou
+  (NSRT bere v tag: víc jmen), nic v rosteru → spec ID; volitelně i řádek Boss s tag:everyone), řádky seřazené podle času.
   Tlačítko NSRT u řádku = export castů jako reminder string pro Northern Sky Raid Tools
   (EncounterID:<id>;Name:<boss> + řádky time:<s od začátku fáze>;ph:<fáze>;tag:<kdo>;spellid:<id>; – formát z Reminders.lua addonu;
   fáze = lorrgs phase_id, u Coiled Altar 1/2/2.5/3 sedí s NSRT). Odkaz z raid taktik: timeline.html#<slug bosse>. web/build.mjs doplní menu.
@@ -134,7 +137,7 @@
   #pick .tile.inlane { box-shadow: inset 3px 0 0 var(--accent); }
   #pick .tile.custom { border-style: dashed; border-color: var(--line); }
   #pick .tile.custom.first { grid-column: 1 / -1; border-color: var(--accent); background: var(--accent-soft); }
-  #nsrtOut { width: 100%; box-sizing: border-box; min-height: 14rem; background: var(--ground, #0a0c0b); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.45 ui-monospace, Consolas, monospace; padding: 8px; white-space: pre; }
+  #nsrtOut, #nsrtAllOut { width: 100%; box-sizing: border-box; min-height: 14rem; background: var(--ground, #0a0c0b); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.45 ui-monospace, Consolas, monospace; padding: 8px; white-space: pre; }
   /* casty */
   .ev { position: absolute; height: var(--lane); display: flex; align-items: center; z-index: 1; }
   .ev .cd { position: absolute; left: 0; height: 6px; bottom: 2px; width: var(--cdw); background: var(--c); opacity: .22; border-radius: 0 3px 3px 0; pointer-events: none; }
@@ -168,6 +171,9 @@
   dialog .list label input { width: auto; margin: 0; }
   dialog .list .grp { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin: 6px 0 2px; }
   dialog .list .nm { font-weight: 600; } dialog .list small { color: var(--muted); }
+  #nsrtAllRows label .nm { flex: 0 0 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #nsrtAllRows label input.tag { flex: 1; min-width: 0; font: inherit; font-size: 11.5px; padding: 1px 5px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
+  #nsrtAllRows label small { flex: none; }
   dialog .custom { display: none; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
   dialog .custom.on { display: block; }
   dialog .custom .two { display: flex; gap: 8px; } dialog .custom .two label { flex: 1; }
@@ -200,6 +206,7 @@
   <span class="sp"></span>
   <span title="Ctrl + kolečko myši nad osou přiblíží / oddálí (zůstane čas pod kurzorem)">Zoom: <b style="color:var(--ink)">Ctrl + kolečko</b> <button class="mini" id="zoomOut" type="button" title="oddálit">−</button><span id="zoomVal" style="min-width:3.5em;display:inline-block;text-align:center"></span><button class="mini" id="zoomIn" type="button" title="přiblížit">+</button></span>
   <label title="zobrazit jen specy, které máme v rosteru"><input type="checkbox" id="onlyRoster"> jen roster</label>
+  <button class="btn-outline" id="nsrtAll" type="button" title="jeden společný NSRT reminder string pro všechny řádky z rosteru (tag = postavy z rosteru)">NSRT export</button>
   <span id="msg"></span>
   <span id="adminbox" hidden>
     <button class="btn-outline" id="edit" type="button">Upravit</button>
@@ -255,6 +262,19 @@
   <textarea id="nsrtOut" readonly spellcheck="false"></textarea>
   <div class="prog" id="nsrtHint">Čas je relativní k začátku fáze (ph:) podle lorrgs fází referenčního killu; EncounterID = ID bosse. Poznámka u castu se připojí jako text reminderu.</div>
   <div class="acts"><button class="btn-outline" type="button" data-close>Zavřít</button><button class="btn" type="button" id="nsrtCopy">Kopírovat</button></div>
+</dialog>
+
+<dialog id="dlgNsrtAll" style="min-width:40rem">
+  <h5>NSRT reminder – všechny řádky</h5>
+  <div>Jeden string pro celý raid: každý řádek dostane <b>tag</b> podle rosteru (hráč řádku → jeho postava, bez hráče → všechny postavy specu, víc jmen oddělených mezerou). Tag jde přepsat.</div>
+  <div class="chips" style="align-items:center;white-space:nowrap"><button class="mini" type="button" data-pick="roster">roster</button><button class="mini" type="button" data-pick="all">vše</button><button class="mini" type="button" data-pick="none">nic</button>
+    <label style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;width:auto"><input type="checkbox" id="nsrtAllBoss"> i řádek Boss (tag everyone)</label>
+    <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="dur:N – jak dlouho před časem se reminder ukáže (prázdné = nastavení NSRT)">dur (s) <input type="number" id="nsrtAllDur" min="0" step="1" placeholder="auto" style="width:4.5rem"></label></div>
+  <div class="list" id="nsrtAllRows" style="max-height:14rem"></div>
+  <label>String (vlož do NSRT → Reminders → Import / note)</label>
+  <textarea id="nsrtAllOut" readonly spellcheck="false"></textarea>
+  <div class="prog" id="nsrtAllHint"></div>
+  <div class="acts"><button class="btn-outline" type="button" data-close>Zavřít</button><button class="btn" type="button" id="nsrtAllCopy">Kopírovat</button></div>
 </dialog>
 
 <dialog id="dlgLane">
@@ -1000,28 +1020,82 @@
     });
     buildNsrt(); $("dlgNsrt").showModal(); $("nsrtOut").focus(); $("nsrtOut").select();
   }
-  function buildNsrt() {
-    var r = nsrtRow, d = state.doc, tag = $("nsrtTag").value.trim() || "everyone", dur = Number($("nsrtDur").value) || 0;
-    var ids = Array.prototype.map.call($("nsrtLanes").querySelectorAll("input:checked"), function (i) { return i.value; });
-    var b = BOSSES.filter(function (x) { return x[0] === state.boss; })[0];
+  function nsrtHeader() { var b = BOSSES.filter(function (x) { return x[0] === state.boss; })[0]; return "EncounterID:" + (b ? b[2] : 0) + ";Name:" + (b ? b[3] : state.boss); }
+  /** reminder lines of one row (null = boss row): [{ts, line}] for the lanes in ids (all lanes when ids is null) */
+  function nsrtLines(r, ids, tag, dur) {
+    var d = state.doc, out = [];
     var phases = [{ ts: 0, id: 1 }].concat((d.phases || []).map(function (p) { return { ts: p.ts, id: p.phase_id }; }));
-    var lines = ["EncounterID:" + (b ? b[2] : 0) + ";Name:" + (b ? b[3] : state.boss)];
-    eventsOf(r).filter(function (e) { return ids.indexOf(String(e.id)) >= 0; }).sort(function (a, b2) { return a.ts - b2.ts; }).forEach(function (e) {
+    eventsOf(r).filter(function (e) { return !ids || ids.indexOf(String(e.id)) >= 0; }).sort(function (a, b2) { return a.ts - b2.ts; }).forEach(function (e) {
       var ph = phases[0]; phases.forEach(function (p) { if (p.ts <= e.ts) ph = p; });
       var t = Math.round((e.ts - ph.ts) / 100) / 10, sp = d.spells[e.id] || {};
       var line = "time:" + t + ";ph:" + ph.id + ";tag:" + tag + ";" + (/^c\d+$/.test(String(e.id)) ? "text:" + (sp.name || e.id) : "spellid:" + e.id) + ";" + (dur ? "dur:" + dur + ";" : "");
       if (e.note) line += " " + e.note;
-      lines.push(line);
+      out.push({ ts: e.ts, line: line });
     });
-    $("nsrtOut").value = lines.join("\n");
+    return out;
+  }
+  function buildNsrt() {
+    var tag = $("nsrtTag").value.trim() || "everyone", dur = Number($("nsrtDur").value) || 0;
+    var ids = Array.prototype.map.call($("nsrtLanes").querySelectorAll("input:checked"), function (i) { return i.value; });
+    $("nsrtOut").value = [nsrtHeader()].concat(nsrtLines(nsrtRow, ids, tag, dur).map(function (x) { return x.line; })).join("\n");
+  }
+  function copyText(ta, hint) {
+    var t = ta.value, done = function () { hint.textContent = "Zkopírováno do schránky."; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { ta.select(); document.execCommand("copy"); done(); });
+    else { ta.select(); document.execCommand("copy"); done(); }
   }
   ["nsrtTag", "nsrtDur"].forEach(function (id) { $(id).addEventListener("input", buildNsrt); });
   $("nsrtLanes").addEventListener("change", buildNsrt);
-  $("nsrtCopy").addEventListener("click", function () {
-    var t = $("nsrtOut").value, done = function () { $("nsrtHint").textContent = "Zkopírováno do schránky."; };
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { $("nsrtOut").select(); document.execCommand("copy"); done(); });
-    else { $("nsrtOut").select(); document.execCommand("copy"); done(); }
+  $("nsrtCopy").addEventListener("click", function () { copyText($("nsrtOut"), $("nsrtHint")); });
+
+  // NSRT export of all (roster) rows into one shared note: tag per row filled from the roster
+  /** default NSRT tag of a row: its player's character, else every roster character of the spec (space separated = NSRT "or"), else the spec ID */
+  function rowTag(r) {
+    if (r.char) return r.char;
+    var chars = (state.roster[r.spec] || []).map(function (c) { return c.char; });
+    if (chars.length) return chars.join(" ");
+    return SPEC_ID[r.spec] ? String(SPEC_ID[r.spec]) : "everyone";
+  }
+  function inRoster(r) { return !!(r.char || state.roster[r.spec]); }
+  function openNsrtAll() {
+    var box = $("nsrtAllRows"); box.innerHTML = "";
+    state.doc.rows.forEach(function (r, i) {
+      var sp = SPEC[r.spec] || {}, l = el("label"), n = r.events.filter(function (e) { return r.lanes.indexOf(e.id) >= 0; }).length;
+      l.innerHTML = "<input type='checkbox' value='" + i + "'" + (inRoster(r) ? " checked" : "") + "><img src='" + specIcon(r.spec) + "' width='16' height='16' style='border-radius:3px' alt=''><span class='nm' style='color:" + (CLASS_COLOR[sp.cls] || "#ddd") + "' title='" + esc(rowTitle(r)) + "'>" + esc(rowTitle(r)) + "</span><input type='text' class='tag' value='" + esc(rowTag(r)) + "' title='tag: jméno postavy (víc jmen oddělených mezerou) / everyone / healer / spec ID'><small>" + n + "×</small>";
+      l.querySelector("input.tag").addEventListener("click", function (ev) { ev.preventDefault(); ev.stopPropagation(); ev.target.focus(); });
+      box.appendChild(l);
+    });
+    if (!state.doc.rows.length) box.textContent = "Timeline nemá žádné řádky.";
+    $("nsrtAllBoss").checked = false; $("nsrtAllDur").value = "";
+    buildNsrtAll(); $("dlgNsrtAll").showModal();
+  }
+  function buildNsrtAll() {
+    var dur = Number($("nsrtAllDur").value) || 0, all = [], rows = 0;
+    $("nsrtAllRows").querySelectorAll("label").forEach(function (l) {
+      var cb = l.querySelector("input[type=checkbox]"), r = cb && state.doc.rows[Number(cb.value)]; if (!r || !cb.checked) return;
+      var tag = (l.querySelector("input.tag").value.trim() || "everyone").replace(/;/g, " ");
+      all = all.concat(nsrtLines(r, r.lanes.map(String), tag, dur)); rows++;
+    });
+    if ($("nsrtAllBoss").checked) {
+      var hide = bossHidden(), ids = state.doc.bossRow.lanes.filter(function (id) { return hide.indexOf(id) < 0; }).map(String);
+      all = all.concat(nsrtLines(null, ids, "everyone", dur));
+    }
+    all.sort(function (a, b) { return a.ts - b.ts; });
+    $("nsrtAllOut").value = [nsrtHeader()].concat(all.map(function (x) { return x.line; })).join("\n");
+    $("nsrtAllHint").textContent = rows + " řádků" + ($("nsrtAllBoss").checked ? " + Boss" : "") + " · " + all.length + " reminderů. Čas je relativní k začátku fáze (ph:); EncounterID = ID bosse.";
+  }
+  $("nsrtAll").addEventListener("click", openNsrtAll);
+  $("nsrtAllRows").addEventListener("change", buildNsrtAll);
+  $("nsrtAllRows").addEventListener("input", buildNsrtAll);
+  ["nsrtAllBoss", "nsrtAllDur"].forEach(function (id) { $(id).addEventListener("input", buildNsrtAll); });
+  $("dlgNsrtAll").querySelectorAll("[data-pick]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var mode = b.getAttribute("data-pick");
+      $("nsrtAllRows").querySelectorAll("input[type=checkbox]").forEach(function (i) { i.checked = mode === "all" || (mode === "roster" && inRoster(state.doc.rows[Number(i.value)])); });
+      buildNsrtAll();
+    });
   });
+  $("nsrtAllCopy").addEventListener("click", function () { copyText($("nsrtAllOut"), $("nsrtAllHint")); });
 
   // custom ability (name / cooldown / duration / colour / icon) – opened from the picker's last tile
   var customRow = null;
