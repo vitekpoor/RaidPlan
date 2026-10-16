@@ -9,7 +9,10 @@
   z jiného parse, Import = všechny specy najednou. ✕ u timeline maže timeline i casty; přidání schopnosti z katalogu zahodí
   skryté casty téhož spellu z logu (jinak by se s timeline vynořily) – skryté casty z logu se vrací jen přes dlaždici "Skryté timeliny z logu".
   Formát dokumentu: { v, boss, duration, phases:[{ts,phase_id}], ref:{report_id,fight_id,…}, bossRow:{lanes,events},
-  rows:[{spec, source, lanes:[spellId], events:[{u,id,ts,d?,note?}]}], spells:{id:{name,icon,cooldown,duration,color,show}} }.
+  rows:[{spec, player?, char?, source, lanes:[spellId], events:[{u,id,ts,d?,note?}]}], spells:{id:{name,icon,cooldown,duration,color,show}} }.
+  Stejný spec může být v rows víckrát (dva Preservation evokeři): řádek má volitelně hráče (player = popisek z rosteru, char = jméno
+  postavy pro NSRT tag) – v úpravách se vybírá v druhém řádku levého sloupce, ⧉ = duplikovat řádek i s casty, ＋ Spec přidá další
+  řádek i už existujícího specu, Import z lorrgs nahrazuje data všech řádků daného specu (hráč zůstává), ⟳ jen ten jeden řádek.
   ＋ u řádku Boss nabízí kromě lorrgs spellů i "NSRT timeline" – všechny schopnosti bosse z BossTimelines/MidnightS2/*.lua
   (raw.githubusercontent.com, mythicData; časy jsou relativní k fázi → přepočet na fáze referenčního killu), klik = přidá všechny casty.
   Ikony mají wowhead tooltip (wow.zamimg.com/js/tooltips.js, $WowheadPower.refreshLinks() po každém renderu), čas + poznámka
@@ -78,6 +81,11 @@
   .edit .tl .lbl .head .btns .act { display: inline-flex; }
   .tl .lbl .sub { height: 15px; line-height: 15px; font-size: 10.5px; color: var(--muted); display: flex; gap: 6px; white-space: nowrap; overflow: hidden; }
   .tl .lbl .sub .pl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .tl .lbl .sub .pl b { color: var(--ink); font-weight: 600; }
+  .tl .lbl .head .who { flex: none; font-weight: 600; font-size: 11px; color: var(--ink); max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+  .tl .lbl .sub select.pl { display: none; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 10.5px; height: 15px; padding: 0 2px; cursor: pointer; }
+  .edit .tl .lbl .sub select.pl { display: block; }
+  .edit .tl .lbl .sub span.pl { display: none; }
   .tl .lbl .sub .src { flex: none; }
   .tl .lbl .sub a { color: var(--accent); text-decoration: none; }
   .tl .lbl .lane { height: var(--lane); display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink); white-space: nowrap; }
@@ -196,7 +204,7 @@
   <span id="adminbox" hidden>
     <button class="btn-outline" id="edit" type="button">Upravit</button>
     <button class="btn-outline" id="import" type="button" title="stáhne z lorrgs.io top parse pro vybrané specy a nahradí jejich řádky">Import z lorrgs</button>
-    <button class="btn-outline" id="addrow" type="button" hidden title="přidá jeden spec (výběr parse)">＋ Spec</button>
+    <button class="btn-outline" id="addrow" type="button" hidden title="přidá řádek (spec + výběr parse); stejný spec může být víckrát – každý hráč zvlášť">＋ Spec</button>
     <button class="btn" id="save" type="button" hidden>Uložit</button>
     <button class="btn-outline" id="cancel" type="button" hidden>Zrušit</button>
   </span>
@@ -206,7 +214,7 @@
 <div id="bosschips" hidden></div>
 <div class="tlwrap" id="tlwrap"><div class="tl" id="tl"></div><div id="cursor"></div></div>
 <div class="legend"><span><i style="background:#3fd68a;opacity:.85"></i>trvání efektu</span><span><i style="background:#3fd68a;opacity:.25"></i>cooldown</span><span><i style="background:none;border:1px solid var(--gold);height:4px"></i>zlatý rámeček = ručně posunutý / přidaný cast</span><span>zlatý obrys = má poznámku (najeď myší)</span></div>
-<p class="hint" id="edithint" hidden><b>Úpravy:</b> táhni ikonu po ose = posun v čase · klik na ikonu = čas, poznámka, smazat, duplikovat · klik do prázdného místa řádku = vyber schopnost a přidá se v tom čase · ＋ u řádku = totéž od 0:00 · ✕ u timeline = smazat timeline i její casty · ⟳ = jiný parse z lorrgs.</p>
+<p class="hint" id="edithint" hidden><b>Úpravy:</b> táhni ikonu po ose = posun v čase · klik na ikonu = čas, poznámka, smazat, duplikovat · klik do prázdného místa řádku = vyber schopnost a přidá se v tom čase · ＋ u řádku = totéž od 0:00 · ✕ u timeline = smazat timeline i její casty · ⟳ = jiný parse z lorrgs · ⧉ = duplikovat řádek (druhý hráč stejného specu) · hráč řádku se vybírá v druhém řádku levého sloupce.</p>
 
 </div>
 </div>
@@ -220,7 +228,7 @@
 
 <dialog id="dlgImport">
   <h5>Import z lorrgs.io</h5>
-  <div>Pro každý vybraný spec stáhne <b>top mythic parse</b> (healeři podle HPS) a nahradí jeho řádek. Řádek Boss a fáze se berou z prvního importovaného killu, pokud ještě nejsou.</div>
+  <div>Pro každý vybraný spec stáhne <b>top mythic parse</b> (healeři podle HPS) a nahradí jeho řádek (všechny řádky toho specu, přiřazení hráčů zůstane). Řádek Boss a fáze se berou z prvního importovaného killu, pokud ještě nejsou.</div>
   <div class="chips"><button class="mini" type="button" data-pick="roster">roster</button><button class="mini" type="button" data-pick="all">vše</button><button class="mini" type="button" data-pick="none">nic</button></div>
   <div class="list" id="impList"></div>
   <label><input type="checkbox" id="impBoss"> znovu načíst i řádek Boss + fáze (z prvního vybraného specu)</label>
@@ -341,6 +349,9 @@
   function lorrgsJson(p) { return fetch(API_BASE + "/api/timeline/lorrgs?p=" + encodeURIComponent(p)).then(function (r) { if (!r.ok) throw new Error("lorrgs " + r.status); return r.json(); }).then(function (d) { if (d && d.ok === false) throw new Error(d.error || "lorrgs"); return d; }); }
   function apiJson(p, opt) { return fetch(API_BASE + p, opt).then(function (r) { return r.json(); }); }
   function rosterNames(slug) { return (state.roster[slug] || []).map(function (x) { return x.label; }).join(", "); }
+  /** row title: spec name + assigned player (rows of the same spec are told apart by r.player) */
+  function rowTitle(r) { var sp = SPEC[r.spec]; return (sp ? sp.name : r.spec) + (r.player ? " – " + r.player : ""); }
+  function specRows(spec) { return state.doc.rows.filter(function (r) { return r.spec === spec; }); }
   function emptyDoc(boss) { return { v: 1, boss: boss, duration: 0, phases: [], ref: null, bossRow: { lanes: [], events: [] }, rows: [], spells: {}, seq: 0 }; }
 
   // ---------- lorrgs ----------
@@ -433,18 +444,44 @@
     var last = 0; d.rows.concat([d.bossRow]).forEach(function (r) { r.events.forEach(function (e) { if (e.ts > last) last = e.ts; }); });
     d.duration = Math.max(mx, last + 15000, 60000);
   }
-  function sortRows() { state.doc.rows.sort(function (a, b) { return (SPEC[a.spec] ? SPEC[a.spec].order : 99) - (SPEC[b.spec] ? SPEC[b.spec].order : 99); }); }
-  function importSpec(spec, fightIdx) {
+  function sortRows() {
+    state.doc.rows.sort(function (a, b) {
+      var o = (SPEC[a.spec] ? SPEC[a.spec].order : 99) - (SPEC[b.spec] ? SPEC[b.spec].order : 99);
+      return o || String(a.player || "").localeCompare(String(b.player || ""), "cs"); // same spec: rows without player first, then by player
+    });
+  }
+  /** target: a row object = replace just that row (keeps its player), "new" = always add a row, undefined (bulk import) =
+   *  replace every row of the spec (players kept) or add one if the spec is not in the doc yet */
+  function importSpec(spec, fightIdx, target) {
     return Promise.all([fetchRanking(spec, state.boss), fetchSpells(spec)]).then(function (res) {
       var fights = res[0], spells = res[1];
       if (!fights.length) throw new Error("lorrgs nemá žádný parse pro " + spec);
       var f = fights[Math.min(fightIdx || 0, fights.length - 1)];
-      var row = rowFromFight(spec, f, spells);
-      var i = state.doc.rows.map(function (r) { return r.spec; }).indexOf(spec);
-      if (i >= 0) state.doc.rows[i] = row; else state.doc.rows.push(row);
+      var rows = state.doc.rows, targets = target === "new" ? [] : target ? [target] : specRows(spec);
+      if (!targets.length) rows.push(rowFromFight(spec, f, spells));
+      targets.forEach(function (old) {
+        var row = rowFromFight(spec, f, spells), i = rows.indexOf(old);
+        if (old.player) { row.player = old.player; if (old.char && old.spec === spec) row.char = old.char; }
+        if (i >= 0) rows[i] = row; else rows.push(row);
+      });
       sortRows();
       return f;
     });
+  }
+  /** copy a row with all its casts (new event ids) – second player of the same spec starts from the same import */
+  function duplicateRow(r) {
+    var copy = JSON.parse(JSON.stringify(r)); delete copy.player; delete copy.char;
+    copy.events.forEach(function (e) { e.u = uid(); });
+    state.doc.rows.splice(state.doc.rows.indexOf(r) + 1, 0, copy); sortRows(); markDirty(); render();
+  }
+  /** player assignment of a row (edit mode select in the left column) */
+  function setRowPlayer(r, sel) {
+    var v = sel.value;
+    if (v === "*") { var name = prompt("Jméno hráče / postavy pro tento řádek:", r.player || ""); if (name == null) { render(); return; } name = name.trim(); r.player = name || undefined; r.char = name || undefined; }
+    else if (!v) { delete r.player; delete r.char; }
+    else { var c = (state.roster[r.spec] || [])[Number(v)]; if (c) { r.player = c.label; r.char = c.char; } }
+    if (!r.player) { delete r.player; delete r.char; }
+    markDirty(); render();
   }
 
   // ---------- data ----------
@@ -529,7 +566,7 @@
     }
     try { if (window.$WowheadPower && $WowheadPower.refreshLinks) $WowheadPower.refreshLinks(); } catch (e) {}
     $("zoomVal").textContent = state.pps.toFixed(1) + " px/s";
-    setStatus((state.updatedAt ? "Uloženo " + new Date(state.updatedAt).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "Neuloženo") + " · " + d.rows.length + " speců · " + fmt(d.duration));
+    setStatus((state.updatedAt ? "Uloženo " + new Date(state.updatedAt).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : "Neuloženo") + " · " + d.rows.length + " řádků · " + fmt(d.duration));
   }
   function phaseBands(trk, labels) {
     var d = state.doc, ph = d.phases || [], pts = [{ ts: 0, id: 1 }].concat(ph.map(function (p) { return { ts: p.ts, id: p.phase_id }; }));
@@ -593,19 +630,32 @@
   function rowHeight(r) { return r ? HEAD + Math.max(1, lanesOf(r).length) * LANE + 4 : HEAD_B + (state.bossPack ? state.bossPack.lanes : 1) * LANE_B + 4; }
   function rowLabel(r) {
     var d = state.doc, sp = r ? SPEC[r.spec] : null, lbl = el("div", "lbl" + (r ? "" : " boss")), h = el("div", "head");
-    if (r) h.innerHTML = "<img src='" + specIcon(r.spec) + "' alt=''><span class='nm' style='color:" + (CLASS_COLOR[sp ? sp.cls : ""] || "#ddd") + "' title='" + esc((sp ? sp.name + " · " + ROLE[sp.role] : r.spec)) + "'>" + esc(sp ? sp.name : r.spec) + "</span>";
+    if (r) h.innerHTML = "<img src='" + specIcon(r.spec) + "' alt=''><span class='nm' style='color:" + (CLASS_COLOR[sp ? sp.cls : ""] || "#ddd") + "' title='" + esc((sp ? sp.name + " · " + ROLE[sp.role] : r.spec) + (r.player ? " · " + r.player : "")) + "'>" + esc(sp ? sp.name : r.spec) + "</span>" + (r.player ? "<span class='who' title='" + esc(r.player) + "'>" + esc(r.player) + "</span>" : "");
     else h.innerHTML = "<span class='nm'>Boss</span>";
     var btns = el("span", "btns");
     btns.appendChild(btn("NSRT", "export castů jako reminder string pro Northern Sky Raid Tools", function () { openNsrt(r); }, "nsrt"));
     var act = el("span", "act");
     var plus = btn("＋", "přidat cast / schopnost (nebo klikni do řádku v čase, kde ho chceš)", function () { var b = plus.getBoundingClientRect(); openPick(r, 0, b.left, b.bottom); });
     act.appendChild(plus);
-    act.appendChild(btn("⟳", r ? "znovu importovat z lorrgs (jiný parse)" : "načíst casty bosse + fáze z jiného killu", function () { openRow(r ? r.spec : null, true); }));
-    if (r) act.appendChild(btn("✕", "odebrat řádek", function () { if (confirm("Odebrat řádek " + (sp ? sp.name : r.spec) + "?")) { d.rows.splice(d.rows.indexOf(r), 1); markDirty(); render(); } }, "danger"));
+    act.appendChild(btn("⟳", r ? "znovu importovat tento řádek z lorrgs (jiný parse)" : "načíst casty bosse + fáze z jiného killu", function () { openRow(r ? r.spec : null, true, r); }));
+    if (r) act.appendChild(btn("⧉", "duplikovat řádek i s casty (druhý hráč stejného specu)", function () { duplicateRow(r); }));
+    if (r) act.appendChild(btn("✕", "odebrat řádek", function () { if (confirm("Odebrat řádek " + rowTitle(r) + "?")) { d.rows.splice(d.rows.indexOf(r), 1); markDirty(); render(); } }, "danger"));
     btns.appendChild(act); h.appendChild(btns); lbl.appendChild(h);
     var sub = el("div", "sub");
     if (r) {
-      var pl = el("span", "pl", state.roster[r.spec] ? esc(rosterNames(r.spec)) : "<i>nikdo v rosteru</i>"); pl.title = rosterNames(r.spec); sub.appendChild(pl);
+      var pl = el("span", "pl", r.player ? "<b>" + esc(r.player) + "</b>" : state.roster[r.spec] ? esc(rosterNames(r.spec)) : "<i>nikdo v rosteru</i>"); pl.title = r.player ? r.player + " (hráč řádku)" : rosterNames(r.spec); sub.appendChild(pl);
+      // edit mode: pick the player of this row (roster characters of the spec, or any name) – lets two rows of one spec differ
+      var ps = el("select", "pl"); ps.title = "hráč tohoto řádku (stejný spec může mít víc řádků)";
+      ps.appendChild(new Option("– všichni (" + (sp ? sp.name : r.spec) + ")", ""));
+      (state.roster[r.spec] || []).forEach(function (c, i) { ps.appendChild(new Option(c.label, String(i))); });
+      ps.appendChild(new Option("jiné jméno…", "*"));
+      if (r.player) {
+        var ri = (state.roster[r.spec] || []).map(function (c) { return c.label; }).indexOf(r.player);
+        if (ri >= 0) ps.value = String(ri); else { ps.insertBefore(new Option(r.player, "cur"), ps.lastChild); ps.value = "cur"; }
+      }
+      ps.addEventListener("change", function () { if (ps.value !== "cur") setRowPlayer(r, ps); });
+      ps.addEventListener("click", function (ev) { ev.stopPropagation(); });
+      sub.appendChild(ps);
       if (r.source) sub.appendChild(el("span", "src", "<a href='" + WCL + esc(r.source.report_id) + "#fight=" + esc(r.source.fight_id) + "' target='_blank' rel='noopener' title='top parse na warcraftlogs: " + esc(r.source.name) + " · " + kfmt(r.source.total || 0) + " · " + fmt(r.source.duration) + " · " + esc(r.source.region || "") + "'>" + esc(r.source.name) + " ↗</a> " + kfmt(r.source.total || 0) + " · " + fmt(r.source.duration)));
     } else {
       sub.appendChild(el("span", "pl", d.ref ? "<a href='" + WCL + esc(d.ref.report_id) + "#fight=" + esc(d.ref.fight_id) + "' target='_blank' rel='noopener' title='referenční kill (fáze + casty bosse)'>ref. kill ↗</a> " + fmt(d.ref.duration) + " · " + esc(d.ref.region || "") : "fáze + casty bosse"));
@@ -731,7 +781,7 @@
   var pick = { row: null, items: [], specItems: [], seq: 0 };
   function openPick(r, ts, x, y) {
     pick.row = r; pick.seq++; var my = pick.seq, p = $("pick");
-    $("pickTitle").textContent = (r ? (SPEC[r.spec] ? SPEC[r.spec].name : r.spec) : "Boss") + " – přidat cast";
+    $("pickTitle").textContent = (r ? rowTitle(r) : "Boss") + " – přidat cast";
     $("pickTime").value = fmt(ts, true); $("pickSearch").value = "";
     $("pickGrid").innerHTML = "<div class='grp'>Načítám schopnosti…</div>";
     p.style.display = "flex";
@@ -857,8 +907,8 @@
     var lastRole = null;
     SPECS.forEach(function (s) {
       if (s[2] !== lastRole) { list.appendChild(el("div", "grp", ROLE[s[2]])); lastRole = s[2]; }
-      var l = el("label"), has = state.doc.rows.some(function (r) { return r.spec === s[0]; });
-      l.innerHTML = "<input type='checkbox' value='" + s[0] + "'" + (state.roster[s[0]] ? " checked" : "") + "><img src='" + specIcon(s[0]) + "' width='16' height='16' style='border-radius:3px' alt=''><span class='nm' style='color:" + CLASS_COLOR[s[3]] + "'>" + esc(s[1]) + "</span><small>" + (state.roster[s[0]] ? esc(rosterNames(s[0])) : "") + (has ? " · už naimportováno" : "") + "</small>";
+      var l = el("label"), has = specRows(s[0]).length;
+      l.innerHTML = "<input type='checkbox' value='" + s[0] + "'" + (state.roster[s[0]] ? " checked" : "") + "><img src='" + specIcon(s[0]) + "' width='16' height='16' style='border-radius:3px' alt=''><span class='nm' style='color:" + CLASS_COLOR[s[3]] + "'>" + esc(s[1]) + "</span><small>" + (state.roster[s[0]] ? esc(rosterNames(s[0])) : "") + (has ? " · už naimportováno" + (has > 1 ? " (" + has + " řádky)" : "") : "") + "</small>";
       list.appendChild(l);
     });
     $("impBoss").checked = !state.doc.ref; $("impProg").textContent = ""; $("impGo").disabled = false;
@@ -892,15 +942,15 @@
   });
 
   // add / re-import one row (parse picker)
-  var rowDlg = { spec: null, fights: [], isBoss: false };
-  function openRow(spec, reimport) {
+  var rowDlg = { spec: null, fights: [], isBoss: false, target: null };
+  function openRow(spec, reimport, row) {
     var sel = $("rowSpec"); sel.innerHTML = "";
-    rowDlg.isBoss = reimport && !spec;
-    $("rowTitle").textContent = rowDlg.isBoss ? "Casty bosse + fáze z jiného killu" : reimport ? "Znovu importovat spec" : "Přidat spec";
+    rowDlg.isBoss = reimport && !spec; rowDlg.target = row || null;
+    $("rowTitle").textContent = rowDlg.isBoss ? "Casty bosse + fáze z jiného killu" : reimport ? "Znovu importovat řádek" + (row ? " – " + rowTitle(row) : "") : "Přidat řádek (spec)";
     var lastRole = null, og = null;
     SPECS.forEach(function (s) {
       if (s[2] !== lastRole) { og = el("optgroup"); og.label = ROLE[s[2]]; sel.appendChild(og); lastRole = s[2]; }
-      var o = el("option", "", esc(s[1]) + (state.roster[s[0]] ? " – " + esc(rosterNames(s[0])) : "")); o.value = s[0]; og.appendChild(o);
+      var n = specRows(s[0]).length, o = el("option", "", esc(s[1]) + (state.roster[s[0]] ? " – " + esc(rosterNames(s[0])) : "") + (n ? " (už " + n + "×)" : "")); o.value = s[0]; og.appendChild(o);
     });
     sel.value = spec || (state.doc.rows[0] ? state.doc.rows[0].spec : "warlock-affliction");
     $("rowParses").textContent = "Načítám parsy…"; $("rowProg").textContent = ""; $("rowGo").disabled = true;
@@ -927,7 +977,7 @@
     var idx = Number(($("rowParses").querySelector("input:checked") || {}).value || 0), f = rowDlg.fights[idx];
     if (!f) return;
     $("rowGo").disabled = true; $("rowProg").textContent = "Importuji…";
-    var p = rowDlg.isBoss ? fetchBossSpells(state.boss).then(function (bs) { bossFromFight(f, bs); }) : importSpec(rowDlg.spec, idx);
+    var p = rowDlg.isBoss ? fetchBossSpells(state.boss).then(function (bs) { bossFromFight(f, bs); }) : importSpec(rowDlg.spec, idx, rowDlg.target || "new");
     p.then(function () { recalcDuration(); markDirty(); render(); $("dlgRow").close(); })
       .catch(function (e) { $("rowProg").textContent = "Chyba: " + e.message; $("rowGo").disabled = false; });
   });
@@ -937,8 +987,8 @@
   function openNsrt(r) {
     nsrtRow = r;
     var sp = r ? SPEC[r.spec] : null, chars = r ? (state.roster[r.spec] || []) : [];
-    $("nsrtTitle").textContent = "NSRT reminder – " + (sp ? sp.name : r ? r.spec : "Boss");
-    $("nsrtTag").value = r ? (chars[0] ? chars[0].char : (SPEC_ID[r.spec] ? String(SPEC_ID[r.spec]) : "everyone")) : "everyone";
+    $("nsrtTitle").textContent = "NSRT reminder – " + (r ? rowTitle(r) : "Boss");
+    $("nsrtTag").value = r ? (r.char || (chars[0] ? chars[0].char : (SPEC_ID[r.spec] ? String(SPEC_ID[r.spec]) : "everyone"))) : "everyone";
     $("nsrtTag").placeholder = r && SPEC_ID[r.spec] ? "jméno postavy / everyone / spec ID " + SPEC_ID[r.spec] : "jméno postavy / everyone / healer / tank";
     $("nsrtDur").value = "";
     var box = $("nsrtLanes"); box.innerHTML = "";
@@ -977,7 +1027,7 @@
   var customRow = null;
   function openCustom(r, ts, pre) {
     customRow = r;
-    $("laneTitle").textContent = (pre ? "Přidat " + pre.sp.name + " – " : "Vlastní schopnost – ") + (r ? (SPEC[r.spec] ? SPEC[r.spec].name : r.spec) : "Boss");
+    $("laneTitle").textContent = (pre ? "Přidat " + pre.sp.name + " – " : "Vlastní schopnost – ") + (r ? rowTitle(r) : "Boss");
     $("laneProg").textContent = pre ? "Cooldown / trvání z raidbots neznáme – doplň (CD určuje šedý pruh na ose)." : "";
     $("laneTime").value = fmt(ts || 0, true); $("cName").value = pre ? pre.sp.name : ""; $("cId").value = pre ? pre.id : "";
     $("cIcon").value = pre ? pre.sp.icon : ""; $("cColor").value = pre ? pre.sp.color : "#cfd8d2"; $("cCd").value = "0"; $("cDur").value = "0";
