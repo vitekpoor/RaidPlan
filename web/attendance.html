@@ -4,7 +4,8 @@
   (GET /api/absence) jako matice hráči × dny – náhrada listů „Docházka“ a „Absence přehled“.
   Zápis docházky: textarea pro řetězec ESA1 z addonu → POST /api/attendance – formulář vidí jen přihlášený admin (tlačítko vpravo nahoře).
   Přihlášený admin může docházku upravovat (Upravit → buňky jako dropdown ano/ne/omluvenka/pozdě → Uložit = PATCH /api/attendance),
-  smazat den docházky nebo jednotlivou absenci. Dny jsou od nejnovějšího; sloupce Absence / Bez oml. = podíl raidů, kde hráč chyběl
+  smazat den docházky nebo jednotlivou absenci. Docházka ukazuje jen hráče z rosteru; bývalí hráči (záznamy bez hráče v rosteru) jsou
+  v archivu (zaškrtávátko „archiv“) – nic se nemaže, po návratu do rosteru pod stejným jménem hráč pokračuje. Dny jsou od nejnovějšího; sloupce Absence / Bez oml. = podíl raidů, kde hráč chyběl
   (vůbec / bez omluvenky) z raidů, kde je v záznamu, jako skóre od 100 %. Absence: nejnovější datum vlevo. web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa.
   Raid time (GET /api/raidtime?offset=): raidový týden (st–út) s nejbližším raidem – den + čas, co se děje (plán), kdo chybí
   (z Omluvenek). Admin: Upravit → časy / plán / zrušení dne, den navíc, šablona pravidelných dnů (PUT /api/raidtime);
@@ -67,6 +68,8 @@
   .form .status { margin-top: 10px; font-weight: 600; min-height: 1.3em; } .form .status.ok { color: var(--accent); } .form .status.err { color: var(--dps); }
   .hint { color: var(--muted); font-size: 13px; margin: 14px 0 0; }
   .x { color: var(--muted); cursor: pointer; font-size: 11px; margin-left: 4px; } .x:hover { color: var(--dps); }
+  #archbox { cursor: pointer; } #archbox input { vertical-align: -1px; margin-right: 3px; }
+  .mx tr.archived td { opacity: .6; } .arch { display: inline-block; font-size: 9.5px; padding: 0 5px; margin-left: 5px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; vertical-align: 1px; }
   /* Raid time */
   #rtnav b { color: var(--ink-strong); font-size: 14px; margin: 0 4px; }
   #rtnav button { padding: 4px 11px; }
@@ -106,6 +109,7 @@
   <span class="seg"><button data-view="att" class="active">Docházka</button><button data-view="abs">Absence</button><button data-view="rt">Raid time</button></span>
   <span id="daterange"><label>od <input type="date" id="from"></label>
   <label>do <input type="date" id="to"></label></span>
+  <label id="archbox" title="hráči, kteří už nejsou v rosteru, ale mají záznamy docházky – zůstávají uložené, po návratu do rosteru (stejné jméno) pokračují tam, kde skončili"><input type="checkbox" id="archive"> archiv <span id="archcnt" class="cnt"></span></label>
   <span id="rtnav" hidden><button class="btn-outline" id="rtprev" type="button" title="předchozí týden">‹</button><b id="rtlabel"></b><button class="btn-outline" id="rtnext" type="button" title="další týden">›</button></span>
   <span id="status"></span>
   <span class="sp"></span>
@@ -145,10 +149,12 @@
                       monk: "#00FF98", paladin: "#F48CBA", priest: "#FFFFFF", rogue: "#FFF468", shaman: "#0070DD", warlock: "#8788EE", warrior: "#C69B3A" };
   var $ = function (s) { return document.querySelector(s); };
   var STATES = ["ano", "ne", "omluvenka", "pozdě"];
-  var state = { view: "att", token: window.esAuth ? esAuth.token() : null, roster: [], att: null, abs: null, edit: false, draft: {}, rt: null, rtOffset: 0, rtStatus: null, rtDraft: null };
+  var state = { view: "att", token: window.esAuth ? esAuth.token() : null, roster: [], att: null, abs: null, edit: false, draft: {}, rt: null, rtOffset: 0, rtStatus: null, rtDraft: null, archive: false };
   var CZ_LONG = ["neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota"], WD_ORDER = [3, 4, 5, 6, 0, 1, 2];   // raidový týden st → út
   if (window.esAuth) esAuth.onChange(function (t) { state.token = t; if (!t) { state.edit = false; state.draft = {}; } render(); });
-  try { state.view = localStorage.getItem("attView") || "att"; } catch (e) {}
+  try { state.view = localStorage.getItem("attView") || "att"; state.archive = localStorage.getItem("attArchive") === "1"; } catch (e) {}
+  $("#archive").checked = state.archive;
+  $("#archive").addEventListener("change", function () { state.archive = this.checked; try { localStorage.setItem("attArchive", state.archive ? "1" : "0"); } catch (e) {} render(); });
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
   function iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
@@ -156,7 +162,7 @@
   var today = new Date();
   $("#from").value = iso(new Date(today.getTime() - 60 * 86400000)); $("#to").value = iso(new Date(today.getTime() + 60 * 86400000));
   function mainClass(name) { var p = state.roster.filter(function (x) { return x.name === name; })[0]; var m = p && (p.characters.filter(function (c) { return c.main; })[0] || p.characters[0]); return m ? m.class : ""; }
-  function nameCell(name) { return '<td style="color:' + (CLASS_COLOR[String(mainClass(name)).toLowerCase()] || "var(--ink)") + '">' + esc(name) + "</td>"; }
+  function nameCell(name, archived) { return '<td style="color:' + (CLASS_COLOR[String(mainClass(name)).toLowerCase()] || "var(--ink)") + '">' + esc(name) + (archived ? ' <span class="arch" title="není v rosteru – archiv">archiv</span>' : "") + "</td>"; }
 
   function load() {
     var from = $("#from").value, to = $("#to").value;
@@ -180,8 +186,11 @@
       '<th class="pct" title="100 % minus jen neomluvené absence (ne) – omluvenka a pozdě neubírají">Bez oml.</th>' +
       days.map(function (d) { var dd = day(d.date); return '<th class="' + (RAID_DAYS[dd.wd] ? "raid" : "") + '">' + esc(dd.txt) + "<small>" + esc(d.time) + (edit ? ' <span class="x" data-del="' + d.date + '" title="smazat den">✕</span>' : "") + "</small></th>"; }).join("") + "</tr>";
     var rows = [], counts = days.map(function () { return { ano: 0, ne: 0, omluvenka: 0, "pozdě": 0 }; });
-    var people = state.roster.map(function (p) { return p.name; }).concat(a.extra || []);
+    // řádky = aktivní hráči z rosteru; bývalí hráči (záznamy bez hráče v rosteru) jen s archivem – záznamy se nemažou, po návratu pokračují
+    var extra = a.extra || [], people = state.roster.map(function (p) { return p.name; }).concat(state.archive ? extra : []);
+    $("#archcnt").textContent = extra.length ? "(" + extra.length + ")" : "";
     people.forEach(function (name) {
+      var archived = extra.indexOf(name) >= 0;
       var n = 0, abs = 0, bad = 0;
       var cells = days.map(function (d, i) {
         var key = d.date + "|" + name, m = (a.marks[d.date] || {})[name];
@@ -193,13 +202,13 @@
       }).join("");
       var score = function (x) { return n ? Math.round(100 * (n - x) / n) : 100; };
       var cls = function (v, badWhenLow) { return v === 100 ? " full" : badWhenLow && v < 100 ? " bad" : ""; };
-      rows.push("<tr>" + nameCell(name) + '<td class="pct' + cls(score(abs)) + '" title="chyběl ' + abs + " z " + n + ' raidů">' + score(abs) + ' %</td><td class="pct' + cls(score(bad), true) + '" title="bez omluvenky ' + bad + " z " + n + ' raidů">' + score(bad) + " %</td>" + cells + "</tr>");
+      rows.push('<tr class="' + (archived ? "archived" : "") + '">' + nameCell(name, archived) + '<td class="pct' + cls(score(abs)) + '" title="chyběl ' + abs + " z " + n + ' raidů">' + score(abs) + ' %</td><td class="pct' + cls(score(bad), true) + '" title="bez omluvenky ' + bad + " z " + n + ' raidů">' + score(bad) + " %</td>" + cells + "</tr>");
     });
     var foot = "<tr><td>Přítomno / chybí</td><td></td><td></td>" + counts.map(function (c) { return "<td>" + c.ano + " / " + (c.ne + c.omluvenka + c["pozdě"]) + (c.omluvenka || c["pozdě"] ? ' <span class="cnt">(' + (c.omluvenka ? c.omluvenka + " oml." : "") + (c.omluvenka && c["pozdě"] ? ", " : "") + (c["pozdě"] ? c["pozdě"] + " pozdě" : "") + ")</span>" : "") + "</td>"; }).join("") + "</tr>";
     $("#mx thead").innerHTML = head; $("#mx tbody").innerHTML = rows.join("") || '<tr><td colspan="' + (days.length + 3) + '" class="cnt">Žádné záznamy v tomhle období.</td></tr>'; $("#mx tfoot").innerHTML = days.length ? foot : "";
     $("#hint").textContent = edit
       ? "Vyber v buňce ano / ne / omluvenka / pozdě („–“ = hráč v ten den v záznamu nebude). Omluvenka a pozdě zapíšou hráči i absenci na ten den, „ne“ ji smaže. ✕ u dne smaže celý den. Nic se neuloží, dokud nedáš Uložit."
-      : "Docházku zapisuje addon ES Attendance (řádek = hráč z rosteru, sloupec = raid, nejnovější vlevo). Účast = každý začíná na 100 %, každá absence (i omluvenka nebo pozdní příchod) ubírá; Bez oml. = ubírají jen neomluvené absence. Počítá se z raidů, kde je hráč v záznamu. Najeď na buňku – ukáže se postava, se kterou hráč přišel. Sloupce st / čt / ne jsou raidové dny.";
+      : "Docházku zapisuje addon ES Attendance (řádek = hráč z rosteru, sloupec = raid, nejnovější vlevo). Hráči odebraní z rosteru se jen skryjí do archivu (zaškrtávátko nahoře), jejich záznamy zůstávají – po návratu do rosteru pod stejným jménem pokračují. Účast = každý začíná na 100 %, každá absence (i omluvenka nebo pozdní příchod) ubírá; Bez oml. = ubírají jen neomluvené absence. Počítá se z raidů, kde je hráč v záznamu. Najeď na buňku – ukáže se postava, se kterou hráč přišel. Sloupce st / čt / ne jsou raidové dny.";
   }
   function renderAbs() {
     var a = state.abs, marks = a.marks || [];
@@ -226,7 +235,7 @@
     $("#attform").hidden = !state.token;   // zápis docházky vidí jen přihlášený raid leader
     if (state.view === "abs") { state.edit = false; state.draft = {}; state.rtDraft = null; }
     var rt = state.view === "rt";
-    $("#daterange").hidden = rt; $("#rtnav").hidden = !rt; $("#mx").classList.toggle("rt", rt);
+    $("#daterange").hidden = rt; $("#rtnav").hidden = !rt; $("#mx").classList.toggle("rt", rt); $("#archbox").hidden = state.view !== "att";
     $("#adminbox").hidden = !(state.token && state.view !== "abs"); $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
     $("#report").hidden = !(rt && !state.edit); $("#announce").hidden = !(rt && !state.edit);
     if (state.view === "abs") renderAbs(); else if (rt) renderRt(); else renderAtt();

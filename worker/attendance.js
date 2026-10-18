@@ -2,7 +2,9 @@
 //   POST /api/attendance             { record: "ESA1;2026-09-16;20:05;Hráč=1:Postava;Hráč=0;…;?=Neznámý", pw? }
 //                                    auth = Bearer API_TOKEN or the admin login token (paste form on attendance.html).
 //                                    A second record for the same day overwrites the first.
-//   GET  /api/attendance?from&to     { days: [{ date, time, unknown }], players: [...], marks: { date: { player: { state, char } } } }
+//   GET  /api/attendance?from&to     { days: [{ date, time, unknown }], players: [...], extra: [...], marks: { date: { player: { state, char } } } }
+//                                    extra = players with records but not in the roster (= archive on attendance.html, hidden by default;
+//                                    records are never deleted when a player leaves the roster – rejoining under the same name continues them)
 //                                    state = ano | ne | omluvenka (absent + absence X that day) | pozdě (absent + "přijdu pozdě")
 //   GET  /api/attendance.csv         the old sheet layout ("Hráč", "16.9.2026 (19:13)", … / ano, ne, omluvenka, pozdě)
 //   DELETE /api/attendance?date=     (admin)
