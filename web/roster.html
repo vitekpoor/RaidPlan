@@ -225,9 +225,7 @@
     if (act === "addplayer") d.push({ name: "", bench: b.dataset.bench === "1", note: "", characters: [{ name: "", class: "", role: "dps", spec: "", main: true }] });
     else if (act === "delplayer") {
       // a saved player keeps his Docházka records: they move to the archive there (hidden), nothing is deleted – rejoining under the same name continues them
-      var note = p.id ? "
-
-Jeho docházka se nesmaže – v Docházce se jen schová do archivu. Když se vrátí do rosteru pod stejným jménem, pokračuje tam, kde skončil." : "";
+      var note = p.id ? "\n\nJeho docházka se nesmaže – v Docházce se jen schová do archivu. Když se vrátí do rosteru pod stejným jménem, pokračuje tam, kde skončil." : "";
       if (!p.name || confirm("Smazat hráče " + p.name + " z rosteru?" + note)) d.splice(i, 1);
     }
     else if (act === "addchar") p.characters.push({ name: "", class: "", role: "dps", spec: "", main: !p.characters.length });
