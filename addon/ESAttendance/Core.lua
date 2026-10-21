@@ -30,7 +30,12 @@ ns.guildOnline = {}     -- normalized char name -> "Name-Realm" of online guild 
 ns.guildChars = {}      -- normalized char name -> "Name-Realm" of every guild member (realm lookup)
 ns.callbacks = {}
 
-function ns.WebAppUrl() return (ESAttendanceDB and ESAttendanceDB.webappUrl) or WEBAPP_URL end
+-- A saved override pointing at the retired Google Apps Script (served the old sheet roster) is ignored.
+function ns.WebAppUrl()
+  local u = ESAttendanceDB and ESAttendanceDB.webappUrl
+  if u and u:find("script.google.com", 1, true) then u = nil end
+  return u or WEBAPP_URL
+end
 function ns.RosterUrl() return ns.WebAppUrl() .. "?p=esroster" end
 function ns.AttendanceUrl() return ns.WebAppUrl() .. "?p=attendance" end
 
