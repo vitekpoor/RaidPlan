@@ -16,6 +16,8 @@ var FLOPIK_DIFFICULTY = { 1: "LFR", 3: "Normal", 4: "Heroic", 5: "Mythic" };
 // spawnNoun / castLabel (words for that summary text), cls (page cell class, e.g. "orb"), hot / hotAll, note (legend),
 // ticks (hits only: count periodic tick damage too – for channelled / whirlwind abilities WCL logs ONLY as ticks; the
 // clustering window then turns a burst of ticks into one hit).
+// types (hits only): event types that count, default damage + applydebuff; window 0 = no clustering, every event is a hit
+// (Ula'tek waves: two waves 0.02–1.3 s apart both hit and stack the DoT – one damage event = one hit the game registered).
 // whileDebuff (ids): count the hit only if the target had one of these debuffs at that moment – or lost it at most
 // whileTol s (default 0.2) before, because the hit itself can remove the debuff (Ula'tek: a wave breaks the carried egg
 // in the same log instant as the damage).
@@ -67,17 +69,19 @@ var FLOPIK_BOSSES = {
   // Ula'tek (Mythic prog report 714PH3Vy2aqNwFbv, 2026-10-22): Toxic Incubation (1299759) hands 8 players an egg = debuff
   // Noxious Shell 1307612 (1307617 = the carrier's own 1 s pulse, not a fail); the egg is put down in groups (removedebuff +
   // Rancid Yolk 1312150 for 20 s + Blightscale Rawling hatch). Caustic Waves: every Gore Rattle add casts 1298570 (2.4 s) = one
-  // wave; a hit = damage 1292403 (direct, no tick) + 10 s DoT debuff 1292403. A wave hitting a CARRIER breaks the egg: the Shell
+  // wave; a hit = damage 1292403 (direct, no tick; the 10 s DoT debuff 1292403 and its ticks are ignored). Two waves can hit the
+  // same player 0.02–1.3 s apart and the game stacks the DoT for each (applydebuffstack), so every direct damage event is one hit
+  // (types damage, window 0; verified 300 hits = 300 direct events in 714PH3Vy2aqNwFbv). A wave hitting a CARRIER breaks the egg: the Shell
   // is removed 0–40 ms before the damage event, so whileDebuff uses a 0.2 s tolerance. Noxious Splash 1307635 = two carried eggs
   // touched (damage + debuff on both carriers in the same instant, applydebuffstack when it happens again within a second).
   // Falling Debris 1286885 = direct damage every 4 s while Venomous Heart (1299526) is up; two damage events in the same
-  // instant are one rock. ver 2 = the four columns added.
-  3492: { key: "ulatek", name: "Ula'tek", ver: 2, sortBy: "waves", metrics: [
-    flopikHits_("waves", "Vlny", [1292403], { castIds: [1298570], window: 1.5, hot: [2, 3], hotAll: [6, 10],
-      note: "zásah vlnou Caustic Waves (1292403) – přímý zásah + 10s DoT, ticky DoTu se nepočítají; každá vlna (cast Gore Rattle 1298570) se počítá jednou" }),
-    flopikHits_("wavesEgg", "Vlna s vejcem", [1292403], { whileDebuff: [1307612], window: 1.5, hot: [1, 2], hotAll: [2, 4],
+  // instant are one rock. ver 2 = the four columns added, ver 3 = waves/splash count every direct damage event (no 1.5 s merge).
+  3492: { key: "ulatek", name: "Ula'tek", ver: 3, sortBy: "waves", metrics: [
+    flopikHits_("waves", "Vlny", [1292403], { castIds: [1298570], types: ["damage"], window: 0, hot: [2, 3], hotAll: [6, 10],
+      note: "zásah vlnou Caustic Waves (1292403) – počítá se každý přímý zásah (i pod imunitou), ticky 10s DoTu ne; dvě vlny těsně po sobě = dva zásahy (hra za každý přidá stack DoTu)" }),
+    flopikHits_("wavesEgg", "Vlna s vejcem", [1292403], { whileDebuff: [1307612], types: ["damage"], window: 0, hot: [1, 2], hotAll: [2, 4],
       note: "zásah vlnou v okamžiku, kdy hráč nesl vejce (Noxious Shell 1307612) – vlna vejce rozbije; podmnožina sloupce Vlny" }),
-    flopikHits_("splash", "Noxious Splash", [1307635], { window: 0.1, hot: [1, 2], hotAll: [2, 4],
+    flopikHits_("splash", "Noxious Splash", [1307635], { types: ["damage"], window: 0, hot: [1, 2], hotAll: [2, 4],
       note: "Noxious Splash (1307635) – nesené vejce se dotklo vejce jiného hráče, dmg + debuff dostanou oba; počítá se každá srážka" }),
     flopikHits_("debris", "Falling Debris", [1286885], { window: 1.5, hot: [1, 2], hotAll: [3, 5],
       note: "zásah padajícím kamenem Falling Debris (1286885) během Venomous Heart; dva zásahy ve stejném okamžiku = jeden kámen" })
@@ -188,7 +192,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
         if (e.type === "cast" && m.castIds.indexOf(ab) >= 0) casts++;
         if (e.type === "summon" && m.spawnIds.indexOf(ab) >= 0) spawned++;
         if (m.ids.indexOf(ab) < 0) return;
-        var hitTypes = m.kind === "hits" ? ["damage", "applydebuff"] : m.kind === "debuff" ? ["applydebuff", "applydebuffstack"] : ["cast"];
+        var hitTypes = m.kind === "hits" ? (m.types || ["damage", "applydebuff"]) : m.kind === "debuff" ? ["applydebuff", "applydebuffstack"] : ["cast"];
         if (hitTypes.indexOf(e.type) < 0 || (e.tick && !m.ticks)) return;   // periodic ticks are not new hits (unless ticks: true)
         var who = m.kind === "casts" ? e.sourceID : e.targetID;
         if (!players[who]) return;
@@ -198,7 +202,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
       var total = 0;
       Object.keys(players).forEach(function (id) {
         var ts = per[id] || [];
-        var v = m.kind === "hits" ? flopikClusters_(ts, m.window) : ts.length;
+        var v = m.kind === "hits" && m.window > 0 ? flopikClusters_(ts, m.window) : ts.length;
         rows[players[id]][m.k] = v; total += v;
       });
       var col = { k: m.k, l: m.l, agg: "sum" };
