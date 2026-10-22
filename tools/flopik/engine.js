@@ -16,11 +16,16 @@ var FLOPIK_DIFFICULTY = { 1: "LFR", 3: "Normal", 4: "Heroic", 5: "Mythic" };
 // spawnNoun / castLabel (words for that summary text), cls (page cell class, e.g. "orb"), hot / hotAll, note (legend),
 // ticks (hits only: count periodic tick damage too – for channelled / whirlwind abilities WCL logs ONLY as ticks; the
 // clustering window then turns a burst of ticks into one hit).
+// whileDebuff (ids): count the hit only if the target had one of these debuffs at that moment – or lost it at most
+// whileTol s (default 0.2) before, because the hit itself can remove the debuff (Ula'tek: a wave breaks the carried egg
+// in the same log instant as the damage).
 function flopikMetric_(kind, key, label, ids, opts) {
   var m = { kind: kind, k: key, l: label, ids: ids.map(String), avoid: true, window: 1.5, castIds: [], spawnIds: [] };
   Object.keys(opts || {}).forEach(function (o) { m[o] = opts[o]; });
   m.castIds = (m.castIds || []).map(String);
   m.spawnIds = (m.spawnIds || []).map(String);
+  m.whileDebuff = (m.whileDebuff || []).map(String);
+  if (m.whileTol === undefined) m.whileTol = 0.2;
   return m;
 }
 function flopikHits_(key, label, ids, opts) { return flopikMetric_("hits", key, label, ids, opts); }
@@ -59,7 +64,25 @@ var FLOPIK_BOSSES = {
   ], description: "Zelené orby (<b>Coalesced Venom</b>) po každém <b>Toxic Deluge</b> se sbírají přeběhnutím a nosí doprostřed, kde je tank zničí Severem. " +
     "<b>Orby</b> = kolikrát hráč orb sebral (počítá se i další sebrání po položení). <b>Axegrinder</b> = kolikrát hráče chytla addka Axegrinder. " +
     "<b>Resonance</b> (Mythic) = kolikrát se duch hráče (Unnerving Fixation) srazil s cizím duchem – Malevolent Resonance." },
-  3492: { key: "ulatek", name: "Ula'tek", metrics: [] },
+  // Ula'tek (Mythic prog report 714PH3Vy2aqNwFbv, 2026-10-22): Toxic Incubation (1299759) hands 8 players an egg = debuff
+  // Noxious Shell 1307612 (1307617 = the carrier's own 1 s pulse, not a fail); the egg is put down in groups (removedebuff +
+  // Rancid Yolk 1312150 for 20 s + Blightscale Rawling hatch). Caustic Waves: every Gore Rattle add casts 1298570 (2.4 s) = one
+  // wave; a hit = damage 1292403 (direct, no tick) + 10 s DoT debuff 1292403. A wave hitting a CARRIER breaks the egg: the Shell
+  // is removed 0–40 ms before the damage event, so whileDebuff uses a 0.2 s tolerance. Noxious Splash 1307635 = two carried eggs
+  // touched (damage + debuff on both carriers in the same instant, applydebuffstack when it happens again within a second).
+  // Falling Debris 1286885 = direct damage every 4 s while Venomous Heart (1299526) is up; two damage events in the same
+  // instant are one rock. ver 2 = the four columns added.
+  3492: { key: "ulatek", name: "Ula'tek", ver: 2, sortBy: "waves", metrics: [
+    flopikHits_("waves", "Vlny", [1292403], { castIds: [1298570], window: 1.5, hot: [2, 3], hotAll: [6, 10],
+      note: "zásah vlnou Caustic Waves (1292403) – přímý zásah + 10s DoT, ticky DoTu se nepočítají; každá vlna (cast Gore Rattle 1298570) se počítá jednou" }),
+    flopikHits_("wavesEgg", "Vlna s vejcem", [1292403], { whileDebuff: [1307612], window: 1.5, hot: [1, 2], hotAll: [2, 4],
+      note: "zásah vlnou v okamžiku, kdy hráč nesl vejce (Noxious Shell 1307612) – vlna vejce rozbije; podmnožina sloupce Vlny" }),
+    flopikHits_("splash", "Noxious Splash", [1307635], { window: 0.1, hot: [1, 2], hotAll: [2, 4],
+      note: "Noxious Splash (1307635) – nesené vejce se dotklo vejce jiného hráče, dmg + debuff dostanou oba; počítá se každá srážka" }),
+    flopikHits_("debris", "Falling Debris", [1286885], { window: 1.5, hot: [1, 2], hotAll: [3, 5],
+      note: "zásah padajícím kamenem Falling Debris (1286885) během Venomous Heart; dva zásahy ve stejném okamžiku = jeden kámen" })
+  ], description: "<b>Vlny</b> = kolikrát hráče trefila vlna <b>Caustic Waves</b> od addek Gore Rattle. <b>Vlna s vejcem</b> = z toho zásahy, kdy hráč nesl vejce " +
+    "(<b>Noxious Shell</b>) a vlna mu ho rozbila. <b>Noxious Splash</b> = srážka dvou nesených vajec. <b>Falling Debris</b> = zásah padajícím kamenem." },
   3379: { key: "nymrissa", name: "Nymrissa Wavecaller", metrics: [] }
 };
 
@@ -80,8 +103,9 @@ function flopikBossFor(encounterID, name) {
 /** WCL events filterExpression: only what the boss's metrics need + player deaths. */
 function flopikFilterFor(boss) {
   var ids = [];
-  (boss.metrics || []).forEach(function (m) { ids = ids.concat(m.ids, m.castIds || [], m.spawnIds || []); });
+  (boss.metrics || []).forEach(function (m) { ids = ids.concat(m.ids, m.castIds || [], m.spawnIds || [], m.whileDebuff || []); });
   if (boss.analyze === "twinfangs") ids = ids.concat(FLOPIK_TF.ids);
+  ids = ids.map(String).filter(function (id, i, arr) { return arr.indexOf(id) === i; });
   var parts = ["(type = 'death' and target.type = 'player')"];
   if (ids.length) parts.push("ability.id in (" + ids.join(",") + ")");
   return parts.join(" or ");
@@ -146,6 +170,19 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
   } else {
     (boss.metrics || []).forEach(function (m) {
       var per = {}, casts = 0, spawned = 0;
+      // whileDebuff: intervals [from, to] per player when the debuff was up (open interval = still up at the end)
+      var up = {}, open = {};
+      if (m.whileDebuff.length) evc.forEach(function (e) {
+        if (m.whileDebuff.indexOf(String(e.abilityGameID)) < 0 || !players[e.targetID]) return;
+        if (e.type === "applydebuff") open[e.targetID] = e.timestamp;
+        else if (e.type === "removedebuff") { (up[e.targetID] = up[e.targetID] || []).push([open[e.targetID] || 0, e.timestamp]); delete open[e.targetID]; }
+      });
+      Object.keys(open).forEach(function (id) { (up[id] = up[id] || []).push([open[id], Infinity]); });
+      function hadDebuff(id, t) {
+        var iv = up[id] || [], tol = m.whileTol * 1000;
+        for (var i = 0; i < iv.length; i++) if (iv[i][0] <= t && t <= iv[i][1] + tol) return true;
+        return false;
+      }
       evc.forEach(function (e) {
         var ab = String(e.abilityGameID);
         if (e.type === "cast" && m.castIds.indexOf(ab) >= 0) casts++;
@@ -155,6 +192,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
         if (hitTypes.indexOf(e.type) < 0 || (e.tick && !m.ticks)) return;   // periodic ticks are not new hits (unless ticks: true)
         var who = m.kind === "casts" ? e.sourceID : e.targetID;
         if (!players[who]) return;
+        if (m.whileDebuff.length && !hadDebuff(who, e.timestamp)) return;
         (per[who] = per[who] || []).push(e.timestamp);
       });
       var total = 0;

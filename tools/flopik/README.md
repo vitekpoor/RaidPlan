@@ -40,6 +40,8 @@ flopikCasts_("soak", "Soaky", [123456])                   // počet castů hrá�
 `hits` = „unique hit count“: každý cast, který hráče zasáhl, se počítá jednou (zásahy do `window` s od
 sebe jsou jeden cast; ticky periodic damage se nepočítají), `castIds` = ID castu bosse pro počet castů
 v souhrnu. `hot`/`hotAll` = prahy pro oranžové / červené zvýraznění v pullu / v součtu, `note` = legenda.
+`whileDebuff: [ID]` počítá zásah jen ve chvíli, kdy cíl měl daný debuff (nebo ho ztratil max. `whileTol` s předtím –
+default 0,2 s, protože zásah sám může debuff sundat; Ula'tek: vlna rozbije nesené vejce).
 Spell ID: WCL (Events tab) nebo `grep -a "Tempest" WoWCombatLog-*.txt | head` (ID zásahu/debuffu, ne castu).
 
 Složitější mechaniky (Twin Fangs: soak orbu → stack, zdroje stacků, death cutoff 2) mají vlastní analyzátor
