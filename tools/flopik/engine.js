@@ -18,6 +18,8 @@ var FLOPIK_DIFFICULTY = { 1: "LFR", 3: "Normal", 4: "Heroic", 5: "Mythic" };
 // clustering window then turns a burst of ticks into one hit).
 // types (hits only): event types that count, default damage + applydebuff; window 0 = no clustering, every event is a hit
 // (Ula'tek waves: two waves 0.02–1.3 s apart both hit and stack the DoT – one damage event = one hit the game registered).
+// skipImmune (hits): ignore damage events that did nothing – amount 0, absorbed 0, no unmitigatedAmount (WCL hitType 10 immune /
+// 0 miss, e.g. a rogue under Cloak of Shadows standing in a wave); WCL's own hit count leaves them out too.
 // whileDebuff (ids): count the hit only if the target had one of these debuffs at that moment – or lost it at most
 // whileTol s (default 0.2) before, because the hit itself can remove the debuff (Ula'tek: a wave breaks the carried egg
 // in the same log instant as the damage).
@@ -75,15 +77,16 @@ var FLOPIK_BOSSES = {
   // is removed 0–40 ms before the damage event, so whileDebuff uses a 0.2 s tolerance. Noxious Splash 1307635 = two carried eggs
   // touched (damage + debuff on both carriers in the same instant, applydebuffstack when it happens again within a second).
   // Falling Debris 1286885 = direct damage every 4 s while Venomous Heart (1299526) is up; two damage events in the same
-  // instant are one rock. ver 2 = the four columns added, ver 3 = waves/splash count every direct damage event (no 1.5 s merge).
-  3492: { key: "ulatek", name: "Ula'tek", ver: 3, sortBy: "waves", metrics: [
-    flopikHits_("waves", "Vlny", [1292403], { castIds: [1298570], types: ["damage"], window: 0, hot: [2, 3], hotAll: [6, 10],
-      note: "zásah vlnou Caustic Waves (1292403) – počítá se každý přímý zásah (i pod imunitou), ticky 10s DoTu ne; dvě vlny těsně po sobě = dva zásahy (hra za každý přidá stack DoTu)" }),
-    flopikHits_("wavesEgg", "Vlna s vejcem", [1292403], { whileDebuff: [1307612], types: ["damage"], window: 0, hot: [1, 2], hotAll: [2, 4],
+  // instant are one rock. ver 2 = the four columns added, ver 3 = waves/splash count every direct damage event (no 1.5 s merge),
+  // ver 4 = immune / zero events skipped (skipImmune) – matches the WCL damage-taken hit count per player (checked on PMt4YfqGDWNxbpHQ).
+  3492: { key: "ulatek", name: "Ula'tek", ver: 4, sortBy: "waves", metrics: [
+    flopikHits_("waves", "Vlny", [1292403], { castIds: [1298570], types: ["damage"], window: 0, skipImmune: true, hot: [2, 3], hotAll: [6, 10],
+      note: "zásah vlnou Caustic Waves (1292403) – počítá se každý přímý zásah, který udělal dmg nebo byl absorbnutý (zásah pod imunitou ne), ticky 10s DoTu ne – stejné číslo jako WCL Damage Taken „hits“; dvě vlny těsně po sobě = dva zásahy (hra za každý přidá stack DoTu)" }),
+    flopikHits_("wavesEgg", "Vlna s vejcem", [1292403], { whileDebuff: [1307612], types: ["damage"], window: 0, skipImmune: true, hot: [1, 2], hotAll: [2, 4],
       note: "zásah vlnou v okamžiku, kdy hráč nesl vejce (Noxious Shell 1307612) – vlna vejce rozbije; podmnožina sloupce Vlny" }),
-    flopikHits_("splash", "Noxious Splash", [1307635], { types: ["damage"], window: 0, hot: [1, 2], hotAll: [2, 4],
+    flopikHits_("splash", "Noxious Splash", [1307635], { types: ["damage"], window: 0, skipImmune: true, hot: [1, 2], hotAll: [2, 4],
       note: "Noxious Splash (1307635) – nesené vejce se dotklo vejce jiného hráče, dmg + debuff dostanou oba; počítá se každá srážka" }),
-    flopikHits_("debris", "Falling Debris", [1286885], { window: 1.5, hot: [1, 2], hotAll: [3, 5],
+    flopikHits_("debris", "Falling Debris", [1286885], { window: 1.5, skipImmune: true, hot: [1, 2], hotAll: [3, 5],
       note: "zásah padajícím kamenem Falling Debris (1286885) během Venomous Heart; dva zásahy ve stejném okamžiku = jeden kámen" })
   ], description: "<b>Vlny</b> = kolikrát hráče trefila vlna <b>Caustic Waves</b> od addek Gore Rattle. <b>Vlna s vejcem</b> = z toho zásahy, kdy hráč nesl vejce " +
     "(<b>Noxious Shell</b>) a vlna mu ho rozbila. <b>Noxious Splash</b> = srážka dvou nesených vajec. <b>Falling Debris</b> = zásah padajícím kamenem." },
@@ -194,6 +197,7 @@ function flopikAnalyze(fight, events, actors, reportStartMs) {
         if (m.ids.indexOf(ab) < 0) return;
         var hitTypes = m.kind === "hits" ? (m.types || ["damage", "applydebuff"]) : m.kind === "debuff" ? ["applydebuff", "applydebuffstack"] : ["cast"];
         if (hitTypes.indexOf(e.type) < 0 || (e.tick && !m.ticks)) return;   // periodic ticks are not new hits (unless ticks: true)
+        if (m.skipImmune && e.type === "damage" && !(e.amount > 0) && !(e.absorbed > 0) && !(e.unmitigatedAmount > 0)) return;
         var who = m.kind === "casts" ? e.sourceID : e.targetID;
         if (!players[who]) return;
         if (m.whileDebuff.length && !hadDebuff(who, e.timestamp)) return;
