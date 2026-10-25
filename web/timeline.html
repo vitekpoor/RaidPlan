@@ -19,7 +19,8 @@
   castu se při najetí ukazují v popisku kurzoru na pravítku. Zoom = Ctrl + kolečko nad osou (čas pod kurzorem zůstává) nebo tlačítka −/+. Levý sloupec: řádek 1 = ikona + spec + tlačítka (NSRT; v úpravách ＋ ⟳ ✕, vždy vpravo), řádek 2 = hráči z rosteru · top parse (WCL odkaz),
   pak timeline schopností. Řádek Boss je kompaktní (jen ikony bez textu, nabalené do co nejmíň drah) a přilepený pod pravítkem při scrollu; chipy nad osou filtrují
   schopnosti bosse (volba diváka v localStorage, admin v režimu úprav ukládá výchozí filtr do dokumentu bossHide).
-  Tlačítko "NSRT export" v liště = jeden společný reminder string pro všechny zaškrtnuté řádky (výchozí = řádky, jejichž spec je
+  Tlačítko "NSRT export" v liště = jeden společný reminder string pro všechny zaškrtnuté řádky (dialog ukazuje jen řádky speců ze
+  sestavy / rosteru – checkbox "jen roster", tlačítko "vše" odkryje i ostatní; výchozí zaškrtnuté = řádky, jejichž spec je
   v rosteru; tag se předvyplní z rosteru: hráč řádku → jeho postava, bez hráče → všechny postavy toho specu oddělené mezerou
   – každé jméno = SAMOSTATNÝ řádek reminderu, víc jmen v jednom tag: se ve hře nenačte správně), nic v rosteru → spec ID;
   volitelně i řádek Boss s tag:everyone), řádky seřazené podle času.
@@ -179,6 +180,7 @@
   dialog .list .grp { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin: 6px 0 2px; }
   dialog .list .nm { font-weight: 600; } dialog .list small { color: var(--muted); }
   #nsrtAllRows label .nm { flex: 0 0 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #nsrtAllRows.only label.off { display: none; }
   #nsrtAllRows label input.tag { flex: 1; min-width: 0; font: inherit; font-size: 11.5px; padding: 1px 5px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
   #nsrtAllRows label small { flex: none; }
   dialog .custom { display: none; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
@@ -276,6 +278,7 @@
   <h5>NSRT reminder – všechny řádky</h5>
   <div>Jeden string pro celý raid: každý řádek dostane <b>tag</b> podle rosteru (hráč řádku → jeho postava, bez hráče → všechny postavy specu – víc jmen oddělených mezerou, do stringu jde každé jméno jako samostatný řádek). Tag jde přepsat.</div>
   <div class="chips" style="align-items:center;white-space:nowrap"><button class="mini" type="button" data-pick="roster">roster</button><button class="mini" type="button" data-pick="all">vše</button><button class="mini" type="button" data-pick="none">nic</button>
+    <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="skrýt řádky speců, které v sestavě bosse / rosteru nemáme"><input type="checkbox" id="nsrtAllOnly" checked> jen roster</label>
     <label style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;width:auto"><input type="checkbox" id="nsrtAllBoss"> i řádek Boss (tag everyone)</label>
     <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="dur:N – jak dlouho před časem se reminder ukáže (prázdné = nastavení NSRT)">dur (s) <input type="number" id="nsrtAllDur" min="0" step="1" placeholder="auto" style="width:4.5rem"></label></div>
   <div class="list" id="nsrtAllRows" style="max-height:14rem"></div>
@@ -1120,11 +1123,13 @@
     var box = $("nsrtAllRows"); box.innerHTML = "";
     state.doc.rows.forEach(function (r, i) {
       var sp = SPEC[r.spec] || {}, l = el("label"), n = r.events.filter(function (e) { return r.lanes.indexOf(e.id) >= 0; }).length;
+      if (!inRoster(r)) l.className = "off";
       l.innerHTML = "<input type='checkbox' value='" + i + "'" + (inRoster(r) ? " checked" : "") + "><img src='" + specIcon(r.spec) + "' width='16' height='16' style='border-radius:3px' alt=''><span class='nm' style='color:" + (CLASS_COLOR[sp.cls] || "#ddd") + "' title='" + esc(rowTitle(r)) + "'>" + esc(rowTitle(r)) + "</span><input type='text' class='tag' value='" + esc(rowTag(r)) + "' title='tag: jméno postavy (víc jmen oddělených mezerou) / everyone / healer / spec ID'><small>" + n + "×</small>";
       l.querySelector("input.tag").addEventListener("click", function (ev) { ev.preventDefault(); ev.stopPropagation(); ev.target.focus(); });
       box.appendChild(l);
     });
     if (!state.doc.rows.length) box.textContent = "Timeline nemá žádné řádky.";
+    $("nsrtAllOnly").checked = true; box.classList.add("only");
     $("nsrtAllBoss").checked = false; $("nsrtAllDur").value = "";
     buildNsrtAll(); wireRaidplanNote("nsrtAllNote", "nsrtAllNoteInfo", buildNsrtAll); $("dlgNsrtAll").showModal();
   }
@@ -1148,9 +1153,16 @@
   $("nsrtAllRows").addEventListener("change", buildNsrtAll);
   $("nsrtAllRows").addEventListener("input", buildNsrtAll);
   ["nsrtAllBoss", "nsrtAllDur", "nsrtAllNote"].forEach(function (id) { $(id).addEventListener("input", buildNsrtAll); });
+  // "jen roster": hide rows of specs we do not have (hidden rows are also unchecked so they never reach the string)
+  $("nsrtAllOnly").addEventListener("change", function () {
+    var on = $("nsrtAllOnly").checked; $("nsrtAllRows").classList.toggle("only", on);
+    if (on) $("nsrtAllRows").querySelectorAll("label.off input[type=checkbox]").forEach(function (i) { i.checked = false; });
+    buildNsrtAll();
+  });
   $("dlgNsrtAll").querySelectorAll("[data-pick]").forEach(function (b) {
     b.addEventListener("click", function () {
       var mode = b.getAttribute("data-pick");
+      if (mode === "all") { $("nsrtAllOnly").checked = false; $("nsrtAllRows").classList.remove("only"); }   // "vše" shows the hidden rows too
       $("nsrtAllRows").querySelectorAll("input[type=checkbox]").forEach(function (i) { i.checked = mode === "all" || (mode === "roster" && inRoster(state.doc.rows[Number(i.value)])); });
       buildNsrtAll();
     });
