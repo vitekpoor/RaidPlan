@@ -21,7 +21,8 @@
   schopnosti bosse (volba diváka v localStorage, admin v režimu úprav ukládá výchozí filtr do dokumentu bossHide).
   Tlačítko "NSRT export" v liště = jeden společný reminder string pro všechny zaškrtnuté řádky (výchozí = řádky, jejichž spec je
   v rosteru; tag se předvyplní z rosteru: hráč řádku → jeho postava, bez hráče → všechny postavy toho specu oddělené mezerou
-  (NSRT bere v tag: víc jmen), nic v rosteru → spec ID; volitelně i řádek Boss s tag:everyone), řádky seřazené podle času.
+  – každé jméno = SAMOSTATNÝ řádek reminderu, víc jmen v jednom tag: se ve hře nenačte správně), nic v rosteru → spec ID;
+  volitelně i řádek Boss s tag:everyone), řádky seřazené podle času.
   Oba NSRT exporty umí (checkbox "i poznámka z RaidPlanu", výchozí zapnuto, když plán poznámku má) předřadit poznámku bosse
   z RaidPlan.io plánu (odkaz z lineups, Worker /api/timeline/raidplan?boss=NN → header/step/footer notes_raw) – NSRT řádky bez
   time:/tag: zobrazí jako "extra note" (jako MRT poznámku), takže jeden string = rozpis z RaidPlanu + remindery.
@@ -273,7 +274,7 @@
 
 <dialog id="dlgNsrtAll" style="min-width:40rem">
   <h5>NSRT reminder – všechny řádky</h5>
-  <div>Jeden string pro celý raid: každý řádek dostane <b>tag</b> podle rosteru (hráč řádku → jeho postava, bez hráče → všechny postavy specu, víc jmen oddělených mezerou). Tag jde přepsat.</div>
+  <div>Jeden string pro celý raid: každý řádek dostane <b>tag</b> podle rosteru (hráč řádku → jeho postava, bez hráče → všechny postavy specu – víc jmen oddělených mezerou, do stringu jde každé jméno jako samostatný řádek). Tag jde přepsat.</div>
   <div class="chips" style="align-items:center;white-space:nowrap"><button class="mini" type="button" data-pick="roster">roster</button><button class="mini" type="button" data-pick="all">vše</button><button class="mini" type="button" data-pick="none">nic</button>
     <label style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;width:auto"><input type="checkbox" id="nsrtAllBoss"> i řádek Boss (tag everyone)</label>
     <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="dur:N – jak dlouho před časem se reminder ukáže (prázdné = nastavení NSRT)">dur (s) <input type="number" id="nsrtAllDur" min="0" step="1" placeholder="auto" style="width:4.5rem"></label></div>
@@ -1083,9 +1084,12 @@
     eventsOf(r).filter(function (e) { return !ids || ids.indexOf(String(e.id)) >= 0; }).sort(function (a, b2) { return a.ts - b2.ts; }).forEach(function (e) {
       var ph = phases[0]; phases.forEach(function (p) { if (p.ts <= e.ts) ph = p; });
       var t = Math.round((e.ts - ph.ts) / 100) / 10, sp = d.spells[e.id] || {};
-      var line = "time:" + t + ";ph:" + ph.id + ";tag:" + tag + ";" + (/^c\d+$/.test(String(e.id)) ? "text:" + (sp.name || e.id) : "spellid:" + e.id) + ";" + (dur ? "dur:" + dur + ";" : "");
-      if (e.note) line += " " + e.note;
-      out.push({ ts: e.ts, line: line });
+      // one reminder line per tag name – several names in one tag: do not load correctly in game
+      String(tag).trim().split(/\s+/).filter(Boolean).forEach(function (one) {
+        var line = "time:" + t + ";ph:" + ph.id + ";tag:" + one + ";" + (/^c\d+$/.test(String(e.id)) ? "text:" + (sp.name || e.id) : "spellid:" + e.id) + ";" + (dur ? "dur:" + dur + ";" : "");
+        if (e.note) line += " " + e.note;
+        out.push({ ts: e.ts, line: line });
+      });
     });
     return out;
   }
@@ -1104,7 +1108,7 @@
   $("nsrtCopy").addEventListener("click", function () { copyText($("nsrtOut"), $("nsrtHint")); });
 
   // NSRT export of all (roster) rows into one shared note: tag per row filled from the roster
-  /** default NSRT tag of a row: its player's character, else every roster character of the spec (space separated = NSRT "or"), else the spec ID */
+  /** default NSRT tag of a row: its player's character, else every roster character of the spec (space separated – nsrtLines writes one reminder line per name), else the spec ID */
   function rowTag(r) {
     if (r.char) return r.char;
     var chars = (state.roster[r.spec] || []).map(function (c) { return c.char; });
