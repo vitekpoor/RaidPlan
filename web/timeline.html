@@ -22,6 +22,12 @@
   Tlačítko "NSRT export" v liště = jeden společný reminder string pro všechny zaškrtnuté řádky (výchozí = řádky, jejichž spec je
   v rosteru; tag se předvyplní z rosteru: hráč řádku → jeho postava, bez hráče → všechny postavy toho specu oddělené mezerou
   (NSRT bere v tag: víc jmen), nic v rosteru → spec ID; volitelně i řádek Boss s tag:everyone), řádky seřazené podle času.
+  Oba NSRT exporty umí (checkbox "i poznámka z RaidPlanu", výchozí zapnuto, když plán poznámku má) předřadit poznámku bosse
+  z RaidPlan.io plánu (odkaz z lineups, Worker /api/timeline/raidplan?boss=NN → header/step/footer notes_raw) – NSRT řádky bez
+  time:/tag: zobrazí jako "extra note" (jako MRT poznámku), takže jeden string = rozpis z RaidPlanu + remindery.
+  Hráči u speců (state.roster) se berou ze Sestavy bosse (lineups.html, /api/lineups; slot "Hráč", "Hráč (Classa)" nebo
+  "Hráč (Classa / spec)" = jeden spec na hráče – spec ze slotu, jinak spec postavy v rosteru); bez sestavy bosse celý roster
+  podle specu každé postavy (tak byl hráč se dvěma postavami jedné classy v obou specech najednou).
   Tlačítko NSRT u řádku = export castů jako reminder string pro Northern Sky Raid Tools
   (EncounterID:<id>;Name:<boss> + řádky time:<s od začátku fáze>;ph:<fáze>;tag:<kdo>;spellid:<id>; – formát z Reminders.lua addonu;
   fáze = lorrgs phase_id, u Coiled Altar 1/2/2.5/3 sedí s NSRT). Odkaz z raid taktik: timeline.html#<slug bosse>. web/build.mjs doplní menu.
@@ -205,7 +211,7 @@
   <a id="lorrgs" href="#" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">lorrgs ↗</a>
   <span class="sp"></span>
   <span title="Ctrl + kolečko myši nad osou přiblíží / oddálí (zůstane čas pod kurzorem)">Zoom: <b style="color:var(--ink)">Ctrl + kolečko</b> <button class="mini" id="zoomOut" type="button" title="oddálit">−</button><span id="zoomVal" style="min-width:3.5em;display:inline-block;text-align:center"></span><button class="mini" id="zoomIn" type="button" title="přiblížit">+</button></span>
-  <label title="zobrazit jen specy, které máme v rosteru"><input type="checkbox" id="onlyRoster"> jen roster</label>
+  <label id="onlyRosterLbl" title="zobrazit jen specy, které máme v sestavě bosse / rosteru"><input type="checkbox" id="onlyRoster"> jen roster</label>
   <button class="btn-outline" id="nsrtAll" type="button" title="jeden společný NSRT reminder string pro všechny řádky z rosteru (tag = postavy z rosteru)">NSRT export</button>
   <span id="msg"></span>
   <span id="adminbox" hidden>
@@ -258,6 +264,7 @@
     <label style="flex:0 0 7rem" title="dur:N – jak dlouho před časem se reminder ukáže (prázdné = nastavení NSRT)">dur (s) <input type="number" id="nsrtDur" min="0" step="1" placeholder="auto"></label>
   </div>
   <div class="list" id="nsrtLanes" style="max-height:9rem"></div>
+  <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="před remindery se vloží poznámka z RaidPlan.io plánu bosse (rozpis skupin, značky…) – NSRT ji ukáže jako extra note"><input type="checkbox" id="nsrtNote"> i poznámka z RaidPlanu <small id="nsrtNoteInfo" class="prog" style="margin:0"></small></label>
   <label>String (vlož do NSRT → Reminders → Import / note)</label>
   <textarea id="nsrtOut" readonly spellcheck="false"></textarea>
   <div class="prog" id="nsrtHint">Čas je relativní k začátku fáze (ph:) podle lorrgs fází referenčního killu; EncounterID = ID bosse. Poznámka u castu se připojí jako text reminderu.</div>
@@ -271,6 +278,7 @@
     <label style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;width:auto"><input type="checkbox" id="nsrtAllBoss"> i řádek Boss (tag everyone)</label>
     <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="dur:N – jak dlouho před časem se reminder ukáže (prázdné = nastavení NSRT)">dur (s) <input type="number" id="nsrtAllDur" min="0" step="1" placeholder="auto" style="width:4.5rem"></label></div>
   <div class="list" id="nsrtAllRows" style="max-height:14rem"></div>
+  <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="před remindery se vloží poznámka z RaidPlan.io plánu bosse (rozpis skupin, značky…) – NSRT ji ukáže jako extra note"><input type="checkbox" id="nsrtAllNote"> i poznámka z RaidPlanu <small id="nsrtAllNoteInfo" class="prog" style="margin:0"></small></label>
   <label>String (vlož do NSRT → Reminders → Import / note)</label>
   <textarea id="nsrtAllOut" readonly spellcheck="false"></textarea>
   <div class="prog" id="nsrtAllHint"></div>
@@ -506,6 +514,7 @@
 
   // ---------- data ----------
   function load() {
+    buildRoster();
     setStatus("Načítám…"); state.doc = null; state.sel = null; hidePop();
     return apiJson("/api/timeline?boss=" + encodeURIComponent(state.boss), { cache: "no-store" }).then(function (d) {
       if (!d.ok) throw new Error(d.error || "chyba API");
@@ -518,18 +527,41 @@
       state.dirty = false; render();
     }).catch(function (e) { setStatus("Chyba: " + e.message); });
   }
+  // roster + lineups once; state.roster (spec slug → [{label, char}]) is rebuilt per boss in buildRoster()
+  var rosterRaw = { players: [], lineups: [] };
   function loadRoster() {
-    return apiJson("/api/roster", { cache: "no-store" }).then(function (d) {
-      var m = {};
-      (d.players || []).forEach(function (p) {
-        (p.characters || []).forEach(function (c) {
-          var slug = String(c.class || "").toLowerCase().replace(/[^a-z]/g, "") + "-" + String(c.spec || "").toLowerCase().replace(/[^a-z]/g, "");
-          if (!SPEC[slug]) return;
-          (m[slug] = m[slug] || []).push({ label: c.main ? p.name : p.name + " (" + c.name + ")", char: c.name });
-        });
+    return Promise.all([apiJson("/api/roster", { cache: "no-store" }), apiJson("/api/lineups", { cache: "no-store" }).catch(function () { return {}; })]).then(function (r) {
+      rosterRaw = { players: (r[0] && r[0].players) || [], lineups: (r[1] && r[1].bosses) || [] };
+    }).catch(function () { rosterRaw = { players: [], lineups: [] }; });
+  }
+  function specSlug(cls, spec) { return String(cls || "").toLowerCase().replace(/[^a-z]/g, "") + "-" + String(spec || "").toLowerCase().replace(/[^a-z]/g, ""); }
+  function nkey(s) { return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
+  /** lineup number of the boss ("08") = prefix of the BOSSES label */
+  function lineupNo() { var b = BOSSES.filter(function (x) { return x[0] === state.boss; })[0]; return b ? b[1].slice(0, 2) : ""; }
+  /** players per spec for the current boss: the boss's lineup (one spec per player – slot "Hráč (Classa / spec)", else the
+   *  character's roster spec), or the whole roster when the boss has no lineup yet */
+  function buildRoster() {
+    var m = {}, no = lineupNo(), lu = rosterRaw.lineups.filter(function (b) { return b.no === no; })[0];
+    var slots = lu ? lu.slots.filter(Boolean) : [];
+    function add(slug, p, c) { if (!SPEC[slug]) return; (m[slug] = m[slug] || []).push({ label: c.main ? p.name : p.name + " (" + c.name + ")", char: c.name }); }
+    if (slots.length) {
+      slots.forEach(function (s) {
+        var mm = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(s), name = (mm ? mm[1] : s).trim(), suf = mm ? mm[2].split("/") : [], cls = (suf[0] || "").trim(), spec = (suf[1] || "").trim();
+        var p = rosterRaw.players.filter(function (x) { return nkey(x.name) === nkey(name); })[0]; if (!p) return;
+        var chars = p.characters || [], main = chars.filter(function (c) { return c.main; })[0] || chars[0]; if (!main) return;
+        var ofCls = cls ? chars.filter(function (c) { return nkey(c.class) === nkey(cls); }) : chars.filter(function (c) { return nkey(c.class) === nkey(main.class); });
+        var c = ofCls[0] || main;
+        if (spec) { var ws = ofCls.filter(function (x) { return specSlug(x.class, x.spec) === specSlug(x.class, spec); })[0]; if (ws) c = ws; }
+        else if (ofCls.indexOf(main) >= 0) c = main;
+        add(specSlug(c.class, spec || c.spec), p, c);
       });
-      state.roster = m;
-    }).catch(function () { state.roster = {}; });
+      state.rosterFrom = "sestava " + no + " (" + slots.length + " hráčů)";
+    } else {
+      rosterRaw.players.forEach(function (p) { (p.characters || []).forEach(function (c) { add(specSlug(c.class, c.spec), p, c); }); });
+      state.rosterFrom = "celý roster (boss nemá sestavu)";
+    }
+    state.roster = m;
+    $("onlyRosterLbl").title = "zobrazit jen specy, které máme v sestavě bosse / rosteru · hráči podle: " + state.rosterFrom;
   }
   function save() {
     var d = state.doc; recalcDuration();
@@ -1018,9 +1050,32 @@
       l.innerHTML = "<input type='checkbox' value='" + esc(String(id)) + "'" + (hide.indexOf(id) < 0 ? " checked" : "") + ">" + (iconUrl(s2) ? "<img src='" + esc(iconUrl(s2)) + "' width='14' height='14' style='border-radius:3px' alt=''>" : "") + "<span class='nm'>" + esc(s2.name || id) + "</span><small>" + n + "×</small>";
       box.appendChild(l);
     });
-    buildNsrt(); $("dlgNsrt").showModal(); $("nsrtOut").focus(); $("nsrtOut").select();
+    buildNsrt(); wireRaidplanNote("nsrtNote", "nsrtNoteInfo", buildNsrt); $("dlgNsrt").showModal(); $("nsrtOut").focus(); $("nsrtOut").select();
   }
   function nsrtHeader() { var b = BOSSES.filter(function (x) { return x[0] === state.boss; })[0]; return "EncounterID:" + (b ? b[2] : 0) + ";Name:" + (b ? b[3] : state.boss); }
+  // RaidPlan.io note of the boss (Worker proxy /api/timeline/raidplan?boss=NN); NSRT shows note lines without time:/tag:
+  // as the "extra note", so the note goes in front of the reminder lines
+  var rpNote = { boss: null, p: null, data: null };
+  function fetchRaidplanNote() {
+    if (rpNote.boss === state.boss && rpNote.p) return rpNote.p;
+    rpNote = { boss: state.boss, data: null, p: apiJson("/api/timeline/raidplan?boss=" + lineupNo()).then(function (d) {
+      if (!d || !d.ok) throw new Error((d && d.error) || "RaidPlan nedostupný");
+      rpNote.data = d; return d;
+    }) };
+    return rpNote.p;
+  }
+  /** fills the "i poznámka z RaidPlanu" checkbox + info of a dialog, then rebuilds its string */
+  function wireRaidplanNote(cbId, infoId, rebuild) {
+    var cb = $(cbId), info = $(infoId);
+    cb.disabled = true; info.textContent = "· načítám RaidPlan…";
+    fetchRaidplanNote().then(function (d) {
+      var has = !!d.text; cb.disabled = !has; cb.checked = has;
+      info.textContent = has ? "· " + d.text.split("\n").length + " řádků, plán rev. " + d.revision + (d.savedAt ? " (" + new Date(d.savedAt).toLocaleDateString("cs-CZ") + ")" : "") : "· plán nemá poznámku";
+      info.title = d.url || "";
+    }).catch(function (e) { cb.disabled = true; cb.checked = false; info.textContent = "· " + e.message; }).then(rebuild);
+  }
+  /** note lines to put in front of the export (empty when unchecked / not loaded) */
+  function raidplanPrefix(cbId) { var d = rpNote.data; return $(cbId).checked && d && d.text ? [d.text, ""] : []; }
   /** reminder lines of one row (null = boss row): [{ts, line}] for the lanes in ids (all lanes when ids is null) */
   function nsrtLines(r, ids, tag, dur) {
     var d = state.doc, out = [];
@@ -1037,14 +1092,14 @@
   function buildNsrt() {
     var tag = $("nsrtTag").value.trim() || "everyone", dur = Number($("nsrtDur").value) || 0;
     var ids = Array.prototype.map.call($("nsrtLanes").querySelectorAll("input:checked"), function (i) { return i.value; });
-    $("nsrtOut").value = [nsrtHeader()].concat(nsrtLines(nsrtRow, ids, tag, dur).map(function (x) { return x.line; })).join("\n");
+    $("nsrtOut").value = raidplanPrefix("nsrtNote").concat([nsrtHeader()], nsrtLines(nsrtRow, ids, tag, dur).map(function (x) { return x.line; })).join("\n");
   }
   function copyText(ta, hint) {
     var t = ta.value, done = function () { hint.textContent = "Zkopírováno do schránky."; };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { ta.select(); document.execCommand("copy"); done(); });
     else { ta.select(); document.execCommand("copy"); done(); }
   }
-  ["nsrtTag", "nsrtDur"].forEach(function (id) { $(id).addEventListener("input", buildNsrt); });
+  ["nsrtTag", "nsrtDur", "nsrtNote"].forEach(function (id) { $(id).addEventListener("input", buildNsrt); });
   $("nsrtLanes").addEventListener("change", buildNsrt);
   $("nsrtCopy").addEventListener("click", function () { copyText($("nsrtOut"), $("nsrtHint")); });
 
@@ -1067,7 +1122,7 @@
     });
     if (!state.doc.rows.length) box.textContent = "Timeline nemá žádné řádky.";
     $("nsrtAllBoss").checked = false; $("nsrtAllDur").value = "";
-    buildNsrtAll(); $("dlgNsrtAll").showModal();
+    buildNsrtAll(); wireRaidplanNote("nsrtAllNote", "nsrtAllNoteInfo", buildNsrtAll); $("dlgNsrtAll").showModal();
   }
   function buildNsrtAll() {
     var dur = Number($("nsrtAllDur").value) || 0, all = [], rows = 0;
@@ -1081,13 +1136,14 @@
       all = all.concat(nsrtLines(null, ids, "everyone", dur));
     }
     all.sort(function (a, b) { return a.ts - b.ts; });
-    $("nsrtAllOut").value = [nsrtHeader()].concat(all.map(function (x) { return x.line; })).join("\n");
-    $("nsrtAllHint").textContent = rows + " řádků" + ($("nsrtAllBoss").checked ? " + Boss" : "") + " · " + all.length + " reminderů. Čas je relativní k začátku fáze (ph:); EncounterID = ID bosse.";
+    var pre = raidplanPrefix("nsrtAllNote");
+    $("nsrtAllOut").value = pre.concat([nsrtHeader()], all.map(function (x) { return x.line; })).join("\n");
+    $("nsrtAllHint").textContent = rows + " řádků" + ($("nsrtAllBoss").checked ? " + Boss" : "") + " · " + all.length + " reminderů" + (pre.length ? " + poznámka z RaidPlanu" : "") + ". Čas je relativní k začátku fáze (ph:); EncounterID = ID bosse. Hráči podle: " + state.rosterFrom + ".";
   }
   $("nsrtAll").addEventListener("click", openNsrtAll);
   $("nsrtAllRows").addEventListener("change", buildNsrtAll);
   $("nsrtAllRows").addEventListener("input", buildNsrtAll);
-  ["nsrtAllBoss", "nsrtAllDur"].forEach(function (id) { $(id).addEventListener("input", buildNsrtAll); });
+  ["nsrtAllBoss", "nsrtAllDur", "nsrtAllNote"].forEach(function (id) { $(id).addEventListener("input", buildNsrtAll); });
   $("dlgNsrtAll").querySelectorAll("[data-pick]").forEach(function (b) {
     b.addEventListener("click", function () {
       var mode = b.getAttribute("data-pick");

@@ -45,6 +45,8 @@
   .lu td.slot.unknown { background: #666 !important; color: #eee; }
   .lu td.slot.dup { color: #b00000 !important; }
   .lu td.slot small { font-size: 9.5px; font-weight: 500; opacity: .8; margin-left: 3px; }
+  .lu td.slot.nospec { box-shadow: inset 0 0 0 2px #c0392b; }
+  .edit .lu td.slot select.spec { font-size: 10.5px; font-weight: 500; opacity: .85; border-bottom-style: dotted; }
   .edit .lu td.slot select, .edit .lu th input[type=date] { width: 100%; background: transparent; color: inherit; border: 0; border-bottom: 1px dashed rgba(0,0,0,.35); font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
   .edit .lu td.slot.empty select { color: var(--muted); border-bottom-color: var(--line); }
   .edit .lu th input[type=date] { display: block; color: var(--ink); border-bottom-color: var(--line); font-weight: 400; font-size: 11px; width: 100%; margin-top: 1px; }
@@ -140,19 +142,58 @@
   function msg(ok, t) { var m = $("#msg"); m.className = ok ? "ok" : "err"; m.textContent = t || ""; }
   function nk(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim(); }
   function czDate(s) { if (!s) return ""; var d = new Date(s + "T00:00:00"); return CZ[d.getDay()] + " " + d.getDate() + "." + (d.getMonth() + 1) + "." + d.getFullYear(); }
-  // slot "Glasolo" = main postava, "Glasolo (Paladin)" = postava dané classy (alt); splitSlot vrací { name, cls }
+  // slot "Glasolo" = main postava, "Glasolo (Paladin)" = postava dané classy (alt), "Global (Priest / holy)" = i spec na bosse; splitSlot vrací { name, cls, spec }
+  // spec keys (SimC, same as roster.html) → role; used to offer a spec where the class + role leave more than one option
+  var SPECS = {
+    "Death Knight": { blood: "tank", frost: "dps", unholy: "dps" },
+    "Demon Hunter": { havoc: "dps", vengeance: "tank", devourer: "dps" },
+    "Druid": { balance: "dps", feral: "dps", guardian: "tank", restoration: "heal" },
+    "Evoker": { devastation: "dps", preservation: "heal", augmentation: "dps" },
+    "Hunter": { beast_mastery: "dps", marksmanship: "dps", survival: "dps" },
+    "Mage": { arcane: "dps", fire: "dps", frost: "dps" },
+    "Monk": { brewmaster: "tank", mistweaver: "heal", windwalker: "dps" },
+    "Paladin": { holy: "heal", protection: "tank", retribution: "dps" },
+    "Priest": { discipline: "heal", holy: "heal", shadow: "dps" },
+    "Rogue": { assassination: "dps", outlaw: "dps", subtlety: "dps" },
+    "Shaman": { elemental: "dps", enhancement: "dps", restoration: "heal" },
+    "Warlock": { affliction: "dps", demonology: "dps", destruction: "dps" },
+    "Warrior": { arms: "dps", fury: "dps", protection: "tank" }
+  };
+  function specLabel(sp) { return String(sp || "").replace(/_/g, " "); }
+  // slot = "Hráč" (main), "Hráč (Classa)" (plays the alt of that class) or "Hráč (Classa / spec)" (spec chosen for this boss)
   function splitSlot(slot) {
     var m = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(String(slot || "").trim());
-    return m ? { name: m[1].trim(), cls: m[2].trim() } : { name: String(slot || "").trim(), cls: "" };
+    if (!m) return { name: String(slot || "").trim(), cls: "", spec: "" };
+    var suf = m[2].split("/");
+    return { name: m[1].trim(), cls: suf[0].trim(), spec: (suf[1] || "").trim() };
   }
-  function slotValue(name, cls, mainCls) { return nk(cls) && nk(cls) !== nk(mainCls) ? name + " (" + cls + ")" : name; }
+  function slotValue(name, cls, mainCls, spec) {
+    if (spec && cls) return name + " (" + cls + " / " + spec + ")";
+    return nk(cls) && nk(cls) !== nk(mainCls) ? name + " (" + cls + ")" : name;
+  }
+  /** specs a character can be: its roster spec, or (spec empty) every spec of its class with its role */
+  function specsOfChar(c) {
+    var m = SPECS[c.class] || {};
+    if (c.spec && m[c.spec]) return [c.spec];
+    return Object.keys(m).filter(function (k) { return m[k] === (c.role || "dps"); });
+  }
   function playerInfo(slot) {
     var sp = splitSlot(slot), k = nk(sp.name), p = state.roster.filter(function (x) { return nk(x.name) === k; })[0];
     if (!p) return null;
     var main = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0] || {};
-    var ch = sp.cls ? p.characters.filter(function (c) { return nk(c.class) === nk(sp.cls); })[0] : main;
-    return { player: p, name: p.name, cls: (ch || main).class || "", role: (ch || main).role || "", bench: p.bench,
-             alt: !!ch && ch !== main, badClass: sp.cls && !ch ? sp.cls : "" };
+    var ofCls = p.characters.filter(function (c) { return nk(c.class) === nk(sp.cls || main.class); });
+    var ch = sp.cls ? ofCls[0] : main;
+    if (sp.spec && ofCls.length > 1) ch = ofCls.filter(function (c) { return c.spec === sp.spec; })[0] || ch;
+    // spec choices: union over the player's characters of that class – shown only when there is more than one
+    var choices = [];
+    (ofCls.length ? ofCls : [ch || main]).forEach(function (c) { specsOfChar(c).forEach(function (x) { if (choices.indexOf(x) < 0) choices.push(x); }); });
+    var spec = sp.spec || (choices.length === 1 ? choices[0] : "");
+    return { player: p, name: p.name, cls: (ch || main).class || "", mainCls: main.class || "", role: (ch || main).role || "", bench: p.bench,
+             alt: !!ch && ch !== main, badClass: sp.cls && !ch ? sp.cls : "", spec: spec, choices: choices, needSpec: choices.length > 1 && !sp.spec };
+  }
+  function withSpec(slot, spec) {
+    var sp = splitSlot(slot), info = playerInfo(slot);
+    return info ? slotValue(sp.name, info.cls, info.mainCls, spec) : slot;
   }
 
   function load() {
@@ -193,14 +234,19 @@
             style = "background:" + (CLASS_COLOR[info.cls.toLowerCase()] || "#999");
             if (info.badClass) why = "postava classy " + info.badClass + " není v rosteru – bere se main";
             else if (info.alt) why = "hraje alt: " + info.cls;
+            if (info.needSpec) { cls.push("nospec"); why = (why ? why + " · " : "") + "vyber spec (" + info.choices.map(specLabel).join(" / ") + ")"; }
+            else if (sp.spec) why = (why ? why + " · " : "") + "spec " + specLabel(sp.spec);
           }
           if (b.slots.filter(function (s) { return nk(splitSlot(s).name) === nk(name); }).length > 1) { cls.push("dup"); why = "dvakrát"; }
           var a = b.date ? state.abs[nk(name) + "|" + b.date] : null;
           if (a === "absent") { cls.push("absent"); why = "nepřijde"; } else if (a === "late") { cls.push("late"); why = "přijde dýl" + (state.absTime[nk(name) + "|" + b.date] ? " v " + state.absTime[nk(name) + "|" + b.date] : ""); }
         }
+        var specSel = state.edit && info && info.choices.length > 1
+          ? '<select class="spec" data-b="' + bi + '" data-s="' + i + '" data-f="spec" title="spec na tohoto bosse (hráč má víc možností)"><option value="">spec?</option>' +
+            info.choices.map(function (x) { return '<option value="' + esc(x) + '"' + (x === sp.spec ? " selected" : "") + ">" + esc(specLabel(x)) + "</option>"; }).join("") + "</select>" : "";
         var inner = state.edit
-          ? '<select data-b="' + bi + '" data-s="' + i + '"><option value="">–</option>' + optionsFor(slot) + "</select>"
-          : esc(name || "–") + (sp.cls ? "<small>" + esc(sp.cls) + "</small>" : "");
+          ? '<select data-b="' + bi + '" data-s="' + i + '"><option value="">–</option>' + optionsFor(slot) + "</select>" + specSel
+          : esc(name || "–") + (sp.cls && (!info || info.alt || info.badClass) ? "<small>" + esc(sp.cls) + "</small>" : "") + (sp.spec ? "<small>" + esc(specLabel(sp.spec)) + "</small>" : "");
         return '<td class="slot ' + cls.join(" ") + '" style="' + style + '"' + (why ? ' title="' + esc(why) + '"' : "") + ">" + inner + "</td>";
       }).join("") + "</tr>");
     }
@@ -210,7 +256,7 @@
     $("#alldate").hidden = !state.edit;
     if (state.edit && !bodyOnly) { var ds = list.map(function (b) { return b.date; }); $("#alldateInput").value = ds.length && ds.every(function (d) { return d === ds[0]; }) ? ds[0] || "" : ""; }
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
-    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown; hráč s více classami je v seznamu jednou za každou – „Glasolo (Paladin)“ = hraje alta), nastav datum raidu u bosse (nebo „Datum všech bossů“ nahoře najednou – jednotlivé datum jde pak ještě upravit), nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit. Po uložení dej „Synchronizovat plány“, aby se změny propsaly do RaidPlan.io."
+    $("#hint").textContent = state.edit ? "Vyber hráče v každém slotu (dropdown; hráč s více classami je v seznamu jednou za každou – „Glasolo (Paladin)“ = hraje alta; když má hráč na výběr víc speců – třeba healer priest nebo dvě postavy stejné classy – vyber v druhém dropdownu spec na tohoto bosse, červený rámeček = spec ještě nevybraný; podle něj se řadí do Timeline a kreslí ikona v RaidPlanu), nastav datum raidu u bosse (nebo „Datum všech bossů“ nahoře najednou – jednotlivé datum jde pak ještě upravit), nebo zkopíruj sestavu předchozího bosse. Nic se neuloží, dokud nedáš Uložit. Po uložení dej „Synchronizovat plány“, aby se změny propsaly do RaidPlan.io."
       : "Sestavy čte tools/raidplan/raidplan.py --boss (přejmenování markerů v RaidPlan.io) a bot docházky na Discordu. Datum bosse určuje, čí omluvenky se v jeho sloupci ukážou.";
   }
   // jeden plochý seznam podle abecedy (roster i lavička dohromady); hráč s postavami více class je tam jednou za každou classu
@@ -231,8 +277,9 @@
       optValues = {}; items.forEach(function (it) { optValues[it.value] = true; });
       optCache = items.map(function (it) { return '<option value="' + esc(it.value) + '">' + esc(it.label) + "</option>"; }).join("");
     }
-    var html = optCache;
-    if (sel && !optValues[sel]) html += '<option value="' + esc(sel) + '">' + esc(sel) + (state.roster.some(function (p) { return nk(p.name) === nk(splitSlot(sel).name); }) ? "" : " (mimo roster)") + "</option>";
+    var html = optCache, sp = splitSlot(sel), info = sel ? playerInfo(sel) : null;
+    if (sp.spec) sel = info ? slotValue(sp.name, info.cls, info.mainCls, "") : slotValue(sp.name, sp.cls, "", "");   // option = slot without the spec
+    if (sel && !optValues[sel]) html += '<option value="' + esc(sel) + '">' + esc(sel) + (info ? "" : " (mimo roster)") + "</option>";
     return html.replace('value="' + esc(sel) + '"', 'value="' + esc(sel) + '" selected');
   }
   // nadřazené datum → všem bossům; opačně (změna u bosse) se do něj nepropisuje
@@ -244,6 +291,7 @@
     var t = ev.target; if (!state.edit || t.id === "alldateInput") return;
     var b = state.draft[+t.dataset.b]; if (!b) return;
     if (t.dataset.f === "date") { b.date = t.value; render(true); }      // absence ve sloupci podle nového data
+    else if (t.dataset.f === "spec") { b.slots[+t.dataset.s] = withSpec(b.slots[+t.dataset.s], t.value); render(); }
     else if (t.dataset.s != null) { b.slots[+t.dataset.s] = t.value; render(); }
   });
   document.addEventListener("click", function (ev) {

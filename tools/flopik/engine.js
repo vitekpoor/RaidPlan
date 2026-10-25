@@ -79,7 +79,8 @@ var FLOPIK_BOSSES = {
   // Falling Debris 1286885 = direct damage every 4 s while Venomous Heart (1299526) is up; two damage events in the same
   // instant are one rock. ver 2 = the four columns added, ver 3 = waves/splash count every direct damage event (no 1.5 s merge),
   // ver 4 = immune / zero events skipped (skipImmune) – matches the WCL damage-taken hit count per player (checked on PMt4YfqGDWNxbpHQ).
-  3492: { key: "ulatek", name: "Ula'tek", ver: 4, sortBy: "waves", metrics: [
+  // ver 5 = death cutoff 2 (a wipe is evaluated only up to the 2nd player death, like Twin Fangs; kills whole) – 2026-10-26.
+  3492: { key: "ulatek", name: "Ula'tek", ver: 5, cutoff: 2, sortBy: "waves", metrics: [
     flopikHits_("waves", "Vlny", [1292403], { castIds: [1298570], types: ["damage"], window: 0, skipImmune: true, hot: [2, 3], hotAll: [6, 10],
       note: "zásah vlnou Caustic Waves (1292403) – počítá se každý přímý zásah, který udělal dmg nebo byl absorbnutý (zásah pod imunitou ne), ticky 10s DoTu ne – stejné číslo jako WCL Damage Taken „hits“; dvě vlny těsně po sobě = dva zásahy (hra za každý přidá stack DoTu)" }),
     flopikHits_("wavesEgg", "Vlna s vejcem", [1292403], { whileDebuff: [1307612], types: ["damage"], window: 0, skipImmune: true, hot: [1, 2], hotAll: [2, 4],

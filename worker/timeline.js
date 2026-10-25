@@ -9,8 +9,12 @@
 //   GET /api/timeline/lorrgs?p=<lorrgs api path>   read-only proxy of api2.lorrgs.io (its CORS header is unreliable
 //                                     from a browser – CloudFront caches responses with/without it). Only the three
 //                                     paths the page needs are allowed; 10 min memo in the isolate + Cloudflare cache.
+//   GET /api/timeline/raidplan?boss=<lineup no "08">   the note of the boss's RaidPlan.io plan (plan link from the lineups,
+//                                     raidplan.io/api/plan/<code> → doc_url JSON: header_notes_raw / step_notes_raw / footer_notes_raw)
+//                                     for the NSRT export (raidplan.io sends no CORS header). 60 s memo + Cloudflare cache.
 
 import { json, nowIso, CORS } from "./lib.js";
+import { loadLineups } from "./lineups.js";
 
 const LORRGS = "https://api2.lorrgs.io";
 const LORRGS_PATHS = [/^\/api\/spec_ranking\/[a-z0-9-]+\/[a-z0-9-]+$/, /^\/api\/specs\/[a-z0-9-]+\/spells$/, /^\/api\/bosses\/[a-z0-9-]+\/spells$/];
@@ -83,4 +87,37 @@ export async function deleteTimeline(env, url) {
   if (!SLUG.test(boss)) return json({ ok: false, error: "bad boss slug" }, 400);
   const r = await env.DB.prepare("DELETE FROM timelines WHERE boss_slug = ?1").bind(boss).run();
   return json({ ok: true, boss, deleted: r.meta ? r.meta.changes : undefined });
+}
+
+const RAIDPLAN_TTL = 60 * 1000;
+const raidplanMemo = new Map(); // plan code → { at, body }
+const RP_HEADERS = { "user-agent": "eternal-shadows timeline (+https://eternal-shadows.vitek-poor.workers.dev)", accept: "application/json" };
+
+/** Note of the boss's RaidPlan.io plan: { ok, boss, code, name, revision, savedAt, header, steps: [{ step, note }], footer, singleNote, text } */
+export async function raidplanNote(env, url) {
+  const boss = (url.searchParams.get("boss") || "").trim().padStart(2, "0");
+  const lineup = (await loadLineups(env)).find((b) => b.no === boss);
+  if (!lineup) return json({ ok: false, error: "unknown boss" }, 400);
+  const m = /raidplan\.io\/plan\/([a-z0-9]+)/.exec(lineup.planView || "");
+  if (!m) return json({ ok: false, error: "boss has no RaidPlan link" }, 404);
+  const code = m[1];
+  const hit = raidplanMemo.get(code);
+  if (hit && Date.now() - hit.at < RAIDPLAN_TTL) return json(hit.body);
+  const mr = await fetch(`https://raidplan.io/api/plan/${code}`, { headers: RP_HEADERS, cf: { cacheTtl: 60 } });
+  if (!mr.ok) return json({ ok: false, error: `raidplan.io ${mr.status}` }, 502);
+  const plan = ((await mr.json()) || {}).plan || {};
+  if (!plan.doc_url) return json({ ok: false, error: "raidplan.io: plan has no doc_url" }, 502);
+  const dr = await fetch(plan.doc_url, { headers: RP_HEADERS, cf: { cacheTtl: 60 } });
+  if (!dr.ok) return json({ ok: false, error: `raidplan.io doc ${dr.status}` }, 502);
+  const doc = (await dr.json()) || {};
+  const clean = (t) => String(t || "").replace(/\r/g, "").trim();
+  const header = clean(doc.header_notes_raw), footer = clean(doc.footer_notes_raw);
+  const steps = (Array.isArray(doc.step_notes_raw) ? doc.step_notes_raw : []).map((n, i) => ({ step: i + 1, note: clean(n) })).filter((x) => x.note);
+  const singleNote = !!doc.single_note;
+  const parts = [header].concat(singleNote ? [] : steps.map((x) => x.note), [footer]).filter(Boolean);
+  const body = { ok: true, boss, code, name: plan.name || "", title: plan.title || "", revision: plan.revision || doc.revision || 0, savedAt: plan.time_saved || null,
+    url: `https://raidplan.io/plan/${code}`, header, steps, footer, singleNote, text: parts.join("\n\n") };
+  if (raidplanMemo.size > 30) raidplanMemo.delete(raidplanMemo.keys().next().value);
+  raidplanMemo.set(code, { at: Date.now(), body });
+  return json(body);
 }

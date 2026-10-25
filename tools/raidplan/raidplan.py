@@ -522,19 +522,25 @@ SLOT_CLASS_RE = re.compile(r"^(.*?)\s*\(([^()]+)\)\s*$")
 
 
 def split_slot(cell):
-    """'Glasolo (Paladin)' -> ('Glasolo', 'paladin'); 'Glasolo' -> ('Glasolo', '').
+    """'Glasolo (Paladin)' -> ('Glasolo', 'paladin', ''); 'Glasolo' -> ('Glasolo', '', '');
+    'Global (Priest / holy)' -> ('Global', 'priest', 'holy').
     The class suffix means the player plays their character of that class
-    (lineups.html offers dual-class players once per class)."""
+    (lineups.html offers dual-class players once per class); the spec after
+    the slash is the spec picked for that boss (lineups.html shows the
+    chooser only where class + role leave more than one spec)."""
     m = SLOT_CLASS_RE.match(cell.strip())
     if not m:
-        return cell.strip(), ""
-    return m.group(1).strip(), m.group(2).strip().lower().replace(" ", "")
+        return cell.strip(), "", ""
+    cls, _, spec = m.group(2).partition("/")
+    return (m.group(1).strip(), cls.strip().lower().replace(" ", ""),
+            spec.strip().lower().replace("_", "").replace(" ", ""))
 
 
 def load_lineups():
     """Boss sestavy tab -> {'01': {'header': ..., 'date': ..., 'players': [...],
-    'classes': {norm(player): class_key}}} (classes only for slots written
-    as "Player (Class)")."""
+    'classes': {norm(player): class_key}, 'specs': {norm(player): spec}}}
+    (classes only for slots written as "Player (Class)", specs only for
+    "Player (Class / spec)")."""
     # lineups live in the guild database (Worker API, same layout the sheet tab had; edited on lineups.html)
     lineups_url = os.environ.get("ES_LINEUPS_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/lineups.csv")
     rows = list(csv.reader(io.StringIO(http_bytes(lineups_url).decode("utf-8", "replace"))))
@@ -561,15 +567,17 @@ def load_lineups():
             continue
         date_str = next((r[ci].strip() for r in rows[1:first_slot]
                          if ci < len(r) and date_re.search(r[ci])), "")
-        players, classes = [], {}
+        players, classes, specs = [], {}, {}
         for r in slot_rows:
             if ci < len(r) and r[ci].strip():
-                name, cls = split_slot(r[ci])
+                name, cls, spec = split_slot(r[ci])
                 players.append(name)
                 if cls:
                     classes[norm(name)] = cls
+                if spec:
+                    specs[norm(name)] = spec
         lineups[m.group(1)] = {"header": head.strip(), "date": date_str,
-                               "players": players, "classes": classes}
+                               "players": players, "classes": classes, "specs": specs}
     if not lineups:
         # gviz silently serves the DEFAULT tab when the name doesn't exist,
         # so this usually means the tab was never created (or was renamed).
@@ -634,7 +642,9 @@ def lineup_renames(doc, lineup, roster, extra_renames):
 def roster_for_lineup(roster, alts, lineup):
     """Roster with the class/role/spec swapped to the alt for every slot
     written as "Player (Class)" — so pairing by role, marker icons and
-    border colors follow the character the player actually brings."""
+    border colors follow the character the player actually brings — and the
+    spec replaced by the one picked in the lineup ("Player (Class / spec)"),
+    which then wins over the Roster spec for the marker icon."""
     out = dict(roster)
     for pn, cls in lineup.get("classes", {}).items():
         hit = roster_lookup(roster, pn)
@@ -651,6 +661,20 @@ def roster_for_lineup(roster, alts, lineup):
         out[key] = alt
         print(f"  {hit[0]} plays the {cls} alt ({alt[2]}"
               f"{', spec ' + alt[3] if alt[3] else ''})")
+    for pn, spec in lineup.get("specs", {}).items():
+        hit = roster_lookup(roster, pn)
+        if not hit:
+            continue
+        key = norm(hit[0])
+        cur = out[key]
+        spec_key = SPEC_ALIASES.get(spec, spec)
+        if spec_key not in KNOWN_SPECS.get(cur[1], ()):
+            print(f"  WARNING: {hit[0]}: lineup spec '{spec}' is not a {cur[1]} spec "
+                  f"in RaidPlan — keeping {cur[3] or 'the role default'}")
+            continue
+        if spec_key != cur[3]:
+            out[key] = (cur[0], cur[1], cur[2], spec_key)
+            print(f"  {hit[0]} plays {spec_key} on this boss (lineup)")
     return out
 
 

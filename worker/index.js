@@ -13,7 +13,7 @@
 //   raidplan     → worker/raidplan.js   /api/lineups/sync (admin → GitHub Actions raidplan.yml), /sync-result (auth), /sync-status
 //   meta comps   → worker/comps.js      /api/comps (GET, POST auth), /api/comps/refresh (admin), /api/comps/status
 //   raid time    → worker/raidtime.js   /api/raidtime (GET, PUT admin), /report, /announce (admin), /status; Cron Trigger 18:00 Prague → Discord
-//   timelines    → worker/timeline.js   /api/timeline[?boss=] (GET), PUT / DELETE (admin), /api/timeline/lorrgs?p= (proxy) – lorrgs.io cooldown timelines
+//   timelines    → worker/timeline.js   /api/timeline[?boss=] (GET), PUT / DELETE (admin), /api/timeline/lorrgs?p= (proxy), /api/timeline/raidplan?boss= (RaidPlan note) – lorrgs.io cooldown timelines
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -36,7 +36,7 @@ import { getLineups, putLineups, getLineupsCsv } from "./lineups.js";
 import * as comps from "./comps.js";
 import * as raidplan from "./raidplan.js";
 import * as raidtime from "./raidtime.js";
-import { getTimeline, putTimeline, deleteTimeline, lorrgsProxy } from "./timeline.js";
+import { getTimeline, putTimeline, deleteTimeline, lorrgsProxy, raidplanNote } from "./timeline.js";
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
@@ -171,6 +171,7 @@ async function route(request, env, ctx, url) {
   if (path === "/api/timeline" && method === "PUT") return admin(() => putTimeline(request, env));
   if (path === "/api/timeline" && method === "DELETE") return admin(() => deleteTimeline(env, url));
   if (path === "/api/timeline/lorrgs" && method === "GET") return lorrgsProxy(env, url);
+  if (path === "/api/timeline/raidplan" && method === "GET") return raidplanNote(env, url);
 
   // ---- meta sestavy: raider.io first-kill rosters (worker/comps.js)
   if (path === "/api/comps" && method === "GET") return comps.getComps(env, url);

@@ -57,6 +57,6 @@ BOSSES = {
         debuff("orbs", "Orby", [1282419], avoid=False, cast_ids=[1299960], spawn_ids=[1299781],
                note="sebrání orbu Coalesced Venom (debuff Volatile Venom 1282419 při každém sebrání)"),
     ]},
-    3492: {"key": "ulatek", "name": "Ula'tek", "metrics": []},
+    3492: {"key": "ulatek", "name": "Ula'tek", "cutoff": 2, "metrics": []},
     3379: {"key": "nymrissa", "name": "Nymrissa Wavecaller", "metrics": []},
 }
