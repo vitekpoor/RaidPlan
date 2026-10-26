@@ -28,6 +28,10 @@ on:
         description: "Přepočítat i už uložené pully reportu (sloučení noci nahrané dvakrát)"
         type: boolean
         default: false
+      fights:
+        description: "Jen tyto WCL fight id reportu, oddělené čárkou (vždy přepočítat)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -54,7 +58,7 @@ jobs:
           if [ "${{ inputs.all }}" = "true" ]; then
             node tools/flopik/wcl_refresh.mjs --all
           elif [ -n "${{ inputs.code }}" ]; then
-            node tools/flopik/wcl_refresh.mjs --code "${{ inputs.code }}" ${{ inputs.force == true && '--force' || '' }}
+            node tools/flopik/wcl_refresh.mjs --code "${{ inputs.code }}" ${{ inputs.force == true && '--force' || '' }} ${{ inputs.fights != '' && format('--fights "{0}"', inputs.fights) || '' }}
           else
             node tools/flopik/wcl_refresh.mjs --live
           fi

@@ -6,7 +6,8 @@
 //   node tools/flopik/wcl_refresh.mjs --live                every guild report whose last fight ended < 90 min ago (cron)
 //   node tools/flopik/wcl_refresh.mjs --all                 every guild report (backfill)
 //   options: --no-dmg (skip damage breakdowns + reference logs), --no-parse, --reports-only, --dry-run,
-//            --force (recompute every fight of the report even when it is stored – e.g. to merge a night uploaded twice)
+//            --force (recompute every fight of the report even when it is stored – e.g. to merge a night uploaded twice),
+//            --fights 12,13 (with --code: only these WCL fight ids, always recomputed)
 //
 // env: WCL_CLIENT_ID, WCL_CLIENT_SECRET (fallback tools/flopik/flopik.config.json wcl_client_id / wcl_client_secret),
 //      ES_API_URL (default https://eternal-shadows.vitek-poor.workers.dev), ES_API_TOKEN (fallback tools/roster/sim_runner.config.json api_token).
@@ -37,7 +38,7 @@ const ENV = {
 };
 
 const args = process.argv.slice(2);
-const opt = { codes: [], live: false, all: false, dmg: true, parse: true, reportsOnly: false, dryRun: false, force: false };
+const opt = { codes: [], live: false, all: false, dmg: true, parse: true, reportsOnly: false, dryRun: false, force: false, fights: [] };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === "--code") opt.codes.push(W.reportCode(args[++i]));
@@ -48,6 +49,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === "--reports-only") opt.reportsOnly = true;
   else if (a === "--dry-run") opt.dryRun = true;
   else if (a === "--force") opt.force = true;
+  else if (a === "--fights") opt.fights = String(args[++i] || "").split(/[\s,]+/).filter(Boolean).map(Number);
   else if (W.reportCode(a)) opt.codes.push(W.reportCode(a));
 }
 
@@ -108,8 +110,8 @@ async function refreshReport(gql, code) {
     const row = stored.find((p) => (p.report === code && String(p.fight) === String(f.id)) || samePull(p, f, startMs, when));
     if (row) have[String(f.id)] = { ver: Number(row.ver) || 1, parse: row.meta && row.meta.summary ? row.meta.summary.parse : undefined, row };
   }
-  const todo = fights.filter((f) => opt.force || !have[String(f.id)] || have[String(f.id)].ver < (engine.flopikBossFor(f.encounterID, f.name).ver || 1));
-  log(`▶ ${code} „${rep.title}“: ${fights.length} pullů, uloženo ${Object.keys(have).length}${stored.length !== Object.keys(have).length ? ` (v okně reportu ${stored.length})` : ""}, k výpočtu ${todo.length}${opt.force ? " (force)" : ""}`);
+  const todo = fights.filter((f) => opt.fights.length ? opt.fights.includes(f.id) : (opt.force || !have[String(f.id)] || have[String(f.id)].ver < (engine.flopikBossFor(f.encounterID, f.name).ver || 1)));
+  log(`▶ ${code} „${rep.title}“: ${fights.length} pullů, uloženo ${Object.keys(have).length}${stored.length !== Object.keys(have).length ? ` (v okně reportu ${stored.length})` : ""}, k výpočtu ${todo.length}${opt.force ? " (force)" : ""}${opt.fights.length ? " (fights " + opt.fights.join(",") + ")" : ""}`);
   let added = 0, parsed = 0;
   for (const f of todo) {
     const boss = engine.flopikBossFor(f.encounterID, f.name);
