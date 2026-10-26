@@ -24,6 +24,10 @@ on:
         description: "Přepočítat všechny reporty guildy (backfill)"
         type: boolean
         default: false
+      force:
+        description: "Přepočítat i už uložené pully reportu (sloučení noci nahrané dvakrát)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -50,7 +54,7 @@ jobs:
           if [ "${{ inputs.all }}" = "true" ]; then
             node tools/flopik/wcl_refresh.mjs --all
           elif [ -n "${{ inputs.code }}" ]; then
-            node tools/flopik/wcl_refresh.mjs --code "${{ inputs.code }}"
+            node tools/flopik/wcl_refresh.mjs --code "${{ inputs.code }}" ${{ inputs.force == true && '--force' || '' }}
           else
             node tools/flopik/wcl_refresh.mjs --live
           fi

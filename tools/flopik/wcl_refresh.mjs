@@ -5,7 +5,8 @@
 //   node tools/flopik/wcl_refresh.mjs --code <report>      compute the missing / outdated pulls of one report
 //   node tools/flopik/wcl_refresh.mjs --live                every guild report whose last fight ended < 90 min ago (cron)
 //   node tools/flopik/wcl_refresh.mjs --all                 every guild report (backfill)
-//   options: --no-dmg (skip damage breakdowns + reference logs), --no-parse, --reports-only, --dry-run
+//   options: --no-dmg (skip damage breakdowns + reference logs), --no-parse, --reports-only, --dry-run,
+//            --force (recompute every fight of the report even when it is stored – e.g. to merge a night uploaded twice)
 //
 // env: WCL_CLIENT_ID, WCL_CLIENT_SECRET (fallback tools/flopik/flopik.config.json wcl_client_id / wcl_client_secret),
 //      ES_API_URL (default https://eternal-shadows.vitek-poor.workers.dev), ES_API_TOKEN (fallback tools/roster/sim_runner.config.json api_token).
@@ -36,7 +37,7 @@ const ENV = {
 };
 
 const args = process.argv.slice(2);
-const opt = { codes: [], live: false, all: false, dmg: true, parse: true, reportsOnly: false, dryRun: false };
+const opt = { codes: [], live: false, all: false, dmg: true, parse: true, reportsOnly: false, dryRun: false, force: false };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === "--code") opt.codes.push(W.reportCode(args[++i]));
@@ -46,6 +47,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === "--no-parse") opt.parse = false;
   else if (a === "--reports-only") opt.reportsOnly = true;
   else if (a === "--dry-run") opt.dryRun = true;
+  else if (a === "--force") opt.force = true;
   else if (W.reportCode(a)) opt.codes.push(W.reportCode(a));
 }
 
@@ -64,6 +66,17 @@ const post = (p, body) => (opt.dryRun ? Promise.resolve({ ok: true, dryRun: true
 // ------------------------------------------------------------------- helpers
 const tzFmt = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 function prague(ms) { const s = tzFmt.format(new Date(ms)); return { date: s.slice(0, 10), time: s.slice(11, 19) }; }   // "2026-09-21 18:51:07"
+
+const SAME_PULL_MS = 15000;      // the same pull in two uploads of one night: start times differ by ~1 s (Worker uses the same tolerance)
+function secOf(t) { const m = /^(\d{1,2}):(\d{2}):(\d{2})/.exec(String(t || "")); return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null; }
+/** Stored pull p = WCL fight f (same boss, start within SAME_PULL_MS)? `when` = Prague date/time of the fight start. */
+function samePull(p, f, startMs, when) {
+  const sameBoss = (p.bossId != null && Number(p.bossId) === Number(f.encounterID)) || String(p.boss) === String(f.name);
+  if (!sameBoss || String(p.date) !== when.date) return false;
+  if (p.startMs != null) return Math.abs(Number(p.startMs) - startMs) <= SAME_PULL_MS;
+  const a = secOf(p.start), b = secOf(when.time);
+  return a != null && b != null && Math.abs(a - b) * 1000 <= SAME_PULL_MS;
+}
 
 const REFS = { loaded: false, map: {} };
 async function ensureRef(gql, encId, difficulty, spec) {
@@ -85,12 +98,18 @@ async function refreshReport(gql, code) {
   const rep = await W.reportInfo(gql, code);
   if (!rep) throw new Error(`report ${code} nenalezen`);
   if (!rep.guild || rep.guild.id !== W.GUILD.id) throw new Error(`report ${code} nepatří guildě ${W.GUILD.name}`);
+  // stored = every pull inside the report's time window, also rows computed from a second upload of the same night
+  // (its fight ids differ) – a fight is "stored" when a row of the same boss starts within SAME_PULL_MS of it
   const stored = (await api("GET", `/api/flopik/pulls?report=${code}`)).pulls || [];
-  const have = {};   // fight → { ver, parse }
-  for (const p of stored) have[String(p.fight)] = { ver: Number(p.ver) || 1, parse: p.meta && p.meta.summary ? p.meta.summary.parse : undefined };
   const fights = (rep.fights || []).filter((f) => (f.endTime - f.startTime) / 1000 >= MIN_DUR).sort((a, b) => a.startTime - b.startTime);
-  const todo = fights.filter((f) => !have[String(f.id)] || have[String(f.id)].ver < (engine.flopikBossFor(f.encounterID, f.name).ver || 1));
-  log(`▶ ${code} „${rep.title}“: ${fights.length} pullů, uloženo ${stored.length}, k výpočtu ${todo.length}`);
+  const have = {};   // fight id → { ver, parse, row }
+  for (const f of fights) {
+    const startMs = rep.startTime + f.startTime, when = prague(startMs);
+    const row = stored.find((p) => (p.report === code && String(p.fight) === String(f.id)) || samePull(p, f, startMs, when));
+    if (row) have[String(f.id)] = { ver: Number(row.ver) || 1, parse: row.meta && row.meta.summary ? row.meta.summary.parse : undefined, row };
+  }
+  const todo = fights.filter((f) => opt.force || !have[String(f.id)] || have[String(f.id)].ver < (engine.flopikBossFor(f.encounterID, f.name).ver || 1));
+  log(`▶ ${code} „${rep.title}“: ${fights.length} pullů, uloženo ${Object.keys(have).length}${stored.length !== Object.keys(have).length ? ` (v okně reportu ${stored.length})` : ""}, k výpočtu ${todo.length}${opt.force ? " (force)" : ""}`);
   let added = 0, parsed = 0;
   for (const f of todo) {
     const boss = engine.flopikBossFor(f.encounterID, f.name);
@@ -124,7 +143,8 @@ async function refreshReport(gql, code) {
       try {
         const rk = await W.rankings(gql, code, f.id);
         const state = Object.keys(rk).length ? "ok" : (Date.now() - (rep.startTime + f.endTime) > PARSE_RETRY_MS ? "none" : "pending");
-        const r = await post("/api/flopik/pulls/parse", { report: code, fight: f.id, players: rk, state });
+        // the stored row may come from the other upload of the night – patch by its own report + fight
+        const r = await post("/api/flopik/pulls/parse", { report: h.row.report || code, fight: h.row.report ? h.row.fight : f.id, players: rk, state });
         parsed += r.patched || 0;
         log(`   parse fight ${f.id}: ${state} (${r.patched || 0} hráčů)`);
       } catch (e) { log(`   ⚠ parse fight ${f.id}: ${e.message}`); }

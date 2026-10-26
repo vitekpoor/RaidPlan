@@ -236,12 +236,16 @@ table.fails tbody tr:hover td.fail:not(.hot):not(.hot2) { background: color-mix(
     var nights = {};
     (pulls || []).forEach(function (p) {
       if ((Number(p.dur) || 0) < MIN_DUR) return;
-      var d = String(p.date), key = String(p.bossKey), code = String(p.report || "");
-      var nk = code || ("d:" + d);
-      var n = nights[nk] || (nights[nk] = { key: nk, code: code, date: d, bosses: {}, last: "", stub: true });
-      if (d + " " + p.start > n.last) { n.last = d + " " + p.start; n.date = d; }
-      var b = n.bosses[key] || (n.bosses[key] = { key: key, name: String(p.boss), pulls: {} });
-      b.pulls[p.no] = pullObj(p);
+      var d = String(p.date), key = String(p.bossKey);
+      // p.reports = every report whose time window contains the pull (a night uploaded to WCL twice shows in both)
+      var codes = (p.reports && p.reports.length) ? p.reports : [String(p.report || "")];
+      codes.forEach(function (code) {
+        var nk = code || ("d:" + d);
+        var n = nights[nk] || (nights[nk] = { key: nk, code: code, date: d, bosses: {}, last: "", stub: true });
+        if (d + " " + p.start > n.last) { n.last = d + " " + p.start; n.date = d; }
+        var b = n.bosses[key] || (n.bosses[key] = { key: key, name: String(p.boss), pulls: {} });
+        b.pulls[p.no] = pullObj(p);
+      });
     });
     Object.keys(nights).forEach(function (nk) { finishNight(nights[nk]); });
     return nights;

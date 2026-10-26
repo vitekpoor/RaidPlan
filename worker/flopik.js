@@ -1,9 +1,11 @@
 // Flopik – per-pull fails from Warcraft Logs (tables flopik_* – 0004). Replaces the Apps Script FLOPIK sections.
 //   GET  /api/flopik/reports              guild reports for the dropdown (from WCL when secrets WCL_CLIENT_ID/SECRET are set
 //                                         and the cached list is older than 2 min; otherwise the list the runner stored)
-//   GET  /api/flopik/pulls                light list of all pulls (no players) – nights index
-//   GET  /api/flopik/pulls?report=CODE    pulls of one report with meta + players (edge-cached 30 s)
-//   POST /api/flopik/pulls                (auth) { pull } – upsert one pull (same key rules as flopikRecordPull_)
+//   GET  /api/flopik/pulls                light list of all pulls (no players) – nights index; `reports` = every report
+//                                         code whose time window contains the pull (a night uploaded twice)
+//   GET  /api/flopik/pulls?report=CODE    pulls inside the report's time window with meta + players (edge-cached 30 s)
+//   POST /api/flopik/pulls                (auth) { pull } – upsert one pull: same report+fight or same date+boss+start
+//                                         (±15 s, second upload of the night) replaces; pull numbers = order within day+boss
 //   POST /api/flopik/pulls/parse          (auth) { report, fight, players: {name: parse}, state, error } – patch parses into a stored kill
 //   GET  /api/flopik/refs                 rank 1 reference breakdowns { key: ref }
 //   POST /api/flopik/refs                 (auth) { ref } | { refs: [...] } – upsert
@@ -102,6 +104,29 @@ function rowToPull(r, players) {
   return out;
 }
 
+// The same night is sometimes uploaded to WCL twice (two players logging) – the fight start times of the two reports
+// differ by a second or so. A pull is therefore identified by date + boss + start time within SAME_PULL_MS, and a
+// report's pulls are every stored pull inside the report's time window (not only the rows computed from that code).
+const SAME_PULL_MS = 15000;
+function secOf(t) { const m = /^(\d{1,2}):(\d{2}):(\d{2})/.exec(String(t || "")); return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null; }
+function samePull(r, start, startMs) {
+  if (r.start === start) return true;
+  if (r.start_ms != null && startMs != null) return Math.abs(Number(r.start_ms) - Number(startMs)) <= SAME_PULL_MS;
+  const a = secOf(r.start), b = secOf(start);
+  return a != null && b != null && Math.abs(a - b) * 1000 <= SAME_PULL_MS;
+}
+/** Report codes whose time window contains the pull (its own code first). */
+function reportsOfPull(r, reports) {
+  const out = r.report ? [r.report] : [];
+  if (r.start_ms != null) {
+    for (const rep of reports) {
+      if (rep.code === r.report || !rep.start_ms || !rep.end_ms) continue;
+      if (Number(r.start_ms) >= Number(rep.start_ms) - SAME_PULL_MS && Number(r.start_ms) <= Number(rep.end_ms)) out.push(rep.code);
+    }
+  }
+  return out;
+}
+
 export async function getPulls(env, ctx, url) {
   const raw = url.searchParams.get("report") || "";
   // "d:YYYY-MM-DD" = pulls recorded from a local combat log (no WCL report) on that day
@@ -112,16 +137,24 @@ export async function getPulls(env, ctx, url) {
   if (hit) return hit;
   let body;
   if (report) {
-    const where = localDay ? "report = '' AND date = ?1" : "report = ?1";
-    const arg = localDay || report;
-    const pulls = (await env.DB.prepare(`SELECT * FROM flopik_pulls WHERE ${where} ORDER BY start_ms, start, id`).bind(arg).all()).results;
-    const players = (await env.DB.prepare(`SELECT p.* FROM flopik_players p JOIN flopik_pulls f ON f.id = p.pull_id WHERE f.${where} ORDER BY p.pull_id, p.id`).bind(arg).all()).results;
+    let where, binds;
+    if (localDay) { where = (a) => `${a}report = '' AND ${a}date = ?1`; binds = [localDay]; }
+    else {
+      const rep = await env.DB.prepare("SELECT start_ms, end_ms FROM flopik_reports WHERE code = ?1").bind(report).first();
+      if (rep && rep.start_ms && rep.end_ms) {
+        where = (a) => `(${a}report = ?1 OR (${a}start_ms IS NOT NULL AND ${a}start_ms >= ?2 AND ${a}start_ms <= ?3))`;
+        binds = [report, Number(rep.start_ms) - SAME_PULL_MS, Number(rep.end_ms)];
+      } else { where = (a) => `${a}report = ?1`; binds = [report]; }
+    }
+    const pulls = (await env.DB.prepare(`SELECT * FROM flopik_pulls WHERE ${where("")} ORDER BY start_ms, start, id`).bind(...binds).all()).results;
+    const players = (await env.DB.prepare(`SELECT p.* FROM flopik_players p JOIN flopik_pulls f ON f.id = p.pull_id WHERE ${where("f.")} ORDER BY p.pull_id, p.id`).bind(...binds).all()).results;
     const byPull = new Map();
     for (const p of players) { if (!byPull.has(p.pull_id)) byPull.set(p.pull_id, []); byPull.get(p.pull_id).push(p); }
     body = { ok: true, report, pulls: pulls.map((r) => rowToPull(r, byPull.get(r.id) || [])) };
   } else {
     const pulls = (await env.DB.prepare("SELECT id, report, fight, date, pull_no, boss, boss_key, boss_id, difficulty, start, start_ms, dur, kill, ver, written_at FROM flopik_pulls ORDER BY date, start, id").all()).results;
-    body = { ok: true, pulls: pulls.map((r) => rowToPull(r, null)) };
+    const reports = (await env.DB.prepare("SELECT code, start_ms, end_ms FROM flopik_reports").all()).results;
+    body = { ok: true, pulls: pulls.map((r) => { const o = rowToPull(r, null); o.reports = reportsOfPull(r, reports); return o; }) };
   }
   const res = json(body, 200, { "cache-control": `public, max-age=0, s-maxage=${PULLS_CACHE_SECONDS}` });
   ctx.waitUntil(cache.put(key, res.clone()));
@@ -136,11 +169,13 @@ export async function postPull(request, env, ctx, url) {
   const date = String(pull.date || ""), start = String(pull.start || ""), bossKey = String(pull.bossKey || "");
   if (!date || !start || !bossKey) return json({ ok: false, error: "chybí date / start / bossKey" }, 400);
   const report = reportCode(pull.report || "") || "", fight = pull.fight == null || pull.fight === "" ? null : Number(pull.fight);
-  const existing = (await env.DB.prepare("SELECT id, pull_no, report, fight, start FROM flopik_pulls WHERE date = ?1 AND boss_key = ?2 ORDER BY pull_no").bind(date, bossKey).all()).results;
+  const startMs = numOrNull(pull.startMs);
+  const existing = (await env.DB.prepare("SELECT id, pull_no, report, fight, start, start_ms FROM flopik_pulls WHERE date = ?1 AND boss_key = ?2 ORDER BY pull_no").bind(date, bossKey).all()).results;
   let pullNo = 0, maxNo = 0;
   const del = [];
   for (const r of existing) {
-    const same = r.start === start || (report && r.report === report && String(r.fight) === String(fight));
+    // the same pull from a second upload of the night (start within SAME_PULL_MS) replaces the stored one – no duplicates
+    const same = (report && r.report === report && String(r.fight) === String(fight)) || samePull(r, start, startMs);
     if (same) { pullNo = pullNo || r.pull_no; del.push(r.id); } else if (r.pull_no > maxNo) maxNo = r.pull_no;
   }
   if (!pullNo) pullNo = maxNo + 1;
@@ -153,7 +188,7 @@ export async function postPull(request, env, ctx, url) {
     `INSERT INTO flopik_pulls (report, fight, date, pull_no, boss, boss_key, boss_id, difficulty, start, start_ms, dur, kill, ver, meta, written_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`
   ).bind(report, fight, date, pullNo, String(pull.boss || bossKey), bossKey, numOrNull(pull.bossId), String(pull.difficulty || ""), start,
-         numOrNull(pull.startMs), Number(pull.dur) || 0, pull.kill ? 1 : 0, Number(summary.ver) || 1, JSON.stringify(meta), now));
+         startMs, Number(pull.dur) || 0, pull.kill ? 1 : 0, Number(summary.ver) || 1, JSON.stringify(meta), now));
   for (const p of pull.players || []) {
     const data = {};
     Object.keys(p || {}).forEach((k) => { if (k !== "name") data[k] = p[k]; });
@@ -162,8 +197,22 @@ export async function postPull(request, env, ctx, url) {
     ).bind(date, bossKey, start, String(p.name || ""), JSON.stringify(data)));
   }
   await env.DB.batch(stmts);
+  // pull numbers = chronological order within the day and boss (a second upload can fill a gap or remove a duplicate)
+  const renum = await renumberDay(env, date, bossKey);
+  if (renum.has(pullNo)) pullNo = renum.get(pullNo);
   await invalidatePulls(ctx, url, report);
   return json({ ok: true, pull: pullNo, rows: 1 + (pull.players || []).length, replaced: del.length });
+}
+
+/** Renumber the pulls of one day + boss by start time; only rows whose number changes are written. Returns old → new. */
+async function renumberDay(env, date, bossKey) {
+  const rows = (await env.DB.prepare("SELECT id, pull_no FROM flopik_pulls WHERE date = ?1 AND boss_key = ?2 ORDER BY start, id").bind(date, bossKey).all()).results;
+  const map = new Map(), stmts = [];
+  rows.forEach((r, i) => {
+    if (r.pull_no !== i + 1) { map.set(r.pull_no, i + 1); stmts.push(env.DB.prepare("UPDATE flopik_pulls SET pull_no = ?2 WHERE id = ?1").bind(r.id, i + 1)); }
+  });
+  if (stmts.length) await env.DB.batch(stmts);
+  return map;
 }
 
 /** POST /api/flopik/pulls/parse – attach parses to a stored kill without recomputing it. */
