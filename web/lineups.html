@@ -46,7 +46,9 @@
   .lu td.slot.dup { color: #b00000 !important; }
   .lu td.slot small { font-size: 9.5px; font-weight: 500; opacity: .8; margin-left: 3px; }
   .lu td.slot.nospec { box-shadow: inset 0 0 0 2px #c0392b; }
-  .edit .lu td.slot select.spec { font-size: 10.5px; font-weight: 500; opacity: .85; border-bottom-style: dotted; }
+  /* spec na bosse: druhý dropdown pod jménem (vlastní řádek s rámečkem – dřív byl na stejném řádku a v nowrap buňce zmizel) */
+  .edit .lu td.slot select.spec { display: block; width: 100%; margin-top: 2px; font-size: 12px; font-weight: 600; background: rgba(255,255,255,.4) !important; border: 1px solid rgba(0,0,0,.4) !important; border-radius: 3px; padding: 1px 3px !important; }
+  .edit .lu td.slot.nospec select.spec { background: #fff !important; border-color: #c0392b !important; color: #c0392b; }
   .edit .lu td.slot select, .edit .lu th input[type=date] { width: 100%; background: transparent; color: inherit; border: 0; border-bottom: 1px dashed rgba(0,0,0,.35); font: inherit; font-weight: 600; padding: 0; cursor: pointer; }
   .edit .lu td.slot.empty select { color: var(--muted); border-bottom-color: var(--line); }
   .edit .lu th input[type=date] { display: block; color: var(--ink); border-bottom-color: var(--line); font-weight: 400; font-size: 11px; width: 100%; margin-top: 1px; }
