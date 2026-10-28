@@ -33,6 +33,11 @@
   Tlačítko NSRT u řádku = export castů jako reminder string pro Northern Sky Raid Tools
   (EncounterID:<id>;Name:<boss> + řádky time:<s od začátku fáze>;ph:<fáze>;tag:<kdo>;spellid:<id>; – formát z Reminders.lua addonu;
   fáze = lorrgs phase_id, u Coiled Altar 1/2/2.5/3 sedí s NSRT). Odkaz z raid taktik: timeline.html#<slug bosse>. web/build.mjs doplní menu.
+  Opačný směr: tlačítko "Import NSRT" (v úpravách) = vlastní reminder string (plán RL) → casty do řádků: tag = postava → řádek
+  s tím char, jinak volný řádek specu postavy z rosteru / nový řádek (hráč = tag); cizí tag = ruční výběr řádku. Spelly, které
+  dokument nezná: lorrgs list specu → ostatní specy classy → raidbots talenty → placeholder "#id"; text: = vlastní schopnost
+  (podle názvu se recykluje). Casty mají m:1, src:"nsrt", poznámka = text za posledním polem; čas = start fáze (lorrgs fáze
+  dokumentu, jinak NSRT BossTimelines) + time. Režim: nahradit jen casty importovaných spellů / vyprázdnit řádek.
 -->
 <html lang="cs">
 <head>
@@ -145,6 +150,12 @@
   #pick .tile.inlane { box-shadow: inset 3px 0 0 var(--accent); }
   #pick .tile.custom { border-style: dashed; border-color: var(--line); }
   #pick .tile.custom.first { grid-column: 1 / -1; border-color: var(--accent); background: var(--accent-soft); }
+  #niIn { width: 100%; box-sizing: border-box; min-height: 8rem; background: var(--ground, #0a0c0b); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.45 ui-monospace, Consolas, monospace; padding: 8px; white-space: pre; margin: 4px 0 6px; }
+  #niRows label .nm { flex: 0 0 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #niRows label select { flex: 1; min-width: 0; font: inherit; font-size: 11.5px; padding: 1px 4px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
+  #niRows label small { flex: 0 0 auto; }
+  #niRows label.skip .nm { color: var(--muted); }
+  dialog label.radio { display: flex; gap: 6px; align-items: center; margin: 3px 0; } dialog label.radio input { width: auto; margin: 0; }
   #nsrtOut, #nsrtAllOut { width: 100%; box-sizing: border-box; min-height: 14rem; background: var(--ground, #0a0c0b); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.45 ui-monospace, Consolas, monospace; padding: 8px; white-space: pre; }
   /* casty */
   .ev { position: absolute; height: var(--lane); display: flex; align-items: center; z-index: 1; }
@@ -221,6 +232,7 @@
     <button class="btn-outline" id="edit" type="button">Upravit</button>
     <button class="btn-outline" id="import" type="button" title="stáhne z lorrgs.io top parse pro vybrané specy a nahradí jejich řádky">Import z lorrgs</button>
     <button class="btn-outline" id="addrow" type="button" hidden title="přidá řádek (spec + výběr parse); stejný spec může být víckrát – každý hráč zvlášť">＋ Spec</button>
+    <button class="btn-outline" id="nsrtImp" type="button" hidden title="vlož vlastní NSRT reminder string (time/ph/tag/spellid) – casty se přidají do řádků podle tagu (postavy)">Import NSRT</button>
     <button class="btn" id="save" type="button" hidden>Uložit</button>
     <button class="btn-outline" id="cancel" type="button" hidden>Zrušit</button>
   </span>
@@ -250,6 +262,17 @@
   <label><input type="checkbox" id="impBoss"> znovu načíst i řádek Boss + fáze (z prvního vybraného specu)</label>
   <div class="prog" id="impProg"></div>
   <div class="acts"><button class="btn-outline" type="button" data-close>Zavřít</button><button class="btn" type="button" id="impGo">Importovat</button></div>
+</dialog>
+
+<dialog id="dlgNsrtImp" style="min-width:42rem">
+  <h5>Import NSRT reminderů do timeline</h5>
+  <div>Vlož vlastní reminder string ve formátu NSRT (řádek = <code>ph:1;time:36;tag:Mimik;spellid:264735;</code>, text za posledním polem = poznámka castu). Casty se přidají do řádku podle <b>tag</b>: jméno postavy z rosteru / řádku se přiřadí samo, jinak vyber cílový řádek ručně (nebo nechej založit nový řádek specu). Čas je relativní k začátku fáze <code>ph:</code> podle fází této timeline.</div>
+  <textarea id="niIn" placeholder="EncounterID:3492;Name:Ula'tek - Mythic&#10;ph:1;time:3;tag:Mimik;spellid:288613;dur:2&#10;ph:1;time:36;tag:Mimik;spellid:264735;dur:2" spellcheck="false"></textarea>
+  <div class="list" id="niRows" style="max-height:14rem">Vlož string…</div>
+  <label class="radio" title="casty ostatních schopností v řádku zůstanou; casty importovaných schopností (z logu i dřívější) se nahradí"><input type="radio" name="niMode" value="merge" checked> v cílovém řádku nahradit jen casty importovaných schopností (ostatní nechat)</label>
+  <label class="radio" title="řádek se nejdřív vyprázdní – zůstanou jen importované casty"><input type="radio" name="niMode" value="replace"> vyprázdnit cílový řádek, nechat jen importované casty</label>
+  <div class="prog" id="niProg"></div>
+  <div class="acts"><button class="btn-outline" type="button" data-close>Zavřít</button><button class="btn" type="button" id="niGo" disabled>Importovat</button></div>
 </dialog>
 
 <dialog id="dlgRow">
@@ -587,7 +610,7 @@
     var d = state.doc, tl = $("tl"), pps = state.pps;
     document.body.classList.toggle("edit", state.edit);
     $("adminbox").hidden = !state.token; $("loginhint").hidden = !!state.token;
-    $("edit").hidden = state.edit; $("import").hidden = !state.edit; $("addrow").hidden = !state.edit; $("cancel").hidden = !state.edit;
+    $("edit").hidden = state.edit; $("import").hidden = !state.edit; $("addrow").hidden = !state.edit; $("nsrtImp").hidden = !state.edit; $("cancel").hidden = !state.edit;
     $("save").hidden = !state.edit; $("save").disabled = !state.dirty; $("save").textContent = state.dirty ? "Uložit" : "Uloženo ✓"; $("edithint").hidden = !state.edit;
     if (!d) return;
     $("lorrgs").href = "https://lorrgs.io/spec_ranking/" + (d.rows[0] ? d.rows[0].spec : "warlock-affliction") + "/" + state.boss;
@@ -1190,6 +1213,131 @@
     markDirty(); render(); $("dlgLane").close();
   });
 
+  // ---------- NSRT import: own reminder string → casts of the rows (by tag) ----------
+  var niParsed = null;   // { enc, groups: [{ tag, items: [{ ph, t, id, text, note }] }], bad }
+  /** parse a reminder string: header EncounterID, one group per tag name (a tag with several names = several groups) */
+  function parseNsrt(txt) {
+    var enc = null, groups = {}, order = [], bad = 0;
+    String(txt || "").split(/\r?\n/).forEach(function (raw) {
+      var l = raw.trim(); if (!l) return;
+      var h = /EncounterID:(\d+)/i.exec(l); if (h && !/(^|;)\s*time:/i.test(l)) { enc = Number(h[1]); return; }
+      var tm = /(^|;)\s*time:(\d+(?:[.,]\d+)?)/i.exec(l), tg = /(^|;)\s*tag:([^;]*)/i.exec(l);
+      if (!tm || !tg) { if (/(^|;)\s*(time|tag|spellid):/i.test(l)) bad++; return; }   // RaidPlan note lines in front of the string are skipped
+      var ph = /(^|;)\s*ph:([\d.]+)/i.exec(l), sid = /(^|;)\s*spellid:(\d+)/i.exec(l), tx = /(^|;)\s*text:([^;]*)/i.exec(l);
+      if (!sid && !tx) { bad++; return; }
+      var note = l.replace(/^(?:\s*[A-Za-z]+:[^;]*(?:;|$))+/, "").trim();   // whatever follows the key:value; fields
+      var it = { ph: ph ? ph[2] : "1", t: Number(tm[2].replace(",", ".")), id: sid ? Number(sid[2]) : null, text: tx ? tx[2].trim() : null, note: note || undefined };
+      tg[2].trim().split(/\s+/).filter(Boolean).forEach(function (name) {
+        if (!groups[name]) { groups[name] = { tag: name, items: [] }; order.push(name); }
+        groups[name].items.push(it);
+      });
+    });
+    return { enc: enc, groups: order.map(function (k) { return groups[k]; }), bad: bad };
+  }
+  /** spec slug + roster entry of a character name (from the per-boss roster), or null */
+  function rosterChar(name) {
+    var k = nkey(name), hit = null;
+    Object.keys(state.roster).forEach(function (slug) { (state.roster[slug] || []).forEach(function (c) { if (!hit && nkey(c.char) === k) hit = { slug: slug, c: c }; }); });
+    return hit;
+  }
+  /** default target of a tag: row with that character → free row of its roster spec → new row of that spec → spec ID tag → nothing */
+  function niDefaultTarget(tag) {
+    var rows = state.doc.rows, k = nkey(tag), i;
+    for (i = 0; i < rows.length; i++) if (rows[i].char && nkey(rows[i].char) === k) return "r" + i;
+    var rc = rosterChar(tag);
+    if (rc) {
+      for (i = 0; i < rows.length; i++) if (rows[i].spec === rc.slug && !rows[i].player) return "r" + i;
+      return "n:" + rc.slug;
+    }
+    if (/^\d+$/.test(tag)) { var slug = Object.keys(SPEC_ID).filter(function (x) { return String(SPEC_ID[x]) === tag; })[0]; if (slug) { for (i = 0; i < rows.length; i++) if (rows[i].spec === slug) return "r" + i; return "n:" + slug; } }
+    return "";
+  }
+  function niRender() {
+    var box = $("niRows"); box.innerHTML = ""; niParsed = parseNsrt($("niIn").value);
+    var b = BOSSES.filter(function (x) { return x[0] === state.boss; })[0], warn = [];
+    if (!niParsed.groups.length) { box.textContent = niParsed.bad ? "Žádný platný řádek (time: + tag: + spellid:/text:)." : "Vlož string…"; $("niGo").disabled = true; $("niProg").textContent = ""; return; }
+    var optRows = state.doc.rows.map(function (r, i) { return "<option value='r" + i + "'>" + esc(rowTitle(r)) + "</option>"; }).join("");
+    var optNew = SPECS.map(function (s) { return "<option value='n:" + s[0] + "'>＋ nový řádek: " + esc(s[1]) + (state.roster[s[0]] ? " (" + esc(rosterNames(s[0])) + ")" : "") + "</option>"; }).join("");
+    niParsed.groups.forEach(function (g, gi) {
+      var ids = {}; g.items.forEach(function (it) { ids[it.id != null ? it.id : "text:" + it.text] = 1; });
+      var l = el("label"), def = niDefaultTarget(g.tag);
+      l.innerHTML = "<span class='nm' title='tag: " + esc(g.tag) + "'>" + esc(g.tag) + "</span><select data-g='" + gi + "'><option value=''>— nepřidávat / vyber řádek —</option><optgroup label='Řádky timeline'>" + optRows + "</optgroup><optgroup label='Nový řádek'>" + optNew + "</optgroup></select><small>" + g.items.length + "× · " + Object.keys(ids).length + " schopností</small>";
+      var sel = l.querySelector("select"); sel.value = def; if (sel.value !== def) sel.value = "";
+      sel.addEventListener("change", function () { l.classList.toggle("skip", !sel.value); });
+      sel.addEventListener("click", function (ev) { ev.stopPropagation(); });
+      l.classList.toggle("skip", !sel.value);
+      box.appendChild(l);
+    });
+    if (niParsed.enc && b && niParsed.enc !== b[2]) { var ob = BOSSES.filter(function (x) { return x[2] === niParsed.enc; })[0]; warn.push("Pozor: string je pro " + (ob ? ob[3] : "EncounterID " + niParsed.enc) + ", importuješ do " + b[3] + "."); }
+    if (niParsed.bad) warn.push(niParsed.bad + " řádků nešlo přečíst.");
+    $("niProg").textContent = warn.join(" "); $("niGo").disabled = false;
+  }
+  $("niIn").addEventListener("input", niRender);
+  function openNsrtImport() { $("niIn").value = ""; niRender(); $("dlgNsrtImp").showModal(); $("niIn").focus(); }
+  /** make sure doc.spells has the spell: lorrgs list of the spec, other specs of the class, raidbots talents, else a placeholder */
+  function niResolveSpell(id, spec) {
+    if (state.doc.spells[id]) return Promise.resolve();
+    var sp0 = SPEC[spec] || {}, sibs = SPECS.filter(function (x) { return x[3] === sp0.cls && x[0] !== spec; }).map(function (x) { return x[0]; });
+    var p = Promise.resolve(null);
+    [spec].concat(sibs).forEach(function (sl) { p = p.then(function (found) { return found || fetchSpells(sl).then(function (list) { return list && list[id] ? list[id] : null; }).catch(function () { return null; }); }); });
+    return p.then(function (found) {
+      if (found) { keepSpell(id, found); return; }
+      return fetchTalents().catch(function () { return {}; }).then(function (tal) {
+        var t = null; Object.keys(tal).forEach(function (k) { ["spec", "cls", "hero"].forEach(function (g) { (tal[k][g] || []).forEach(function (e) { if (!t && e.id === id) t = e; }); }); });
+        state.doc.spells[id] = t ? { name: t.name, icon: t.icon ? ZAM_ICON + t.icon + ".jpg" : "", cooldown: 0, duration: 0, color: CLASS_COLOR[sp0.cls] || "#cfd8d2", show: true, type: "talent" }
+                              : { name: "#" + id, icon: "", cooldown: 0, duration: 0, color: "#888", show: true, type: "" };
+      });
+    });
+  }
+  /** custom (text:) reminder → existing custom spell of that name, else a new one */
+  function niTextSpell(name) {
+    var d = state.doc, k = nkey(name), hit = Object.keys(d.spells).filter(function (id) { return /^c\d+$/.test(id) && nkey(d.spells[id].name) === k; })[0];
+    if (hit) return hit;
+    var id = "c" + uid(); d.spells[id] = { name: name, icon: "", cooldown: 0, duration: 0, color: "#cfd8d2", show: true, type: "custom" }; return id;
+  }
+  $("niGo").addEventListener("click", function () {
+    if (!niParsed) return;
+    var jobs = [], d = state.doc, mode = ($("dlgNsrtImp").querySelector("input[name=niMode]:checked") || {}).value || "merge";
+    $("niRows").querySelectorAll("select").forEach(function (sel) { if (sel.value) jobs.push({ g: niParsed.groups[Number(sel.dataset.g)], target: sel.value }); });
+    if (!jobs.length) { $("niProg").textContent = "Vyber aspoň jednomu tagu cílový řádek."; return; }
+    var needNsrtPh = jobs.some(function (j) { return j.g.items.some(function (it) { return String(it.ph) !== "1" && !(d.phases || []).some(function (q) { return String(q.phase_id) === String(it.ph); }); }); });
+    $("niGo").disabled = true; $("niProg").textContent = "Importuji…";
+    (needNsrtPh ? fetchNsrtBoss(state.boss).catch(function () { return { phases: {} }; }) : Promise.resolve({ phases: {} })).then(function (nsrt) {
+      var errs = [], added = 0, rowsTouched = [];
+      // rows first (synchronous), then missing spells (async), then the casts
+      jobs.forEach(function (j) {
+        var row;
+        if (j.target.charAt(0) === "r") row = d.rows[Number(j.target.slice(1))];
+        else {
+          var slug = j.target.slice(2), rc = rosterChar(j.g.tag), mine = rc && rc.slug === slug;
+          row = { spec: slug, player: mine ? rc.c.label : j.g.tag, char: mine ? rc.c.char : j.g.tag, source: null, lanes: [], events: [] };
+          d.rows.push(row);
+        }
+        j.row = row; if (rowsTouched.indexOf(row) < 0) rowsTouched.push(row);
+      });
+      var ids = []; jobs.forEach(function (j) { j.g.items.forEach(function (it) { if (it.id != null && !d.spells[it.id] && !ids.some(function (x) { return x.id === it.id; })) ids.push({ id: it.id, spec: j.row.spec }); }); });
+      var p = Promise.resolve(); ids.forEach(function (x) { p = p.then(function () { return niResolveSpell(x.id, x.spec); }); });
+      return p.then(function () {
+        if (mode === "replace") rowsTouched.forEach(function (r) { r.events.length = 0; r.lanes.length = 0; });
+        jobs.forEach(function (j) {
+          var r = j.row, done = {};
+          j.g.items.forEach(function (it) {
+            var id = it.id != null ? it.id : niTextSpell(it.text);
+            if (!done[id]) { done[id] = 1; if (mode === "merge") dropCasts(r, id); if (r.lanes.indexOf(id) < 0) r.lanes.push(id); }
+            var start = phaseStartMs(it.ph, nsrt);
+            if (start == null) { errs.push(j.g.tag + ": fáze " + it.ph + " v timeline není (cast " + it.t + " s vynechán)"); return; }
+            var ev = { u: uid(), id: id, ts: Math.round(start + it.t * 1000), m: 1, src: "nsrt" }; if (it.note) ev.note = it.note;
+            r.events.push(ev); added++;
+          });
+          r.events.sort(function (a, b) { return a.ts - b.ts; });
+        });
+        sortRows(); recalcDuration(); markDirty(); render();
+        $("dlgNsrtImp").close();
+        msg("NSRT import: " + added + " castů do " + rowsTouched.length + " řádků." + (errs.length ? " " + errs.join("; ") : "") + " Nezapomeň Uložit.", errs.length ? "err" : "ok");
+      });
+    }).catch(function (e) { $("niProg").textContent = "Chyba: " + e.message; $("niGo").disabled = false; });
+  });
+
   // ---------- toolbar ----------
   var bsel = $("boss");
   BOSSES.forEach(function (b) { var o = el("option", "", esc(b[1])); o.value = b[0]; bsel.appendChild(o); });
@@ -1233,6 +1381,7 @@
   $("save").addEventListener("click", save);
   $("import").addEventListener("click", openImport);
   $("addrow").addEventListener("click", function () { openRow(null, false); });
+  $("nsrtImp").addEventListener("click", openNsrtImport);
   if (window.esAuth) esAuth.onChange(function (t) { state.token = t; if (!t) { state.edit = false; } if (state.doc) render(); });
   window.addEventListener("beforeunload", function (ev) { if (state.dirty) { ev.preventDefault(); ev.returnValue = ""; } });
 
