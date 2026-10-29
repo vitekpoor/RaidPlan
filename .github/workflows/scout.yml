@@ -1,8 +1,8 @@
 name: Nábor (Warcraft Logs → databáze)
 
 # Najde hráče guild, které jsou na realmu v mythic žebříčku raider.io pod námi (Eternal Shadows a horší, do max. ranku):
-# rostery jejich first killů z raider.io, průměrný percentil parsů 95+ z Warcraft Logs API (diff auto = mythic u guild
-# s mythic progressem, jinak heroic), doplní kontakt z raider.io
+# rostery jejich first killů z raider.io, průměrný percentil parsů 95+ z Warcraft Logs API (diff auto = screening na mythicu
+# u guild s mythic progressem, jinak na heroicu; hráčům, kteří prošli, dotáhne i druhou obtížnost), doplní kontakt z raider.io
 # (About, BattleTag, Discord, socials, looking-for-guild profil) a uloží je přes Worker API do D1
 # (tabulky scout_guilds, scout_players). Zobrazuje admin stránka web/scout.html ("Nábor").
 # Spouští se jednou týdně a ručně (stránka přes Worker POST /api/scout/refresh → workflow_dispatch, nebo Run workflow).

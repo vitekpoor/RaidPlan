@@ -8,8 +8,9 @@
 //      killed) = the characters that actually raid there (≈ 25–35 per guild; the server-wide WCL parse harvest used
 //      before cost 900+ points and returned 2000+ characters incl. alts and ex-members)
 //   3. Warcraft Logs zoneRankings per character (≈ 5 points per difficulty; 3600 points/hour): best / median performance
-//      average + per-boss parses, WCL picks dps or hps by the character's role. --diff auto (default) queries only the
-//      difficulty the guild raids (mythic when it has >= 3 mythic kills, else heroic); both / hc / my force it.
+//      average + per-boss parses, WCL picks dps or hps by the character's role. --diff auto (default) screens only on the
+//      difficulty the guild raids (mythic when it has >= 3 mythic kills, else heroic) and then fetches the other
+//      difficulty just for the players that qualified; both / hc / my force it.
 //      Players with best average >= --min-avg (on any queried difficulty) are kept.
 //   4. raider.io (undocumented /api/characters/<region>/<realm>/<name>): About (biography), BattleTag, Discord, socials,
 //      looking-for-guild profiles, item level
@@ -312,11 +313,19 @@ async function main() {
     row.candidates = chars.length; candidates += chars.length;
     log(`\n#${g.rank} ${g.name} (${g.realmName || g.realmSlug}): ${chars.length} raiders from ${calls} first-kill rosters${hidden ? `, ${hidden} hidden comps` : ""}${errors ? `, ${errors} errors` : ""} → WCL ${diffs.join("+")}`);
     const rows = chars.length ? await parses(chars, diffs) : [];
+    const passes = (r) => !r.hidden && ["hc", "my"].some((d) => r[d] && r[d].bestPerformanceAverage != null && r[d].bestPerformanceAverage >= OPT.minAvg);
+    // auto: the few players who qualify on the screened difficulty also get the other one (≈ 5 points each), so both
+    // columns are filled without querying both difficulties for every raider
+    const other = OPT.diff === "auto" ? (diffs[0] === "my" ? "hc" : "my") : null;
+    const hit = other ? rows.filter(passes) : [];
+    if (hit.length) {
+      const extra = await parses(hit.map((r) => r.c), [other]);
+      for (const x of extra) { const r = hit.find((h) => h.c === x.c); if (r) r[other] = x[other]; }
+    }
     const found = [];
     for (const r of rows) {
-      if (r.hidden) continue;
+      if (!passes(r)) continue;
       const hcBest = r.hc && r.hc.bestPerformanceAverage, myBest = r.my && r.my.bestPerformanceAverage;
-      if (!((hcBest != null && hcBest >= OPT.minAvg) || (myBest != null && myBest >= OPT.minAvg))) continue;
       const hcB = perBoss(r.hc), myB = perBoss(r.my);
       const specCount = {};
       [...hcB, ...myB].forEach((b) => { if (b.spec) specCount[b.spec] = (specCount[b.spec] || 0) + b.kills + 1; });
@@ -329,7 +338,7 @@ async function main() {
         myBest: round(myBest), myMedian: round(r.my && r.my.medianPerformanceAverage), myKills: myB.reduce((s, b) => s + b.kills, 0),
         wclUrl: `https://www.warcraftlogs.com/character/${OPT.region}/${r.realm}/${encodeURIComponent(r.c.name)}`,
         rioUrl: `https://raider.io/characters/${OPT.region}/${r.realm}/${encodeURIComponent(r.c.name)}`,
-        bio: "", battletag: "", discord: "", socials: {}, recruitment: [], data: { hc: hcB, my: myB, diffs, firstKills: r.c.kills },
+        bio: "", battletag: "", discord: "", socials: {}, recruitment: [], data: { hc: hcB, my: myB, diffs: other ? [...diffs, other] : diffs, firstKills: r.c.kills },
       };
       if (OPT.rio) {
         try {
