@@ -5,6 +5,9 @@
   z raider.io (About, BattleTag, Discord, socials, looking-for-guild profil). Data stahuje tools/recruit/wcl_scout.mjs
   (GitHub Actions scout.yml, pondělí + ručně) do D1 přes Worker; stránka čte GET /api/scout (admin token – bez přihlášení
   Worker vrátí 401 a stránka nic neukáže; položka menu "Nábor" se zobrazí jen přihlášenému adminovi, viz es-auth.js).
+  Ke každému hráči si admin vede poznámku (stav kontaktu, kdy napsal, text) – POST /api/scout/note, tabulka scout_notes,
+  kterou scraping nepřepisuje; poznámky hráčů, kteří z výběru vypadli, jsou pod tabulkou. Tlačítko Excel = .xlsx
+  aktuálně zobrazených řádků (SheetJS z cdnjs, načítá se až po kliknutí).
 -->
 <html lang="cs">
 <head>
@@ -53,6 +56,18 @@
   .guilds button small { opacity: .7; }
   #runlog { white-space: pre-wrap; font: 11.5px/1.4 ui-monospace, Consolas, monospace; color: var(--muted); max-height: 14rem; overflow: auto; background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-top: 10px; }
   .hint code { font-size: 12px; }
+  .st { display: inline-block; border-radius: 6px; padding: 1px 7px; font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid var(--line); background: var(--surface2); color: var(--muted); }
+  .st.contacted { border-color: #6aa3ff; color: #6aa3ff; } .st.replied, .st.talking { border-color: #e5cc80; color: #e5cc80; }
+  .st.joined { border-color: var(--accent); color: var(--accent); } .st.declined, .st.skip { border-color: #ff6a6a; color: #ff6a6a; }
+  td.nt { max-width: 18rem; } td.nt .txt { color: var(--muted); font-size: 12px; white-space: pre-wrap; max-height: 3.3em; overflow: hidden; }
+  .note-ed { margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; align-items: start; }
+  .note-ed label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+  .note-ed select, .note-ed input, .note-ed textarea { background: var(--ground, #0a0c0b); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; }
+  .note-ed textarea { width: 100%; min-height: 4.5em; resize: vertical; box-sizing: border-box; }
+  .note-ed .acts { display: flex; flex-direction: column; gap: 6px; padding-top: 18px; } .note-ed .acts button { padding: 6px 14px; font-size: 13px; }
+  .note-ed .meta { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+  @media (max-width: 900px) { .note-ed { grid-template-columns: 1fr 1fr; } .note-ed label.full { grid-column: 1 / -1; } }
+  #orphans { margin-top: 18px; } #orphans table.sc td { font-size: 12.5px; }
 </style>
 </head>
 <body>
@@ -76,16 +91,19 @@
   <label>Role <select id="role"><option value="">všechny</option><option value="tank">tank</option><option value="healer">healer</option><option value="dps">DPS</option></select></label>
   <label>Třída <select id="cls"><option value="">všechny</option></select></label>
   <label><input type="checkbox" id="contact"> jen s kontaktem</label>
+  <label>Stav <select id="nstat"><option value="">všichni</option><option value="none">neoslovení</option><option value="any">s poznámkou</option><option value="contacted">napsáno</option><option value="replied">odpověděl</option><option value="talking">jednáme</option><option value="declined">odmítl</option><option value="joined">přišel</option><option value="skip">nechceme</option></select></label>
   <input type="text" id="q" placeholder="hledat jméno…">
-  <span id="adminbox"><button class="btn-outline" id="refresh" type="button" title="spustí scraping Warcraft Logs + raider.io v GitHub Actions (10 min až 2 h podle limitu bodů WCL API)">Obnovit (WCL)</button></span>
+  <span id="adminbox"><button class="btn-outline" id="xlsx" type="button" title="stáhne tabulku podle aktuálního filtru a řazení jako .xlsx (včetně poznámek)">Excel</button> <button class="btn-outline" id="refresh" type="button" title="spustí scraping Warcraft Logs + raider.io v GitHub Actions (10 min až 2 h podle limitu bodů WCL API)">Obnovit (WCL)</button></span>
 </div>
 <div class="guilds" id="guilds"></div>
 <div id="content"></div>
+<div id="orphans" hidden></div>
 <div id="runlog" hidden></div>
 </div>
 
 <p class="hint">Zdroj: <a href="https://raider.io/the-venomous-abyss/realm-rankings/eu/drakthul/mythic" target="_blank" rel="noopener">raider.io</a> – mythic žebříček guild na realmu (guildy pod námi do ranku 20) a rostery jejich first killů (= kdo tam aktuálně raiduje); <a href="https://www.warcraftlogs.com/" target="_blank" rel="noopener">Warcraft Logs</a> (API) – parsy těch hráčů na každém bossovi (Best / Median Perf. Avg = průměr nejlepšího / mediánového percentilu přes zabité bosse; healeři podle HPS); raider.io profil (About, BattleTag, Discord, socials, „hledám guildu“). Výchozí běh (auto) prochází u guild s mythic progressem jen mythic parsy, u ostatních heroic, a hráčům, kteří prošli (95+), pak dotáhne i druhou obtížnost – oba sloupce jsou vyplněné. Hráč, který má 95+ jen na obtížnosti, kterou guilda neprogressuje (např. heroic u mythic guildy), se objeví jen při běhu workflow s volbou diff = both (trvá déle, WCL limit bodů).
-Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skript <code>tools/recruit/wcl_scout.mjs</code>), admin může spustit ručně tlačítkem.</p>
+Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skript <code>tools/recruit/wcl_scout.mjs</code>), admin může spustit ručně tlačítkem.
+Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: napsáno / odpověděl / jednáme / odmítl / přišel / nechceme, datum prvního kontaktu, text) – poznámky zůstávají i po dalším stažení dat; hráč, který z výběru vypadl, zůstane s poznámkou pod tabulkou.</p>
 </div>
 </div>
 
@@ -102,6 +120,7 @@ Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skrip
                       Monk: "#00FF98", Paladin: "#F48CBA", Priest: "#FFFFFF", Rogue: "#FFF468", Shaman: "#0070DD", Warlock: "#8788EE", Warrior: "#C69B3A" };
   var $ = function (s) { return document.querySelector(s); };
   var state = { token: window.esAuth ? esAuth.token() : null, data: null, guild: "", sort: "best", dir: -1, open: {}, polling: null };
+  var STATUS = { "": "–", contacted: "napsáno", replied: "odpověděl", talking: "jednáme", declined: "odmítl", joined: "přišel", skip: "nechceme" };
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function msg(t, cls) { var m = $("#msg"); m.textContent = t || ""; m.className = cls || ""; }
@@ -110,6 +129,34 @@ Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skrip
   function when(iso) { return iso ? new Date(iso).toLocaleString("cs-CZ") : "–"; }
   function best(p) { var d = $("#diff").value; return d === "hc" ? p.hcBest : d === "my" ? p.myBest : Math.max(p.hcBest == null ? -1 : p.hcBest, p.myBest == null ? -1 : p.myBest); }
   function hasContact(p) { return !!(p.battletag || p.discord || (p.recruitment && p.recruitment.length) || Object.keys(p.socials || {}).length); }
+  function day(d) { if (!d) return ""; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? Number(m[3]) + ". " + Number(m[2]) + ". " + m[1] : d; }
+  function today() { var t = new Date(); return t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0"); }
+  function stBadge(n) { return n && n.status ? '<span class="st ' + esc(n.status) + '">' + esc(STATUS[n.status] || n.status) + "</span>" : ""; }
+  function noteCell(n) {
+    if (!n) return '<span class="sub">–</span>';
+    return stBadge(n) + (n.contactedAt ? ' <span class="sub">' + esc(day(n.contactedAt)) + "</span>" : "") + (n.note ? '<div class="txt" title="' + esc(n.note) + '">' + esc(n.note) + "</div>" : "");
+  }
+  function noteEditor(p) {
+    var n = p.note || { status: "", contactedAt: "", note: "" };
+    return '<form class="note-ed" data-k="' + esc(p.key) + '" data-n="' + esc(p.name) + '">' +
+      '<label>Stav<select name="status">' + Object.keys(STATUS).map(function (k) { return '<option value="' + k + '"' + (n.status === k ? " selected" : "") + ">" + esc(k ? STATUS[k] : "neosloven") + "</option>"; }).join("") + "</select></label>" +
+      '<label>Napsáno dne<input type="date" name="contactedAt" value="' + esc(n.contactedAt) + '"></label>' +
+      '<label class="full">Poznámka (kde, co, jak to dopadlo…)<textarea name="note" placeholder="např. 29. 10. napsáno na Discordu, zatím bez odpovědi">' + esc(n.note) + "</textarea></label>" +
+      '<div class="acts"><button class="btn" type="submit">Uložit</button>' + (p.note ? '<button class="btn-outline" type="button" data-del="1">Smazat</button>' : "") + "</div>" +
+      (p.note ? '<div class="meta">naposledy upraveno ' + esc(when(p.note.updatedAt)) + "</div>" : "") + "</form>";
+  }
+  function saveNote(form, del) {
+    var body = { key: form.getAttribute("data-k"), name: form.getAttribute("data-n"), status: del ? "" : form.status.value, contactedAt: del ? "" : form.contactedAt.value, note: del ? "" : form.note.value };
+    if (!del && body.status === "contacted" && !body.contactedAt) body.contactedAt = today();
+    form.querySelectorAll("button").forEach(function (b) { b.disabled = true; }); msg("Ukládám…");
+    return fetch(API_BASE + "/api/scout/note", { method: "POST", headers: esAuth.headers({ "Content-Type": "application/json" }), body: JSON.stringify(body) })
+      .then(function (r) { if (r.status === 401) { esAuth.logout(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); } return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || "uložení selhalo");
+        (state.data.players || []).forEach(function (p) { if (p.key === body.key) p.note = d.note; });
+        msg(del ? "Poznámka smazána" : "Uloženo", "ok"); render();
+      }).catch(function (e) { msg("Chyba: " + e.message, "err"); form.querySelectorAll("button").forEach(function (b) { b.disabled = false; }); });
+  }
 
   function load() {
     if (!state.token) { $("#locked").hidden = false; $("#app").hidden = true; return Promise.resolve(); }
@@ -146,24 +193,27 @@ Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skrip
       return '<button type="button" data-g="' + g.id + '" class="' + (String(state.guild) === String(g.id) ? "on" : "") + '" title="' + esc(g.faction) + ', world #' + esc(g.worldRank || "?") + '">#' + esc(g.serverRank || "?") + " " + esc(g.name) + " <small>" + (counts[g.id] || 0) + "/" + esc(g.candidates || 0) + "</small></button>";
     }).join("");
     // rows
-    var minAvg = Number($("#minavg").value) || 0, role = $("#role").value, cls = $("#cls").value, q = $("#q").value.trim().toLowerCase(), onlyC = $("#contact").checked, diff = $("#diff").value;
+    var minAvg = Number($("#minavg").value) || 0, role = $("#role").value, cls = $("#cls").value, q = $("#q").value.trim().toLowerCase(), onlyC = $("#contact").checked, diff = $("#diff").value, nstat = $("#nstat").value;
     var rows = (d.players || []).filter(function (p) {
       if (state.guild && String(p.guildId) !== String(state.guild)) return false;
       if (role && p.role !== role) return false;
       if (cls && p.class !== cls) return false;
       if (onlyC && !hasContact(p)) return false;
-      if (q && (p.name + " " + p.guildName + " " + p.spec + " " + p.bio).toLowerCase().indexOf(q) < 0) return false;
+      if (nstat === "none" ? !!(p.note && p.note.status) : nstat === "any" ? !p.note : nstat ? !(p.note && p.note.status === nstat) : false) return false;
+      if (q && (p.name + " " + p.guildName + " " + p.spec + " " + p.bio + " " + (p.note ? p.note.note : "")).toLowerCase().indexOf(q) < 0) return false;
       var b = best(p); return b != null && b >= minAvg;
     });
     var key = { name: function (p) { return p.name.toLowerCase(); }, guild: function (p) { return (p.guildName || "").toLowerCase(); }, spec: function (p) { return p.class + " " + p.spec; },
                 hc: function (p) { return p.hcBest == null ? -1 : p.hcBest; }, hcm: function (p) { return p.hcMedian == null ? -1 : p.hcMedian; },
                 my: function (p) { return p.myBest == null ? -1 : p.myBest; }, mym: function (p) { return p.myMedian == null ? -1 : p.myMedian; },
-                ilvl: function (p) { return p.ilvl == null ? -1 : p.ilvl; }, best: best, contact: function (p) { return hasContact(p) ? 1 : 0; } }[state.sort] || best;
+                ilvl: function (p) { return p.ilvl == null ? -1 : p.ilvl; }, best: best, contact: function (p) { return hasContact(p) ? 1 : 0; },
+                note: function (p) { return p.note ? (p.note.contactedAt || "0000") + " " + p.note.updatedAt : ""; } }[state.sort] || best;
     rows.sort(function (a, b) { var x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * state.dir || a.name.localeCompare(b.name); });
+    state.rows = rows;
     function th(id, label, title) { return '<th data-s="' + id + '" class="' + (state.sort === id ? "on" : "") + '" title="' + esc(title || "") + '">' + label + (state.sort === id ? ' <span class="dir">' + (state.dir < 0 ? "▼" : "▲") + "</span>" : "") + "</th>"; }
     var html = '<table class="sc"><thead><tr>' + th("name", "Hráč") + th("spec", "Spec") + th("guild", "Guilda") +
       th("hc", "HC best", "Heroic: průměr nejlepšího percentilu přes zabité bosse") + th("hcm", "HC median") + th("my", "M best", "Mythic: průměr nejlepšího percentilu") + th("mym", "M median") +
-      th("ilvl", "ilvl") + th("contact", "Kontakt (raider.io)") + "<th>Odkazy</th></tr></thead><tbody>";
+      th("ilvl", "ilvl") + th("contact", "Kontakt (raider.io)") + th("note", "Moje poznámka", "stav oslovení, datum, text – klikni na řádek a uprav") + "<th>Odkazy</th></tr></thead><tbody>";
     rows.forEach(function (p) {
       var col = CLASS_COLOR[p.class] || "var(--ink)";
       var contact = [];
@@ -179,12 +229,20 @@ Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skrip
         '<td class="num">' + pct(p.myBest) + '<div class="sub">' + (p.myKills || 0) + " killů</div></td><td class=\"num\">" + pct(p.myMedian) + "</td>" +
         '<td class="num">' + (p.ilvl != null ? p.ilvl : "–") + "</td>" +
         '<td class="ct">' + (contact.join("") || '<span class="sub">–</span>') + bio + "</td>" +
+        '<td class="nt">' + noteCell(p.note) + "</td>" +
         '<td class="lnk"><a href="' + esc(p.wclUrl) + '" target="_blank" rel="noopener">logy</a><a href="' + esc(p.rioUrl) + '" target="_blank" rel="noopener">raider.io</a></td></tr>';
-      if (state.open[p.key]) html += '<tr class="det"><td colspan="10">' + detail(p) + "</td></tr>";
+      if (state.open[p.key]) html += '<tr class="det"><td colspan="11">' + detail(p) + "</td></tr>";
     });
     html += "</tbody></table>";
     if (!rows.length) html = '<p class="hint">Nikdo neodpovídá filtru' + (d.players && d.players.length ? "" : " – data se ještě nestáhla (tlačítko „Obnovit (WCL)“ nebo workflow scout.yml)") + ".</p>";
     $("#content").innerHTML = html;
+    var orph = d.orphans || [];
+    $("#orphans").hidden = !orph.length;
+    $("#orphans").innerHTML = orph.length ? '<h4>Poznámky k hráčům, kteří už ve výběru nejsou</h4><p class="hint">Vypadli pod hranici percentilu, změnili guildu nebo server – poznámka zůstává, kdyby se vrátili.</p>' +
+      '<table class="sc"><thead><tr><th>Hráč</th><th>Stav</th><th>Napsáno</th><th>Poznámka</th><th>Upraveno</th><th></th></tr></thead><tbody>' + orph.map(function (n) {
+        return '<tr><td class="nm">' + esc(n.name || n.key) + "</td><td>" + stBadge(n) + "</td><td>" + esc(day(n.contactedAt)) + '</td><td class="nt"><div class="txt">' + esc(n.note) + "</div></td><td>" + esc(when(n.updatedAt)) +
+          '</td><td><form class="note-ed" style="display:inline;padding:0;border:0;background:none" data-k="' + esc(n.key) + '" data-n="' + esc(n.name) + '"><button class="btn-outline" type="button" data-del="1">Smazat</button></form></td></tr>';
+      }).join("") + "</tbody></table>" : "";
   }
   function detail(p) {
     function tbl(title, list) {
@@ -195,19 +253,58 @@ Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skrip
     }
     var rec = (p.recruitment || []).map(function (r) { return '<div class="sub">🔎 ' + esc(JSON.stringify(r).slice(0, 600)) + "</div>"; }).join("");
     var rg = p.data && p.data.rioGuild ? '<div class="sub">raider.io guilda: ' + esc(p.data.rioGuild.name) + " (" + esc(p.data.rioGuild.realm) + ")</div>" : "";
-    return '<div class="cols">' + tbl("Heroic", p.data && p.data.hc) + tbl("Mythic", p.data && p.data.my) + "</div>" + (p.bio ? '<div class="bio-full">' + esc(p.bio) + "</div>" : "") + rec + rg +
+    return noteEditor(p) + '<div class="cols" style="margin-top:10px">' + tbl("Heroic", p.data && p.data.hc) + tbl("Mythic", p.data && p.data.my) + "</div>" + (p.bio ? '<div class="bio-full">' + esc(p.bio) + "</div>" : "") + rec + rg +
       '<div class="sub">staženo ' + esc(when(p.fetchedAt)) + "</div>";
   }
 
   // ---- events
-  ["diff", "minavg", "role", "cls", "contact", "q"].forEach(function (id) { $("#" + id).addEventListener("input", render); });
+  ["diff", "minavg", "role", "cls", "contact", "q", "nstat"].forEach(function (id) { $("#" + id).addEventListener("input", render); });
+  document.addEventListener("submit", function (ev) { var f = ev.target.closest("form.note-ed"); if (!f) return; ev.preventDefault(); saveNote(f, false); });
+  document.addEventListener("click", function (ev) {
+    var b = ev.target.closest("button[data-del]"); if (!b) return;
+    var f = b.closest("form.note-ed"); if (!f || !confirm("Smazat poznámku k " + f.getAttribute("data-n") + "?")) return;
+    saveNote(f, true).then(function () { if (state.data && state.data.orphans) { var k = f.getAttribute("data-k"); state.data.orphans = state.data.orphans.filter(function (n) { return n.key !== k; }); render(); } });
+  });
   $("#guilds").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (!b) return; state.guild = b.getAttribute("data-g") || ""; render(); });
   $("#content").addEventListener("click", function (ev) {
-    if (ev.target.closest("a")) return;
+    if (ev.target.closest("a") || ev.target.closest("form.note-ed")) return;
     var th = ev.target.closest("th[data-s]");
     if (th) { var s = th.getAttribute("data-s"); if (state.sort === s) state.dir = -state.dir; else { state.sort = s; state.dir = (s === "name" || s === "guild" || s === "spec") ? 1 : -1; } render(); return; }
     var tr = ev.target.closest("tr.p"); if (!tr) return;
     var k = tr.getAttribute("data-k"); state.open[k] = !state.open[k]; render();
+  });
+  // ---- Excel: the rows as shown (filter + sort), one sheet, notes included
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise(function (ok, fail) {
+      var sc = document.createElement("script");
+      sc.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      sc.onload = ok; sc.onerror = function () { fail(new Error("knihovna XLSX se nenačetla")); };
+      document.head.appendChild(sc);
+    });
+  }
+  $("#xlsx").addEventListener("click", function () {
+    var rows = state.rows || [];
+    if (!rows.length) { msg("Nic k exportu", "err"); return; }
+    $("#xlsx").disabled = true; msg("Připravuji Excel…");
+    loadXlsx().then(function () {
+      var head = ["Hráč", "Realm", "Třída", "Spec", "Role", "Guilda", "HC best", "HC median", "HC killy", "M best", "M median", "M killy", "ilvl",
+                  "BattleTag", "Discord", "Socials", "Hledá guildu", "About (raider.io)", "Stav", "Napsáno dne", "Poznámka", "Poznámka upravena", "Logy", "raider.io"];
+      var data = rows.map(function (p) {
+        var n = p.note || {};
+        return [p.name, p.realm, p.class, p.spec, p.role, p.guildName, p.hcBest, p.hcMedian, p.hcKills || 0, p.myBest, p.myMedian, p.myKills || 0, p.ilvl,
+                p.battletag, p.discord, Object.keys(p.socials || {}).map(function (k) { return k + ": " + p.socials[k]; }).join(", "),
+                p.recruitment && p.recruitment.length ? "ano" : "", p.bio, STATUS[n.status] && n.status ? STATUS[n.status] : "", n.contactedAt ? day(n.contactedAt) : "", n.note || "",
+                n.updatedAt ? when(n.updatedAt) : "", p.wclUrl, p.rioUrl];
+      });
+      var ws = XLSX.utils.aoa_to_sheet([head].concat(data));
+      ws["!cols"] = [14, 12, 12, 13, 7, 20, 8, 9, 8, 8, 9, 8, 6, 16, 16, 24, 10, 40, 10, 12, 40, 16, 40, 40].map(function (w) { return { wch: w }; });
+      ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: head.length - 1 } }) };
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Nábor");
+      XLSX.writeFile(wb, "nabor-" + today() + ".xlsx");
+      msg("Excel stažen (" + rows.length + " hráčů)", "ok");
+    }).catch(function (e) { msg("Chyba: " + e.message, "err"); }).then(function () { $("#xlsx").disabled = false; });
   });
   $("#refresh").addEventListener("click", function () {
     if (!confirm("Spustit scraping Warcraft Logs + raider.io v GitHub Actions? Trvá 10 min až 2 h (limit bodů WCL API); hotové guildy se do tabulky doplňují průběžně.")) return;

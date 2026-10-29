@@ -1,11 +1,13 @@
 // Nábor – admin-only scouting of players from the guilds ranked below us on the server: Warcraft Logs parse averages
 // (95+ on heroic or mythic) + raider.io contact info. Written by tools/recruit/wcl_scout.mjs (GitHub Actions scout.yml),
 // shown on web/scout.html (the page and its menu item exist only for a logged-in admin). D1 tables scout_guilds,
-// scout_players (migration 0010), run info in meta key scout_run.
+// scout_players (migration 0010), scout_notes (admin's contact notes, 0011), run info in meta key scout_run.
 //
 //   GET  /api/scout                    (admin) { ok, run, guilds: [...], players: [...] }
 //   GET  /api/scout/status             (admin) { ok, run, lastDispatch, running }
 //   POST /api/scout/refresh            (admin) dispatch scout.yml { minAvg?, maxRank?, diff?, reason? } (Worker secret GITHUB_TOKEN), deduped 10 min
+//   POST /api/scout/note               (admin) { key, status, contactedAt, note } → scout_notes (migration 0011; survives the scrape's
+//                                              upsert + prune, a player who drops out and returns gets the note back)
 //   POST /api/scout/run                (auth)  { runId, phase: start | progress | finish | error, ...info } → meta scout_run
 //                                              (finish with prune: true deletes guilds/players of other runs)
 //   POST /api/scout/guilds             (auth)  { runId, guilds: [{ id, name, faction, serverRank, worldRank, candidates, players }] } upsert
@@ -38,13 +40,20 @@ export async function getScout(env) {
   const run = await metaGet(env, "scout_run");
   const guilds = (await env.DB.prepare("SELECT * FROM scout_guilds ORDER BY server_rank, name").all()).results
     .map((g) => ({ id: g.id, name: g.name, faction: g.faction, serverRank: g.server_rank, worldRank: g.world_rank, candidates: g.candidates, players: g.players, fetchedAt: g.fetched_at }));
-  const players = (await env.DB.prepare("SELECT * FROM scout_players ORDER BY guild_name, name").all()).results.map((r) => ({
+  const players = (await env.DB.prepare(
+    `SELECT p.*, n.status AS n_status, n.contacted_at AS n_contacted, n.note AS n_note, n.updated_at AS n_updated
+     FROM scout_players p LEFT JOIN scout_notes n ON n.key = p.key ORDER BY p.guild_name, p.name`).all()).results.map((r) => ({
     key: r.key, name: r.name, realm: r.realm, class: r.class, spec: r.spec, role: r.role, guildId: r.guild_id, guildName: r.guild_name, ilvl: r.ilvl,
     hcBest: r.hc_best, hcMedian: r.hc_median, hcKills: r.hc_kills, myBest: r.my_best, myMedian: r.my_median, myKills: r.my_kills,
     wclUrl: r.wcl_url, rioUrl: r.rio_url, bio: r.bio, battletag: r.battletag, discord: r.discord,
     socials: parse(r.socials, {}), recruitment: parse(r.recruitment, []), data: parse(r.data, {}), fetchedAt: r.fetched_at,
+    note: r.n_updated ? { status: r.n_status || "", contactedAt: r.n_contacted || "", note: r.n_note || "", updatedAt: r.n_updated } : null,
   }));
-  return json({ ok: true, run, guilds, players }, 200, { "cache-control": "no-store" });
+  // notes of players no longer in the scrape (dropped below the threshold, left the server…) – shown in their own block
+  const orphans = (await env.DB.prepare(
+    "SELECT n.* FROM scout_notes n LEFT JOIN scout_players p ON p.key = n.key WHERE p.key IS NULL AND (n.status <> '' OR n.note <> '') ORDER BY n.updated_at DESC").all()).results
+    .map((n) => ({ key: n.key, name: n.name, status: n.status, contactedAt: n.contacted_at, note: n.note, updatedAt: n.updated_at }));
+  return json({ ok: true, run, guilds, players, orphans }, 200, { "cache-control": "no-store" });
 }
 
 export async function postRun(request, env) {
@@ -104,6 +113,29 @@ export async function postPlayers(request, env) {
   // D1 batch limit is generous, but keep statements per batch modest
   for (let i = 0; i < rows.length; i += 50) await env.DB.batch(rows.slice(i, i + 50));
   return json({ ok: true, players: rows.length });
+}
+
+const NOTE_STATUS = ["", "contacted", "replied", "talking", "declined", "joined", "skip"];
+
+/** admin's note on a player: empty status + empty note deletes the row */
+export async function postNote(request, env) {
+  let b;
+  try { b = await request.json(); } catch (e) { return json({ ok: false, error: "invalid JSON" }, 400); }
+  const key = str(b.key, 120);
+  if (!key) return json({ ok: false, error: "key required" }, 400);
+  const status = NOTE_STATUS.includes(b.status) ? b.status : "";
+  const contactedAt = /^\d{4}-\d{2}-\d{2}$/.test(String(b.contactedAt || "")) ? b.contactedAt : "";
+  const note = str(b.note, 4000).trim();
+  const now = nowIso();
+  if (!status && !note && !contactedAt) {
+    await env.DB.prepare("DELETE FROM scout_notes WHERE key = ?1").bind(key).run();
+    return json({ ok: true, note: null });
+  }
+  const name = str(b.name, 60) || ((await env.DB.prepare("SELECT name FROM scout_players WHERE key = ?1").bind(key).first()) || {}).name || key;
+  await env.DB.prepare(
+    `INSERT INTO scout_notes (key, name, status, contacted_at, note, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+     ON CONFLICT(key) DO UPDATE SET name = ?2, status = ?3, contacted_at = ?4, note = ?5, updated_at = ?6`).bind(key, name, status, contactedAt, note, now).run();
+  return json({ ok: true, note: { status, contactedAt, note, updatedAt: now } });
 }
 
 export async function refresh(request, env) {

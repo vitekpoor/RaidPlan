@@ -3,6 +3,8 @@
   roster.html - soupiska guildy z databáze (Worker GET /api/roster). Přihlášený admin (heslo → POST /api/admin/login,
   token v localStorage) upravuje roster přímo v tabulce: jména a poznámky jako políčka bez rámečku, classa a spec jako
   dropdowny (role se odvodí ze specu), pořadí a lavička tažením řádků (drag & drop). Uložení = PUT /api/roster.
+  Zobrazení (bez editace) je jeden seznam seřazený podle role main postavy (tank, heal, dps) bez linky a bez odlišení
+  lavičky (2026-10-29); lavička se nastavuje jen v editaci a používají ji Sestavy, Docházka a hub.
   web/build.mjs (Cloudflare build → dist/) kopíruje do kořene repa (assets/ -> assets/).
 -->
 <html lang="cs">
@@ -25,7 +27,7 @@
   #msg { min-height: 1.2em; font-weight: 600; } #msg.ok { color: var(--accent); } #msg.err { color: var(--dps); }
   /* těsná tabulka jako Sestavy: všech ~30 hráčů na jednu obrazovku */
   table.roster { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 4px; }
-  /* lavička = řádky pod tlustou linkou (žádné nadpisy skupin) */
+  /* lavička = řádky pod tlustou linkou, jen v editaci (zobrazení je jeden seznam podle role) */
   .roster tbody#bench tr:first-child td { border-top: 3px solid #3a433e; }
   .roster th { text-align: left; padding: 2px 6px; color: var(--muted); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; }
   .roster td { padding: 1px 6px; vertical-align: top; line-height: 1.4; }
@@ -163,7 +165,7 @@
   function rowView(p) {
     var main = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0];
     var alts = p.characters.filter(function (c) { return c !== main; });
-    return '<tr class="' + (p.bench ? "bench" : "") + '"><td class="grab"></td><td class="player"><span class="pid" title="ID hráče v databázi">' + p.id + '</span>' + esc(p.name) + '</td><td>' + (main ? charView(main) : '<div class="char"><span class="cinfo">–</span></div>') +
+    return '<tr><td class="grab"></td><td class="player"><span class="pid" title="ID hráče v databázi">' + p.id + '</span>' + esc(p.name) + '</td><td>' + (main ? charView(main) : '<div class="char"><span class="cinfo">–</span></div>') +
       '</td><td>' + alts.map(charView).join("") + '</td><td class="note">' + esc(p.note) + '</td><td class="act"></td></tr>';
   }
 
@@ -198,15 +200,19 @@
     var list = state.edit ? state.draft : state.players;
     $("#page").classList.toggle("edit", state.edit);
     var mainRows = [], benchRows = [];
-    list.forEach(function (p, i) { (p.bench ? benchRows : mainRows).push(state.edit ? rowEdit(p, i) : rowView(p)); });
     if (state.edit) {
+      list.forEach(function (p, i) { (p.bench ? benchRows : mainRows).push(rowEdit(p, i)); });
       var add = '<tr class="newrow"><td></td><td colspan="5"><button class="mini add" type="button" data-act="addplayer" data-bench="%b">+ hráč</button></td></tr>';
       mainRows.push(add.replace("%b", "0")); benchRows.push(add.replace("%b", "1"));
+    } else {
+      // view: one list, tanks → healers → dps (role of the main character), saved order within a role
+      var rank = function (p) { var m = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0]; var i = ROLES.indexOf(m ? roleOf(m) : ""); return i < 0 ? ROLES.length : i; };
+      list.map(function (p, i) { return { p: p, i: i, r: rank(p) }; }).sort(function (a, b) { return a.r - b.r || a.i - b.i; }).forEach(function (x) { mainRows.push(rowView(x.p)); });
     }
     $("#main").innerHTML = mainRows.join("") || '<tr><td></td><td colspan="5" class="note">nikdo</td></tr>';
     $("#bench").innerHTML = benchRows.join("");
     var nm = list.filter(function (p) { return !p.bench; }).length, nb = list.length - nm;
-    $("#count").textContent = nm + " v rosteru" + (nb ? " · " + nb + " na lavičce (pod linkou)" : "") + " ·";
+    $("#count").textContent = state.edit ? nm + " v rosteru" + (nb ? " · " + nb + " na lavičce (pod linkou)" : "") + " ·" : list.length + " hráčů ·";
     $("#adminbox").hidden = !state.token; $("#loginhint").hidden = !!state.token;
     $("#edit").hidden = state.edit; $("#save").hidden = !state.edit; $("#cancel").hidden = !state.edit;
     $("#hint").textContent = state.edit ? "Piš přímo do tabulky. Číslo vlevo je ID hráče v databázi (zůstává i po přejmenování; jména hráčů musí být jedinečná). Classa a spec jsou dropdowny (role se odvodí ze specu), ★ = main postava, přetažením řádku na jiného hráče si oba prohodí místo (i roster ↔ lavička = řádky pod tlustou linkou), přetažením na volné místo pod linkou / nad ní se hráč zařadí na konec lavičky / rosteru. Nic se neuloží, dokud nedáš Uložit."

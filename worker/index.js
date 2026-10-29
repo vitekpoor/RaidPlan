@@ -14,7 +14,7 @@
 //   meta comps   → worker/comps.js      /api/comps (GET, POST auth), /api/comps/refresh (admin), /api/comps/status
 //   raid time    → worker/raidtime.js   /api/raidtime (GET, PUT admin), /report, /announce (admin), /status; Cron Trigger 18:00 Prague → Discord
 //   timelines    → worker/timeline.js   /api/timeline[?boss=] (GET), PUT / DELETE (admin), /api/timeline/lorrgs?p= (proxy), /api/timeline/raidplan?boss= (RaidPlan note) – lorrgs.io cooldown timelines
-//   nábor        → worker/scout.js      /api/scout, /status, /refresh (admin), /run, /guilds, /players (auth) – WCL scouting of players from guilds below us
+//   nábor        → worker/scout.js      /api/scout, /status, /refresh, /note (admin), /run, /guilds, /players (auth) – WCL scouting of players from guilds below us
 //
 // auth = header "Authorization: Bearer <API_TOKEN>" (Worker secret API_TOKEN; the same value is the GitHub Actions
 // secret ES_API_TOKEN / sim_runner.config.json "api_token"). Writers: tools/roster/sim_results.py, sim_runner.py.
@@ -29,6 +29,7 @@ import migration0007 from "./migrations/0007_absence_time.sql";
 import migration0008 from "./migrations/0008_raid_days.sql";
 import migration0009 from "./migrations/0009_timelines.sql";
 import migration0010 from "./migrations/0010_scout.sql";
+import migration0011 from "./migrations/0011_scout_notes.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
@@ -43,7 +44,7 @@ import { getTimeline, putTimeline, deleteTimeline, lorrgsProxy, raidplanNote } f
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007], ["0008_raid_days", migration0008], ["0009_timelines", migration0009], ["0010_scout", migration0010]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007], ["0008_raid_days", migration0008], ["0009_timelines", migration0009], ["0010_scout", migration0010], ["0011_scout_notes", migration0011]];
 
 export default {
   async fetch(request, env, ctx) {
@@ -186,6 +187,7 @@ async function route(request, env, ctx, url) {
   if (path === "/api/scout" && method === "GET") return admin(() => scout.getScout(env));
   if (path === "/api/scout/status" && method === "GET") return admin(() => scout.status(env));
   if (path === "/api/scout/refresh" && method === "POST") return admin(() => scout.refresh(request, env));
+  if (path === "/api/scout/note" && method === "POST") return admin(() => scout.postNote(request, env));
   if (path === "/api/scout/run" && method === "POST") return auth() || scout.postRun(request, env);
   if (path === "/api/scout/guilds" && method === "POST") return auth() || scout.postGuilds(request, env);
   if (path === "/api/scout/players" && method === "POST") return auth() || scout.postPlayers(request, env);
