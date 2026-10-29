@@ -23,7 +23,7 @@
   sestavy / rosteru – checkbox "jen roster", tlačítko "vše" odkryje i ostatní; výchozí zaškrtnuté = řádky, jejichž spec je
   v rosteru; tag se předvyplní z rosteru: hráč řádku → jeho postava, bez hráče → všechny postavy toho specu oddělené mezerou
   – každé jméno = SAMOSTATNÝ řádek reminderu, víc jmen v jednom tag: se ve hře nenačte správně), nic v rosteru → spec ID;
-  výchozí i řádek Boss s tag:everyone, dur:2), řádky seřazené podle času.
+  výchozí i řádek Boss s tag:everyone, dur auto), řádky seřazené podle času.
   Oba NSRT exporty umí (checkbox "i poznámka z RaidPlanu", výchozí zapnuto, když plán poznámku má) předřadit poznámku bosse
   z RaidPlan.io plánu (odkaz z lineups, Worker /api/timeline/raidplan?boss=NN&fresh=1 → header/step/footer notes_raw, bez cache,
   takže změna uložená v RaidPlanu je v exportu hned) – NSRT řádky bez
@@ -301,7 +301,7 @@
   <h5 id="nsrtTitle">NSRT reminder</h5>
   <div class="two" style="display:flex;gap:8px">
     <label style="flex:1">tag (kdo) <input type="text" id="nsrtTag" placeholder="jméno postavy / everyone / healer / spec ID"></label>
-    <label style="flex:0 0 7rem" title="dur:N – jak dlouho před časem se reminder ukáže (výchozí 2 s, prázdné = nastavení NSRT)">dur (s) <input type="number" id="nsrtDur" min="0" step="1" value="2" placeholder="auto"></label>
+    <label style="flex:0 0 7rem" title="dur:N – jak dlouho před časem se reminder ukáže (výchozí auto = nastavení NSRT)">dur (s) <input type="number" id="nsrtDur" min="0" step="1" placeholder="auto"></label>
   </div>
   <div class="list" id="nsrtLanes" style="max-height:9rem"></div>
   <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="před remindery se vloží poznámka z RaidPlan.io plánu bosse (rozpis skupin, značky…) – NSRT ji ukáže jako extra note"><input type="checkbox" id="nsrtNote"> i poznámka z RaidPlanu <small id="nsrtNoteInfo" class="prog" style="margin:0"></small></label>
@@ -318,7 +318,7 @@
   <div class="chips" style="align-items:center;white-space:nowrap"><button class="mini" type="button" data-pick="roster">roster</button><button class="mini" type="button" data-pick="all">vše</button><button class="mini" type="button" data-pick="none">nic</button>
     <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="skrýt řádky speců, které v sestavě bosse / rosteru nemáme"><input type="checkbox" id="nsrtAllOnly" checked> jen roster</label>
     <label style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;width:auto"><input type="checkbox" id="nsrtAllBoss" checked> i řádek Boss (tag everyone)</label>
-    <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="dur:N – jak dlouho před časem se reminder ukáže (výchozí 2 s, prázdné = nastavení NSRT)">dur (s) <input type="number" id="nsrtAllDur" min="0" step="1" value="2" placeholder="auto" style="width:4.5rem"></label></div>
+    <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="dur:N – jak dlouho před časem se reminder ukáže (výchozí auto = nastavení NSRT)">dur (s) <input type="number" id="nsrtAllDur" min="0" step="1" placeholder="auto" style="width:4.5rem"></label></div>
   <div class="list" id="nsrtAllRows" style="max-height:14rem"></div>
   <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="před remindery se vloží poznámka z RaidPlan.io plánu bosse (rozpis skupin, značky…) – NSRT ji ukáže jako extra note"><input type="checkbox" id="nsrtAllNote"> i poznámka z RaidPlanu <small id="nsrtAllNoteInfo" class="prog" style="margin:0"></small></label>
   <label style="display:inline-flex;gap:4px;align-items:center;width:auto" title="jména hráčů v poznámce z RaidPlanu se přepíšou na postavy, které na tohoto bosse hrají podle sestavy (Gina → Ejakulátorka, „Houdy (Druid)“ → Tragicomix)"><input type="checkbox" id="nsrtAllChars" checked> jména postav místo hráčů</label>
@@ -1134,14 +1134,14 @@
   });
 
   // NSRT reminder export of one row (format of NorthernSkyRaidTools/Reminders.lua: time relative to the phase start)
-  var nsrtRow = null, NSRT_DUR = 2;   // default dur: (seconds the reminder shows before the cast) – what the RL writes by hand
+  var nsrtRow = null;
   function openNsrt(r) {
     nsrtRow = r;
     var sp = r ? SPEC[r.spec] : null, chars = r ? (state.roster[r.spec] || []) : [];
     $("nsrtTitle").textContent = "NSRT reminder – " + (r ? rowTitle(r) : "Boss");
     $("nsrtTag").value = r ? (r.char ? charNow(r.char) : (chars[0] ? chars[0].char : (SPEC_ID[r.spec] ? String(SPEC_ID[r.spec]) : "everyone"))) : "everyone";
     $("nsrtTag").placeholder = r && SPEC_ID[r.spec] ? "jméno postavy / everyone / spec ID " + SPEC_ID[r.spec] : "jméno postavy / everyone / healer / tank";
-    $("nsrtDur").value = String(NSRT_DUR);
+    $("nsrtDur").value = "";   // auto = NSRT setting
     var box = $("nsrtLanes"); box.innerHTML = "";
     var lanes = r ? r.lanes : state.doc.bossRow.lanes, hide = r ? [] : bossHidden();
     lanes.forEach(function (id) {
@@ -1233,7 +1233,7 @@
     });
     if (!state.doc.rows.length) box.textContent = "Timeline nemá žádné řádky.";
     $("nsrtAllOnly").checked = true; box.classList.add("only");
-    $("nsrtAllBoss").checked = true; $("nsrtAllDur").value = String(NSRT_DUR);
+    $("nsrtAllBoss").checked = true; $("nsrtAllDur").value = "";   // Boss row on, dur auto (NSRT setting)
     buildNsrtAll(); wireRaidplanNote("nsrtAllNote", "nsrtAllNoteInfo", buildNsrtAll); $("dlgNsrtAll").showModal();
   }
   function buildNsrtAll() {
