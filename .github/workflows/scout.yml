@@ -1,11 +1,12 @@
 name: Nábor (Warcraft Logs → databáze)
 
-# Najde hráče guild, které jsou na serveru v žebříčku progressu pod námi (Eternal Shadows a horší, do max. ranku),
-# s průměrným percentilem parsů 95+ na heroicu nebo mythicu (Warcraft Logs API), doplní kontakt z raider.io
+# Najde hráče guild, které jsou na realmu v mythic žebříčku raider.io pod námi (Eternal Shadows a horší, do max. ranku):
+# rostery jejich first killů z raider.io, průměrný percentil parsů 95+ z Warcraft Logs API (diff auto = mythic u guild
+# s mythic progressem, jinak heroic), doplní kontakt z raider.io
 # (About, BattleTag, Discord, socials, looking-for-guild profil) a uloží je přes Worker API do D1
 # (tabulky scout_guilds, scout_players). Zobrazuje admin stránka web/scout.html ("Nábor").
 # Spouští se jednou týdně a ručně (stránka přes Worker POST /api/scout/refresh → workflow_dispatch, nebo Run workflow).
-# WCL API má limit 3600 bodů/h – skript podle potřeby čeká na reset, celý běh může trvat až ~2 h.
+# WCL API má limit 3600 bodů/h – auto běh ≈ 3000 bodů / pár minut; both ≈ dvojnásobek, skript pak čeká na hodinový reset.
 #
 # Secrets: WCL_CLIENT_ID + WCL_CLIENT_SECRET (https://www.warcraftlogs.com/api/clients), ES_API_TOKEN (Worker API_TOKEN).
 
@@ -22,6 +23,11 @@ on:
         description: "Do jakého ranku guild na serveru se dívat (progress)"
         type: string
         default: "20"
+      diff:
+        description: "Obtížnost parsů: auto = mythic u guild s mythic progressem, jinak heroic (nejrychlejší); both = obě; hc; my"
+        type: choice
+        options: [auto, both, hc, my]
+        default: auto
       reason:
         description: "Kdo/co spustil (jen do logu)"
         type: string
@@ -48,4 +54,4 @@ jobs:
         with:
           node-version: "22"
       - name: Scout players
-        run: node tools/recruit/wcl_scout.mjs --min-avg "${{ inputs.min_avg || '95' }}" --max-rank "${{ inputs.max_rank || '20' }}" --reason "${{ inputs.reason || 'schedule' }}"
+        run: node tools/recruit/wcl_scout.mjs --min-avg "${{ inputs.min_avg || '95' }}" --max-rank "${{ inputs.max_rank || '20' }}" --diff "${{ inputs.diff || 'auto' }}" --reason "${{ inputs.reason || 'schedule' }}"

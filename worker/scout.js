@@ -5,7 +5,7 @@
 //
 //   GET  /api/scout                    (admin) { ok, run, guilds: [...], players: [...] }
 //   GET  /api/scout/status             (admin) { ok, run, lastDispatch, running }
-//   POST /api/scout/refresh            (admin) dispatch scout.yml { minAvg?, maxRank?, reason? } (Worker secret GITHUB_TOKEN), deduped 10 min
+//   POST /api/scout/refresh            (admin) dispatch scout.yml { minAvg?, maxRank?, diff?, reason? } (Worker secret GITHUB_TOKEN), deduped 10 min
 //   POST /api/scout/run                (auth)  { runId, phase: start | progress | finish | error, ...info } → meta scout_run
 //                                              (finish with prune: true deletes guilds/players of other runs)
 //   POST /api/scout/guilds             (auth)  { runId, guilds: [{ id, name, faction, serverRank, worldRank, candidates, players }] } upsert
@@ -117,6 +117,7 @@ export async function refresh(request, env) {
   const inputs = {
     min_avg: String(Math.min(100, Math.max(0, Number(body.minAvg) || 95))),
     max_rank: String(Math.min(100, Math.max(1, parseInt(body.maxRank, 10) || 20))),
+    diff: ["auto", "both", "hc", "my"].includes(body.diff) ? body.diff : "auto",
     reason: str(body.reason || "page", 80),
   };
   const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW}/dispatches`, {
