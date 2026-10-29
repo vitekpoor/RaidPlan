@@ -16,7 +16,7 @@ import path from "node:path";
 
 const WEB = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(WEB, "..", "dist");
-const PAGES = ["loot.html", "roster.html", "attendance.html", "lineups.html", "comps.html", "flopik.html", "timeline.html"];
+const PAGES = ["loot.html", "roster.html", "attendance.html", "lineups.html", "comps.html", "flopik.html", "timeline.html", "scout.html"];
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST, { recursive: true });

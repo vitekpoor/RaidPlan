@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<!--
+  scout.html - Nábor (jen pro admina): hráči guild, které jsou na serveru v žebříčku progressu pod námi (Eternal Shadows
+  a horší, do max. ranku), s průměrným percentilem parsů 95+ na heroicu nebo mythicu podle Warcraft Logs, plus kontakt
+  z raider.io (About, BattleTag, Discord, socials, looking-for-guild profil). Data stahuje tools/recruit/wcl_scout.mjs
+  (GitHub Actions scout.yml, pondělí + ručně) do D1 přes Worker; stránka čte GET /api/scout (admin token – bez přihlášení
+  Worker vrátí 401 a stránka nic neukáže; položka menu "Nábor" se zobrazí jen přihlášenému adminovi, viz es-auth.js).
+-->
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Nábor – Eternal Shadows</title>
+<link rel="icon" href="assets/images/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<style>
+  :root { --wrap: 1600px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  .bar .sp { flex: 1; }
+  .bar select, .bar input[type=text], .bar input[type=number] { background: var(--surface2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; }
+  .bar input[type=number] { width: 4.5rem; }
+  .bar .btn, .bar .btn-outline { padding: 7px 16px; font-size: 13.5px; }
+  #msg { min-height: 1.2em; font-weight: 600; } #msg.ok { color: var(--accent); } #msg.err { color: var(--dps); }
+  #locked { padding: 24px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); text-align: center; }
+  table.sc { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.sc th, table.sc td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.sc th { color: var(--muted); font-weight: 600; white-space: nowrap; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--ground, #0a0c0b); }
+  table.sc th.on { color: var(--ink-strong); }
+  table.sc th .dir { opacity: .6; font-size: 11px; }
+  table.sc tr.p { cursor: pointer; } table.sc tr.p:hover td { background: rgba(255,255,255,.03); }
+  table.sc td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.sc .nm { font-weight: 700; }
+  table.sc .sub { color: var(--muted); font-size: 11.5px; }
+  .pct { font-weight: 700; } .pct.p25 { color: #1eff00; } .pct.p50 { color: #0070ff; } .pct.p75 { color: #a335ee; } .pct.p95 { color: #ff8000; } .pct.p99 { color: #e268a8; } .pct.p100 { color: #e5cc80; } .pct.p0 { color: #666; }
+  .role { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .role.tank { background: var(--tank, #6aa3ff); } .role.healer { background: var(--heal, #4ad17a); } .role.dps { background: var(--dps, #ff6a6a); }
+  .lnk a { margin-right: 8px; white-space: nowrap; }
+  .ct { max-width: 26rem; } .ct .bio { color: var(--muted); font-size: 12px; white-space: pre-wrap; max-height: 3.3em; overflow: hidden; }
+  .ct .tag { display: inline-block; background: var(--surface2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; margin: 0 4px 3px 0; font-size: 12px; white-space: nowrap; }
+  .ct .tag.lfg { border-color: var(--accent); color: var(--accent); }
+  tr.det td { background: rgba(255,255,255,.025); font-size: 12px; }
+  .det .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; } @media (max-width: 900px) { .det .cols { grid-template-columns: 1fr; } }
+  .det table { border-collapse: collapse; } .det td, .det th { padding: 2px 8px 2px 0; border: 0; font-size: 12px; }
+  .det .bio-full { white-space: pre-wrap; color: var(--muted); margin-top: 6px; }
+  .guilds { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .guilds button { background: var(--surface2); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  .guilds button.on { color: var(--ink-strong); border-color: var(--accent); }
+  .guilds button small { opacity: .7; }
+  #runlog { white-space: pre-wrap; font: 11.5px/1.4 ui-monospace, Consolas, monospace; color: var(--muted); max-height: 14rem; overflow: auto; background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-top: 10px; }
+  .hint code { font-size: 12px; }
+</style>
+</head>
+<body>
+<!-- @nav -->
+<div class="page">
+<div class="card">
+<div class="intro">
+  <h4><em>Nábor</em> – hráči z guild pod námi</h4>
+  <p>Guildy na našem serveru, které jsou v žebříčku progressu pod Eternal Shadows (do zvoleného ranku), a jejich hráči s průměrným percentilem parsů 95+ na heroicu nebo mythicu (Warcraft Logs). U každého odkaz na logy a raider.io a kontakt z raider.io profilu (About, BattleTag, Discord), pokud ho má vyplněný. Jen pro přihlášeného admina.</p>
+</div>
+
+<div id="locked">🔒 Stránka je jen pro admina – přihlas se vpravo nahoře.</div>
+
+<div id="app" hidden>
+<div class="bar">
+  <span id="status">Načítám…</span>
+  <span class="sp"></span>
+  <span id="msg"></span>
+  <label>Obtížnost <select id="diff"><option value="any">HC nebo M</option><option value="hc">Heroic</option><option value="my">Mythic</option></select></label>
+  <label>Min. avg <input type="number" id="minavg" min="0" max="100" step="1" value="95"></label>
+  <label>Role <select id="role"><option value="">všechny</option><option value="tank">tank</option><option value="healer">healer</option><option value="dps">DPS</option></select></label>
+  <label>Třída <select id="cls"><option value="">všechny</option></select></label>
+  <label><input type="checkbox" id="contact"> jen s kontaktem</label>
+  <input type="text" id="q" placeholder="hledat jméno…">
+  <span id="adminbox"><button class="btn-outline" id="refresh" type="button" title="spustí scraping Warcraft Logs + raider.io v GitHub Actions (10 min až 2 h podle limitu bodů WCL API)">Obnovit (WCL)</button></span>
+</div>
+<div class="guilds" id="guilds"></div>
+<div id="content"></div>
+<div id="runlog" hidden></div>
+</div>
+
+<p class="hint">Zdroj: <a href="https://www.warcraftlogs.com/" target="_blank" rel="noopener">Warcraft Logs</a> (API) – žebříček progressu guild na serveru, parsy hráčů na každém bossovi (Best / Median Perf. Avg = průměr nejlepšího / mediánového percentilu přes zabité bosse; healeři podle HPS) a <a href="https://raider.io/" target="_blank" rel="noopener">raider.io</a> profil (About, BattleTag, Discord, socials, „hledám guildu“). Kandidáti se berou z top 100 parsů serveru na každém bossovi (po třídách), takže hráč, který nikde na serveru v top 100 není, tu nebude – 95+ hráči ale jsou.
+Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skript <code>tools/recruit/wcl_scout.mjs</code>), admin může spustit ručně tlačítkem.</p>
+</div>
+</div>
+
+<footer>
+  <p>Eternal Shadows · Burning Blade EU</p>
+  <p class="credit">Design: <a href="https://templatemo.com/tm-579-cyborg-gaming" target="_blank" rel="noopener">TemplateMo</a> (Cyborg Gaming, CC BY 4.0)</p>
+</footer>
+
+<script src="assets/js/es-auth.js"></script>
+<script>
+(function () {
+  var API_BASE = /(^|\.)workers\.dev$/.test(location.hostname) ? "" : "https://eternal-shadows.vitek-poor.workers.dev";
+  var CLASS_COLOR = { "Death Knight": "#C41E3A", "Demon Hunter": "#A330C9", Druid: "#FF7C0A", Evoker: "#33937F", Hunter: "#AAD372", Mage: "#3FC7EB",
+                      Monk: "#00FF98", Paladin: "#F48CBA", Priest: "#FFFFFF", Rogue: "#FFF468", Shaman: "#0070DD", Warlock: "#8788EE", Warrior: "#C69B3A" };
+  var $ = function (s) { return document.querySelector(s); };
+  var state = { token: window.esAuth ? esAuth.token() : null, data: null, guild: "", sort: "best", dir: -1, open: {}, polling: null };
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function msg(t, cls) { var m = $("#msg"); m.textContent = t || ""; m.className = cls || ""; }
+  function pctCls(v) { return v == null ? "p0" : v >= 100 ? "p100" : v >= 99 ? "p99" : v >= 95 ? "p95" : v >= 75 ? "p75" : v >= 50 ? "p50" : v >= 25 ? "p25" : "p0"; }
+  function pct(v) { return v == null ? '<span class="pct p0">–</span>' : '<span class="pct ' + pctCls(v) + '">' + v.toFixed(1) + "</span>"; }
+  function when(iso) { return iso ? new Date(iso).toLocaleString("cs-CZ") : "–"; }
+  function best(p) { var d = $("#diff").value; return d === "hc" ? p.hcBest : d === "my" ? p.myBest : Math.max(p.hcBest == null ? -1 : p.hcBest, p.myBest == null ? -1 : p.myBest); }
+  function hasContact(p) { return !!(p.battletag || p.discord || (p.recruitment && p.recruitment.length) || Object.keys(p.socials || {}).length); }
+
+  function load() {
+    if (!state.token) { $("#locked").hidden = false; $("#app").hidden = true; return Promise.resolve(); }
+    $("#locked").hidden = true; $("#app").hidden = false; $("#status").textContent = "Načítám…";
+    return fetch(API_BASE + "/api/scout", { headers: esAuth.headers(), cache: "no-store" }).then(function (r) {
+      if (r.status === 401) { esAuth.logout(); throw new Error("Přihlášení vypršelo – přihlas se znovu."); }
+      return r.json();
+    }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "načtení selhalo");
+      state.data = d; fillClasses(); render();
+    }).catch(function (e) { $("#status").textContent = "Chyba: " + e.message; });
+  }
+  function fillClasses() {
+    var sel = $("#cls"), cur = sel.value, seen = {};
+    (state.data.players || []).forEach(function (p) { seen[p.class] = 1; });
+    sel.innerHTML = '<option value="">všechny</option>' + Object.keys(seen).sort().map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + "</option>"; }).join("");
+    sel.value = cur;
+  }
+
+  function render() {
+    var d = state.data; if (!d) return;
+    var run = d.run || {};
+    var running = run.phase === "start" || run.phase === "progress";
+    $("#status").innerHTML = (run.finishedAt ? "Poslední sběr " + esc(when(run.finishedAt)) : run.startedAt ? "Běh od " + esc(when(run.startedAt)) : "Zatím žádný sběr") +
+      (run.ourRank ? " · " + esc(run.ourGuild || "my") + " #" + run.ourRank + " na serveru, guildy #" + (run.ourRank + 1) + "–#" + esc(run.maxRank || "?") : "") +
+      (run.phase === "error" ? ' · <b style="color:var(--dps)">poslední běh selhal: ' + esc(run.error || "") + "</b>" : "") +
+      (running ? ' · <b style="color:var(--accent)">⏳ běží ' + (run.done != null ? run.done + "/" + run.of + " guild, " + (run.players || 0) + " hráčů" : "") + "</b>" : "") +
+      " · " + (d.players || []).length + " hráčů z " + (d.guilds || []).length + " guild";
+    $("#runlog").hidden = !run.log; $("#runlog").textContent = run.log || "";
+    // guild pills
+    var counts = {};
+    (d.players || []).forEach(function (p) { counts[p.guildId] = (counts[p.guildId] || 0) + 1; });
+    $("#guilds").innerHTML = '<button type="button" data-g="" class="' + (state.guild ? "" : "on") + '">všechny guildy</button>' + (d.guilds || []).map(function (g) {
+      return '<button type="button" data-g="' + g.id + '" class="' + (String(state.guild) === String(g.id) ? "on" : "") + '" title="' + esc(g.faction) + ', world #' + esc(g.worldRank || "?") + '">#' + esc(g.serverRank || "?") + " " + esc(g.name) + " <small>" + (counts[g.id] || 0) + "/" + esc(g.candidates || 0) + "</small></button>";
+    }).join("");
+    // rows
+    var minAvg = Number($("#minavg").value) || 0, role = $("#role").value, cls = $("#cls").value, q = $("#q").value.trim().toLowerCase(), onlyC = $("#contact").checked, diff = $("#diff").value;
+    var rows = (d.players || []).filter(function (p) {
+      if (state.guild && String(p.guildId) !== String(state.guild)) return false;
+      if (role && p.role !== role) return false;
+      if (cls && p.class !== cls) return false;
+      if (onlyC && !hasContact(p)) return false;
+      if (q && (p.name + " " + p.guildName + " " + p.spec + " " + p.bio).toLowerCase().indexOf(q) < 0) return false;
+      var b = best(p); return b != null && b >= minAvg;
+    });
+    var key = { name: function (p) { return p.name.toLowerCase(); }, guild: function (p) { return (p.guildName || "").toLowerCase(); }, spec: function (p) { return p.class + " " + p.spec; },
+                hc: function (p) { return p.hcBest == null ? -1 : p.hcBest; }, hcm: function (p) { return p.hcMedian == null ? -1 : p.hcMedian; },
+                my: function (p) { return p.myBest == null ? -1 : p.myBest; }, mym: function (p) { return p.myMedian == null ? -1 : p.myMedian; },
+                ilvl: function (p) { return p.ilvl == null ? -1 : p.ilvl; }, best: best, contact: function (p) { return hasContact(p) ? 1 : 0; } }[state.sort] || best;
+    rows.sort(function (a, b) { var x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * state.dir || a.name.localeCompare(b.name); });
+    function th(id, label, title) { return '<th data-s="' + id + '" class="' + (state.sort === id ? "on" : "") + '" title="' + esc(title || "") + '">' + label + (state.sort === id ? ' <span class="dir">' + (state.dir < 0 ? "▼" : "▲") + "</span>" : "") + "</th>"; }
+    var html = '<table class="sc"><thead><tr>' + th("name", "Hráč") + th("spec", "Spec") + th("guild", "Guilda") +
+      th("hc", "HC best", "Heroic: průměr nejlepšího percentilu přes zabité bosse") + th("hcm", "HC median") + th("my", "M best", "Mythic: průměr nejlepšího percentilu") + th("mym", "M median") +
+      th("ilvl", "ilvl") + th("contact", "Kontakt (raider.io)") + "<th>Odkazy</th></tr></thead><tbody>";
+    rows.forEach(function (p) {
+      var col = CLASS_COLOR[p.class] || "var(--ink)";
+      var contact = [];
+      if (p.battletag) contact.push('<span class="tag" title="BattleTag">🎮 ' + esc(p.battletag) + "</span>");
+      if (p.discord) contact.push('<span class="tag" title="Discord">💬 ' + esc(p.discord) + "</span>");
+      Object.keys(p.socials || {}).forEach(function (k) { contact.push('<span class="tag">' + esc(k) + ": " + esc(p.socials[k]) + "</span>"); });
+      if (p.recruitment && p.recruitment.length) contact.push('<span class="tag lfg" title="má na raider.io profil „hledám guildu“">🔎 hledá guildu</span>');
+      var bio = p.bio ? '<div class="bio" title="' + esc(p.bio) + '">' + esc(p.bio) + "</div>" : "";
+      html += '<tr class="p" data-k="' + esc(p.key) + '"><td><span class="nm" style="color:' + col + '">' + esc(p.name) + '</span><div class="sub">' + esc(p.realm) + "</div></td>" +
+        '<td><span class="role ' + esc(p.role) + '"></span>' + esc(p.spec) + '<div class="sub">' + esc(p.class) + "</div></td>" +
+        "<td>" + esc(p.guildName) + "</td>" +
+        '<td class="num">' + pct(p.hcBest) + '<div class="sub">' + (p.hcKills || 0) + " killů</div></td><td class=\"num\">" + pct(p.hcMedian) + "</td>" +
+        '<td class="num">' + pct(p.myBest) + '<div class="sub">' + (p.myKills || 0) + " killů</div></td><td class=\"num\">" + pct(p.myMedian) + "</td>" +
+        '<td class="num">' + (p.ilvl != null ? p.ilvl : "–") + "</td>" +
+        '<td class="ct">' + (contact.join("") || '<span class="sub">–</span>') + bio + "</td>" +
+        '<td class="lnk"><a href="' + esc(p.wclUrl) + '" target="_blank" rel="noopener">logy</a><a href="' + esc(p.rioUrl) + '" target="_blank" rel="noopener">raider.io</a></td></tr>';
+      if (state.open[p.key]) html += '<tr class="det"><td colspan="10">' + detail(p) + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    if (!rows.length) html = '<p class="hint">Nikdo neodpovídá filtru' + (d.players && d.players.length ? "" : " – data se ještě nestáhla (tlačítko „Obnovit (WCL)“ nebo workflow scout.yml)") + ".</p>";
+    $("#content").innerHTML = html;
+  }
+  function detail(p) {
+    function tbl(title, list) {
+      if (!list || !list.length) return "<div><b>" + title + "</b><div class=\"sub\">žádné parsy</div></div>";
+      return "<div><b>" + title + "</b><table><tr><th>Boss</th><th>best</th><th>median</th><th>killy</th><th>spec</th></tr>" + list.map(function (b) {
+        return "<tr><td>" + esc(b.boss) + '</td><td class="num">' + pct(b.best) + '</td><td class="num">' + pct(b.median) + "</td><td class=\"num\">" + (b.kills || 0) + "</td><td>" + esc(b.spec) + "</td></tr>";
+      }).join("") + "</table></div>";
+    }
+    var rec = (p.recruitment || []).map(function (r) { return '<div class="sub">🔎 ' + esc(JSON.stringify(r).slice(0, 600)) + "</div>"; }).join("");
+    var rg = p.data && p.data.rioGuild ? '<div class="sub">raider.io guilda: ' + esc(p.data.rioGuild.name) + " (" + esc(p.data.rioGuild.realm) + ")</div>" : "";
+    return '<div class="cols">' + tbl("Heroic", p.data && p.data.hc) + tbl("Mythic", p.data && p.data.my) + "</div>" + (p.bio ? '<div class="bio-full">' + esc(p.bio) + "</div>" : "") + rec + rg +
+      '<div class="sub">staženo ' + esc(when(p.fetchedAt)) + "</div>";
+  }
+
+  // ---- events
+  ["diff", "minavg", "role", "cls", "contact", "q"].forEach(function (id) { $("#" + id).addEventListener("input", render); });
+  $("#guilds").addEventListener("click", function (ev) { var b = ev.target.closest("button"); if (!b) return; state.guild = b.getAttribute("data-g") || ""; render(); });
+  $("#content").addEventListener("click", function (ev) {
+    if (ev.target.closest("a")) return;
+    var th = ev.target.closest("th[data-s]");
+    if (th) { var s = th.getAttribute("data-s"); if (state.sort === s) state.dir = -state.dir; else { state.sort = s; state.dir = (s === "name" || s === "guild" || s === "spec") ? 1 : -1; } render(); return; }
+    var tr = ev.target.closest("tr.p"); if (!tr) return;
+    var k = tr.getAttribute("data-k"); state.open[k] = !state.open[k]; render();
+  });
+  $("#refresh").addEventListener("click", function () {
+    if (!confirm("Spustit scraping Warcraft Logs + raider.io v GitHub Actions? Trvá 10 min až 2 h (limit bodů WCL API); hotové guildy se do tabulky doplňují průběžně.")) return;
+    $("#refresh").disabled = true; msg("Spouštím…");
+    fetch(API_BASE + "/api/scout/refresh", { method: "POST", headers: esAuth.headers({ "Content-Type": "application/json" }), body: JSON.stringify({ minAvg: Number($("#minavg").value) || 95, reason: "scout page" }) })
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) throw new Error(d.error || "spuštění selhalo");
+        msg(d.message || "spuštěno", "ok"); poll();
+      }).catch(function (e) { msg("Chyba: " + e.message, "err"); }).then(function () { $("#refresh").disabled = false; });
+  });
+  function poll() {
+    if (state.polling) clearInterval(state.polling);
+    var n = 0;
+    state.polling = setInterval(function () {
+      n++;
+      fetch(API_BASE + "/api/scout/status", { headers: esAuth.headers(), cache: "no-store" }).then(function (r) { return r.json(); }).then(function (s) {
+        if (!s.ok) return;
+        if (s.run && state.data && JSON.stringify(s.run) !== JSON.stringify(state.data.run)) load();
+        if (!s.running || n > 600) { clearInterval(state.polling); state.polling = null; load(); }
+      }).catch(function () {});
+    }, 20000);
+  }
+
+  if (window.esAuth) esAuth.onChange(function (t) { state.token = t; load(); });
+  load().then(function () { if (state.data && state.data.run && (state.data.run.phase === "start" || state.data.run.phase === "progress")) poll(); });
+})();
+</script>
+</body>
+</html>

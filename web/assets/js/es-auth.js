@@ -24,6 +24,9 @@
   function renderBtn() {
     if (!box) return;
     var t = token();
+    // menu items only an admin should see (nav.html <li class="admin-only" hidden>, e.g. Nábor) – the pages themselves
+    // read admin-only endpoints, so without the token they show nothing anyway
+    document.querySelectorAll(".main-nav .admin-only").forEach(function (li) { li.hidden = !t; });
     box.innerHTML = t
       ? '<button type="button" class="es-auth-btn on" title="přihlášený admin"><span class="dot"></span>Admin</button><div class="es-auth-pop" hidden><p>Přihlášený raid leader – můžeš upravovat roster, sestavy, docházku a absence.</p><button type="button" class="es-auth-out">Odhlásit</button></div>'
       : '<button type="button" class="es-auth-btn">Přihlásit</button><div class="es-auth-pop" hidden><label>Heslo admina<input type="password" autocomplete="current-password" placeholder="heslo"></label><button type="button" class="es-auth-go">Přihlásit</button><span class="es-auth-err"></span></div>';
