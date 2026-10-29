@@ -32,6 +32,8 @@
   postavu, kterou hráč na tohoto bosse hraje podle sestavy (Gina → Ejakulátorka, „Houdy (Druid)“ → Tragicomix) – v RaidPlanu
   zůstávají jména hráčů. Pravidla jako raidplan.py replace_in_text: hranice slov (i za |cffRRGGBB), bez ohledu na velikost
   písmen a diakritiku, jen slova s velkým počátečním písmenem ("were"/"global" v textu zůstanou), jeden průchod.
+  Stejnou mapou (state.nameMap z buildRoster) projde i tag řádku v exportu: řádek má uložené r.char z doby přiřazení (nebo ručně
+  napsané jméno hráče), takže "Schizoid" se v tagu přepíše na postavu podle sestavy (Schizoiddh) – charNow().
   Hráči u speců (state.roster) se berou ze Sestavy bosse (lineups.html, /api/lineups; slot "Hráč", "Hráč (Classa)" nebo
   "Hráč (Classa / spec)" = jeden spec na hráče – spec ze slotu, jinak spec postavy v rosteru); bez sestavy bosse celý roster
   podle specu každé postavy (tak byl hráč se dvěma postavami jedné classy v obou specech najednou).
@@ -647,6 +649,7 @@
       state.rosterFrom = "celý roster (boss nemá sestavu)";
     }
     state.roster = m;
+    state.nameMap = noteNameMap();   // player / any character → the character brought to this boss (note + reminder tags)
     $("onlyRosterLbl").title = "zobrazit jen specy, které máme v sestavě bosse / rosteru · hráči podle: " + state.rosterFrom;
   }
   function save() {
@@ -1136,7 +1139,7 @@
     nsrtRow = r;
     var sp = r ? SPEC[r.spec] : null, chars = r ? (state.roster[r.spec] || []) : [];
     $("nsrtTitle").textContent = "NSRT reminder – " + (r ? rowTitle(r) : "Boss");
-    $("nsrtTag").value = r ? (r.char || (chars[0] ? chars[0].char : (SPEC_ID[r.spec] ? String(SPEC_ID[r.spec]) : "everyone"))) : "everyone";
+    $("nsrtTag").value = r ? (r.char ? charNow(r.char) : (chars[0] ? chars[0].char : (SPEC_ID[r.spec] ? String(SPEC_ID[r.spec]) : "everyone"))) : "everyone";
     $("nsrtTag").placeholder = r && SPEC_ID[r.spec] ? "jméno postavy / everyone / spec ID " + SPEC_ID[r.spec] : "jméno postavy / everyone / healer / tank";
     $("nsrtDur").value = "";
     var box = $("nsrtLanes"); box.innerHTML = "";
@@ -1157,7 +1160,7 @@
   function fetchRaidplanNote() {
     rpNote = { boss: state.boss, data: null, chars: null, p: apiJson("/api/timeline/raidplan?boss=" + lineupNo() + "&fresh=1", { cache: "no-store" }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || "RaidPlan nedostupný");
-      rpNote.data = d; rpNote.chars = toCharNames(d.text || "", noteNameMap()); return d;
+      rpNote.data = d; rpNote.chars = toCharNames(d.text || "", state.nameMap || noteNameMap()); return d;
     }) };
     return rpNote.p;
   }
@@ -1209,8 +1212,11 @@
 
   // NSRT export of all (roster) rows into one shared note: tag per row filled from the roster
   /** default NSRT tag of a row: its player's character, else every roster character of the spec (space separated – nsrtLines writes one reminder line per name), else the spec ID */
+  /** a name as it should be tagged on THIS boss: a player name or another character of the player → the character from
+   *  the lineup (a row assigned as "Schizoid" long ago tags Schizoiddh when that is who comes); unknown names stay */
+  function charNow(name) { return String(name || "").split(/\s+/).filter(Boolean).map(function (n) { return (state.nameMap || {})[nkey(n)] || n; }).join(" "); }
   function rowTag(r) {
-    if (r.char) return r.char;
+    if (r.char) return charNow(r.char);
     var chars = (state.roster[r.spec] || []).map(function (c) { return c.char; });
     if (chars.length) return chars.join(" ");
     return SPEC_ID[r.spec] ? String(SPEC_ID[r.spec]) : "everyone";
