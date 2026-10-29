@@ -47,6 +47,16 @@ Rename separators: Old=New, Old->New
 Swaps/renames touch markers (incl. names inside assignment markers like
 "T1 Gina"), text labels and all notes. Quote arguments with spaces or <>.
 
+Character names: markers carry the PLAYER name (Gina), but notes, text
+labels and assignment markers get the in-game CHARACTER name of the
+character the player brings to that boss per the lineup and the Roster
+("Gina" -> Ejakulátorka, "Houdy (Druid)" -> Tragicomix), so they can be
+pasted into the game. Every spelling of a lineup player (player name, any of
+their characters) is rewritten; a renamed/swapped player's mentions become
+the replacement's character. Only capitalised mentions are touched, so
+prose words that double as names ("were", "global") stay. Character names
+in plans are recognised as their player everywhere (lookups, pairing).
+
 Spec icons: tank/heal roles map to their spec; "dps" maps to the class's DPS
 spec (SPEC_BY_ROLE — guild default where a class has several, overridable per
 player via an optional "Main spec" column in the Roster tab). Spec icons the
@@ -166,6 +176,15 @@ ASSET_RE = re.compile(r"game/wow/class/([a-z]+)(?:_([a-z]+))?\.png")
 
 ASSUMED_TANK_ROLES = set()
 ASSUMED_DPS_SPECS = {}   # player -> "warrior_arms" where the DPS spec was guessed
+
+# Character names from the Roster (filled by load_roster_tab). Markers keep
+# the PLAYER name; notes, text labels and assignment markers get the in-game
+# CHARACTER name of the character the player brings to that boss (the
+# lineup's "(Class / spec)" choice picks which one), so they can be pasted
+# into the game as they are.
+PLAYER_CHARS = {}   # norm(player) -> [character display names, main first]
+CHAR_ALIASES = {}   # norm(character) -> norm(player)
+NAME_DISPLAY = {}   # norm(player or character) -> display spelling
 
 
 def role_key(role):
@@ -412,15 +431,27 @@ def load_roster(sheet_url, gid):
         if fill and fill.patternType and fill.fgColor and fill.fgColor.type == "rgb":
             rgb = fill.fgColor.rgb
         cls = nearest_class(rgb) if rgb else "priest"  # uncolored/white cell = priest
-        roster[norm(name)] = (name.strip(), cls, str(role_cell.value or "").strip(), "")
+        roster[norm(name)] = (name.strip(), cls, str(role_cell.value or "").strip(), "", "")
     return roster, ws.title
 
 
-def roster_lookup(roster, name):
-    """Exact normalized match first, then prefix match (Nesfe ~ Nesferit)."""
+def roster_lookup_exact(roster, name):
+    """Roster entry whose player name OR character name equals `name`
+    (case/diacritics-insensitive), else None. 'Ejakulátorka' -> Gina."""
     n = norm(name)
     if n in roster:
         return roster[n]
+    owner = CHAR_ALIASES.get(n)
+    return roster[owner] if owner in roster else None
+
+
+def roster_lookup(roster, name):
+    """Exact normalized match first (player or character name), then prefix
+    match (Nesfe ~ Nesferit)."""
+    hit = roster_lookup_exact(roster, name)
+    if hit:
+        return hit
+    n = norm(name)
     if len(n) >= 4:
         hits = [v for k, v in roster.items() if k.startswith(n) or n.startswith(k)]
         if len(hits) == 1:
@@ -439,12 +470,15 @@ def gviz_rows(doc_id, sheet_name):
 
 
 def load_roster_tab(with_alts=False):
-    """Roster tab -> {norm(player): (Player, class_key, role, spec)}.
+    """Roster tab -> {norm(player): (Player, class_key, role, spec, character)}.
     class_key matches CLASS_COLORS keys ('Death Knight' -> 'deathknight').
-    spec comes from the OPTIONAL 'Main spec' column ('' when absent).
+    spec comes from the OPTIONAL 'Main spec' column ('' when absent),
+    character from 'Main char' (the in-game name, '' when absent).
     with_alts=True returns (roster, alts) where alts = {norm(player):
-    [(Player, class_key, role, spec), ...]} for the 'Alt char' columns —
-    used when a lineup slot says "Player (Class)" (play the alt)."""
+    [(Player, class_key, role, spec, character), ...]} for the 'Alt char'
+    columns — used when a lineup slot says "Player (Class)" (play the alt).
+    Also fills PLAYER_CHARS / CHAR_ALIASES / NAME_DISPLAY so character names
+    in plans are recognised and notes can be rewritten to them."""
     # roster lives in the guild database now (Worker API, same CSV layout the sheet tab had; edited on roster.html)
     roster_url = os.environ.get("ES_ROSTER_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/roster.csv")
     rows = list(csv.reader(io.StringIO(http_bytes(roster_url).decode("utf-8", "replace"))))
@@ -465,8 +499,9 @@ def load_roster_tab(with_alts=False):
     ia, iac, iar = (col("Alt char", required=False), col("Alt classa", required=False),
                     col("Alt role", required=False))
     ias = col("Alt spec", required=False)
+    imc, iach = col("Main char", required=False), col("Alt char", required=False)
 
-    def entry(player, cls, role, spec):
+    def entry(player, cls, role, spec, char=""):
         cls_key = cls.lower().replace(" ", "")
         if cls_key not in CLASS_COLORS:
             print(f"  WARNING: {player} has unknown class '{cls}' in the Roster")
@@ -475,7 +510,7 @@ def load_roster_tab(with_alts=False):
             print(f"  WARNING: {player}: '{spec}' is not a {cls} spec in RaidPlan "
                   f"(known: {', '.join(sorted(KNOWN_SPECS.get(cls_key, ())))}) — ignored")
             spec_key = ""
-        return (player, cls_key, role.lower(), spec_key)
+        return (player, cls_key, role.lower(), spec_key, char.strip())
 
     roster, alts = {}, {}
     for r in rows[1:]:
@@ -483,12 +518,26 @@ def load_roster_tab(with_alts=False):
         player, cls, role, spec = cell(ip), cell(ic), cell(ir), cell(isp)
         if not player or not cls:
             continue
-        roster[norm(player)] = entry(player, cls, role, spec)
+        roster[norm(player)] = entry(player, cls, role, spec, cell(imc))
         if cell(ia) and cell(iac):
             alts.setdefault(norm(player), []).append(
-                entry(player, cell(iac), cell(iar) or role, cell(ias)))
+                entry(player, cell(iac), cell(iar) or role, cell(ias), cell(iach)))
     if not roster:
         sys.exit(f"Tab '{ROSTER_TAB}' contains no players.")
+    # character name -> player, so "Ejakulátorka" in a marker or a note is
+    # recognised as Gina. A character spelled like ANOTHER player's name is
+    # not an alias (the player wins); one spelled like its own player is fine.
+    PLAYER_CHARS.clear(); CHAR_ALIASES.clear(); NAME_DISPLAY.clear()
+    for key, main in roster.items():
+        chars = [e[4] for e in [main] + alts.get(key, []) if e[4]]
+        PLAYER_CHARS[key] = chars
+        NAME_DISPLAY[key] = main[0]
+        for c in chars:
+            ck = norm(c)
+            if ck == key or ck not in roster:
+                NAME_DISPLAY.setdefault(ck, c)
+                if ck != key:
+                    CHAR_ALIASES.setdefault(ck, key)
     return (roster, alts) if with_alts else roster
 
 
@@ -646,22 +695,28 @@ def roster_for_lineup(roster, alts, lineup):
     spec replaced by the one picked in the lineup ("Player (Class / spec)"),
     which then wins over the Roster spec for the marker icon."""
     out = dict(roster)
+    specs = lineup.get("specs", {})
     for pn, cls in lineup.get("classes", {}).items():
         hit = roster_lookup(roster, pn)
         if not hit:
             continue  # reported as "not in the Roster" by lineup_renames
         key = norm(hit[0])
-        if hit[1] == cls:
-            continue  # main class spelled out — nothing to swap
-        alt = next((a for a in alts.get(key, []) if a[1] == cls), None)
-        if alt is None:
+        chars = [c for c in [hit] + alts.get(key, []) if c[1] == cls]
+        if not chars:
             print(f"  WARNING: {hit[0]} has no {cls} character in the Roster — "
-                  f"using the main ({hit[1]})")
+                  f"using the main ({hit[1]}{', ' + hit[4] if hit[4] else ''})")
             continue
-        out[key] = alt
-        print(f"  {hit[0]} plays the {cls} alt ({alt[2]}"
-              f"{', spec ' + alt[3] if alt[3] else ''})")
-    for pn, spec in lineup.get("specs", {}).items():
+        # two characters of one class (Global: Globalcd holy / Globlin
+        # discipline): the lineup spec picks the character
+        want = SPEC_ALIASES.get(specs.get(pn, ""), specs.get(pn, ""))
+        pick = next((c for c in chars if want and c[3] == want), chars[0])
+        if pick is hit:
+            continue  # main character spelled out — nothing to swap
+        out[key] = pick
+        print(f"  {hit[0]} plays the {cls} character "
+              f"{pick[4] + ' ' if pick[4] else ''}({pick[2]}"
+              f"{', spec ' + pick[3] if pick[3] else ''})")
+    for pn, spec in specs.items():
         hit = roster_lookup(roster, pn)
         if not hit:
             continue
@@ -673,9 +728,44 @@ def roster_for_lineup(roster, alts, lineup):
                   f"in RaidPlan — keeping {cur[3] or 'the role default'}")
             continue
         if spec_key != cur[3]:
-            out[key] = (cur[0], cur[1], cur[2], spec_key)
+            out[key] = (cur[0], cur[1], cur[2], spec_key, cur[4])
             print(f"  {hit[0]} plays {spec_key} on this boss (lineup)")
     return out
+
+
+def char_text_map(lineup_players, renames, roster):
+    """What notes, text labels and assignment markers should call everyone:
+    {norm(any spelling that means a player): character name on this boss}.
+    Every lineup player — by player name or by any of their characters — maps
+    to the character they bring to this boss (roster = roster_for_lineup(),
+    so the lineup's "(Class / spec)" choice is already in); a renamed or
+    swapped player maps to the replacement's character. Returns (mapping,
+    groups); groups[old] = the keys standing for a rename's old name (so the
+    'does not appear anywhere' warning sees mentions by character name)."""
+    def char_of(key):
+        e = roster[key]
+        return e[4] or e[0]
+
+    def keys_of(key):
+        return {key} | {norm(c) for c in PLAYER_CHARS.get(key, [])
+                        if norm(c) == key or norm(c) not in roster}
+
+    mapping, groups = {}, {}
+    for p in lineup_players:
+        hit = roster_lookup(roster, p)
+        if hit:
+            key = norm(hit[0])
+            for k in keys_of(key):
+                mapping[k] = char_of(key)
+    for old, new in renames.items():   # command-line + lineup pairing; win
+        ohit, nhit = roster_lookup(roster, old), roster_lookup(roster, new)
+        target = char_of(norm(nhit[0])) if nhit else new
+        keys = keys_of(norm(ohit[0])) if ohit else set()
+        keys.add(norm(old))
+        for k in keys:
+            mapping[k] = target
+        groups[old] = keys
+    return mapping, groups
 
 
 def boss_mode(args, cli_renames):
@@ -715,9 +805,10 @@ def boss_mode(args, cli_renames):
         plan, doc = fetch_plan(info["code"])
 
         renames, (to_add, to_remove) = lineup_renames(doc, lu, boss_roster, cli_renames)
+        text_map, groups = char_text_map(lu["players"], renames, boss_roster)
         a = copy.copy(args)
         a.in_place, a.key, a.sync_icons = True, info["key"], True
-        process_plan(info["code"], a, doc, plan, renames, boss_roster)
+        process_plan(info["code"], a, doc, plan, renames, boss_roster, text_map, groups)
         if to_add:
             print(f"  PLACE MANUALLY (in the lineup, nowhere in the plan): "
                   f"{', '.join(sorted(to_add))}")
@@ -848,22 +939,32 @@ def restore_mode(args):
     print(f"Done. Plan restored to revision {file_rev}:  https://raidplan.io/plan/{code}")
 
 
-def replace_in_text(text, renames, hits=None):
+def replace_in_text(text, mapping, hits=None, cap=False):
     """Word-boundary, case/diacritics-insensitive replacement in free text.
+    mapping = {norm(name): replacement}; hits counts replacements per key.
 
     All names are replaced in ONE pass so swaps (A->B while B->A) don't
-    chase each other's output."""
-    if not text or not renames:
+    chase each other's output. A name glued to a WoW colour code
+    ("|cffff7d0aGina|r") still counts as a whole word. cap=True replaces
+    only mentions written with a capital first letter, so prose words that
+    double as player names ("were", "global", "swipe") are left alone."""
+    if not text or not mapping:
         return text, 0
     # match against the diacritics-stripped shadow so 'Zirael' finds 'Zîrael'
     shadow = "".join(c for c in unicodedata.normalize("NFKD", text)
                      if not unicodedata.combining(c))
-    alts = "|".join(re.escape(o) for o in sorted(renames, key=len, reverse=True))
-    pattern = re.compile(rf"(?<!\w)({alts})(?!\w)", re.IGNORECASE)
+    alts = "|".join(re.escape(o) for o in sorted(mapping, key=len, reverse=True))
+    pattern = re.compile(rf"(?:(?<!\w)|(?<=\|c[0-9a-fA-F]{{8}}))({alts})(?!\w)",
+                         re.IGNORECASE)
     out, pos, count = [], 0, 0
     for m in pattern.finditer(shadow):
-        old = next(o for o in renames if norm(o) == norm(m.group(1)))
-        out.append(text[pos:m.start()]); out.append(renames[old]); pos = m.end(); count += 1
+        if cap and m.group(1)[:1].islower():
+            continue
+        old = norm(m.group(1))
+        new = mapping[old]
+        if text[m.start():m.end()] == new:
+            continue  # already spelled exactly right
+        out.append(text[pos:m.start()]); out.append(new); pos = m.end(); count += 1
         if hits is not None:
             hits[old] = hits.get(old, 0) + 1
     out.append(text[pos:])
@@ -914,7 +1015,11 @@ MODES
      spec). Players in the plan who are not in that boss's lineup are renamed
      to lineup players missing from the plan (paired tank/heal/dps, then
      anyone free). Names, class icons, spec icons and border colors are
-     synced to the Roster tab. Plans are saved IN PLACE with the edit keys
+     synced to the Roster tab. Notes, text labels and assignment markers
+     ("T1 Gina") get the CHARACTER name the player brings to that boss
+     (Roster "Main char"/"Alt char", picked by the lineup's "(Class / spec)":
+     Gina -> Ejakulátorka, "Houdy (Druid)" -> Tragicomix); player markers
+     keep the player name. Plans are saved IN PLACE with the edit keys
      from venomabyss_plans.txt; the original document is kept as
      backup_<code>_rev<N>.json. Whoever cannot be paired is listed as
      PLACE MANUALLY / REMOVE MANUALLY.
@@ -943,6 +1048,9 @@ SWAPS AND RENAMES (positional; quote anything containing spaces or < >)
   Old=New   Old->New
         rename one player (New takes Old's icon slot; the class/spec icon
         and border color switch to New's roster entry).
+  In --boss mode notes/texts/assignments are written with CHARACTER names
+  (Roster Main char / Alt char per the lineup's class choice), markers with
+  player names; "A" / "Old" may be typed as either (Gina or Ejakulátorka).
   Names are matched case- and diacritics-insensitively ("Zirael" finds
   "Zîreael"); an unambiguous prefix works too ("Nesfe" -> "Nesferity").
 
@@ -1134,10 +1242,18 @@ def main():
     process_plan(code, args, doc, plan, renames, roster)
 
 
-def process_plan(code, args, doc, plan, renames, roster):
+def process_plan(code, args, doc, plan, renames, roster, text_map=None, groups=None):
     """Apply renames/--sync-names/--check/--normalize to a fetched plan
-    document and save it (clone, or in place per args)."""
+    document and save it (clone, or in place per args).
+
+    text_map (boss mode, from char_text_map) says what notes, text labels and
+    assignment markers should call each player — their CHARACTER name on this
+    boss; without it they just get the renames. Markers that are exactly a
+    player (or character) name keep their text unless renamed."""
     original_doc = json.loads(json.dumps(doc))  # pristine copy for --in-place backup
+    cap = text_map is not None   # character names: only capitalised mentions
+    text_map = dict(text_map or {})
+    groups = {o: set(g) for o, g in (groups or {}).items()}
 
     # Warn early about unknown replacement names, and resolve their classes.
     new_class = {}
@@ -1148,7 +1264,8 @@ def process_plan(code, args, doc, plan, renames, roster):
         if hit:
             new_class[old] = hit
             print(f"  {old} -> {new}: {new} is {hit[1]} ({hit[2]}"
-                  f"{', spec ' + hit[3] if hit[3] else ''}) in the roster")
+                  f"{', spec ' + hit[3] if hit[3] else ''}"
+                  f"{', character ' + hit[4] if hit[4] else ''}) in the roster")
         else:
             close = difflib.get_close_matches(new, list(roster), n=1, cutoff=0.6)
             hint = f" — did you mean '{roster[close[0]][0]}'?" if close else ""
@@ -1180,8 +1297,14 @@ def process_plan(code, args, doc, plan, renames, roster):
         if not n_sync:
             print("  all marker names already match the sheet")
 
+    # renames not covered by the text map (manual mode, --sync-names) go
+    # into texts as they are
+    for old, new in renames.items():
+        text_map.setdefault(norm(old), new)
+        groups.setdefault(old, set()).add(norm(old))
+
     marker_hits = text_hits = icon_hits = 0
-    hits = {}
+    hits, thits = {}, {}   # per rename key (markers) / per text-map key (texts)
     unknown = set()
     mismatch = set()
     class_fixed = set()
@@ -1196,17 +1319,19 @@ def process_plan(code, args, doc, plan, renames, roster):
                     if attr["text"] != renames[hit_key]:
                         attr["text"] = renames[hit_key]
                         marker_hits += 1
-                    hits[hit_key] = hits.get(hit_key, 0) + 1
+                    hits[norm(hit_key)] = hits.get(norm(hit_key), 0) + 1
                     info = new_class.get(hit_key)
                     if info:
-                        disp, cls, role, sheet_spec = info
+                        disp, cls, role, sheet_spec = info[:4]
                         if sync_marker_icon(attr, cls, role, sheet_spec, disp, plan_specs):
                             icon_hits += 1
-                else:
-                    # assignment markers can hold a name inside longer text
+                elif not roster_lookup_exact(roster, txt):
+                    # assignment markers hold a name inside longer text
                     # ("T1 Ahaaferos", "Soak: Gina + Houdy") — rename/swap
-                    # those too (text only; the icon stays as authored)
-                    new_txt, n = replace_in_text(txt, renames, hits)
+                    # those too, with character names in boss mode (text
+                    # only; the icon stays as authored). A marker that IS a
+                    # player/character name keeps the player name.
+                    new_txt, n = replace_in_text(txt, text_map, thits, cap)
                     if n:
                         attr["text"] = txt = new_txt
                         text_hits += n
@@ -1217,7 +1342,7 @@ def process_plan(code, args, doc, plan, renames, roster):
                     else:
                         if hit[0] != txt:
                             mismatch.add((txt, hit[0]))
-                        disp, cls, role, sheet_spec = hit
+                        disp, cls, role, sheet_spec = hit[:4]
                         m = ASSET_RE.match(attr.get("asset") or "")
                         if not m:
                             pass  # not a class icon (raid mark etc.) — leave it
@@ -1230,15 +1355,15 @@ def process_plan(code, args, doc, plan, renames, roster):
                         elif m.group(1) != cls:
                             class_wrong.add((txt, m.group(1), cls))
         elif node["type"] == "itext":
-            attr["text"], n = replace_in_text(attr.get("text"), renames, hits)
+            attr["text"], n = replace_in_text(attr.get("text"), text_map, thits, cap)
             text_hits += n
 
     for key in ("header_notes_raw", "footer_notes_raw"):
-        doc[key], n = replace_in_text(doc.get(key) or "", renames, hits)
+        doc[key], n = replace_in_text(doc.get(key) or "", text_map, thits, cap)
         text_hits += n
     step_notes = []
     for note in doc.get("step_notes_raw") or []:
-        note, n = replace_in_text(note or "", renames, hits)
+        note, n = replace_in_text(note or "", text_map, thits, cap)
         text_hits += n
         step_notes.append(note)
 
@@ -1268,8 +1393,12 @@ def process_plan(code, args, doc, plan, renames, roster):
     print(f"\nChanged {marker_hits} player markers, {text_hits} mentions in texts/notes, "
           f"{icon_hits} class icons updated" +
           (f", {fmt_hits} markers reformatted." if args.normalize else "."))
+    if thits:
+        print("Names in notes/texts/assignments" + (" -> character names:" if cap else ":"))
+        for k, n in sorted(thits.items(), key=lambda kv: NAME_DISPLAY.get(kv[0], kv[0]).lower()):
+            print(f"  - {NAME_DISPLAY.get(k, k)} -> {text_map[k]} ({n}x)")
     for old in renames:
-        if not hits.get(old):
+        if not hits.get(norm(old)) and not any(thits.get(k) for k in groups.get(old, ())):
             print(f"  WARNING: '{old}' does not appear anywhere in the plan — check the spelling")
     if args.check and unknown:
         print("Markers whose name is NOT in the roster sheet:")
