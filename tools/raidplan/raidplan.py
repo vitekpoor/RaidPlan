@@ -47,15 +47,16 @@ Rename separators: Old=New, Old->New
 Swaps/renames touch markers (incl. names inside assignment markers like
 "T1 Gina"), text labels and all notes. Quote arguments with spaces or <>.
 
-Character names: markers carry the PLAYER name (Gina), but notes, text
-labels and assignment markers get the in-game CHARACTER name of the
-character the player brings to that boss per the lineup and the Roster
-("Gina" -> Ejakulátorka, "Houdy (Druid)" -> Tragicomix), so they can be
-pasted into the game. Every spelling of a lineup player (player name, any of
-their characters) is rewritten; a renamed/swapped player's mentions become
-the replacement's character. Only capitalised mentions are touched, so
-prose words that double as names ("were", "global") stay. Character names
-in plans are recognised as their player everywhere (lookups, pairing).
+Names in notes: markers, notes, text labels and assignment markers all
+carry the PLAYER name (Gina) — timeline.html turns them into the in-game
+character names at NSRT export time, per the lineup ("Gina" -> Ejakulátorka,
+"Houdy (Druid)" -> Tragicomix). Boss mode therefore rewrites every spelling
+of a lineup player found in notes/texts (a character name, a typo like
+"Ahaferos") to the Roster player name, and a renamed/swapped player's
+mentions to the replacement's name; --chars-in-notes writes the boss's
+character names into the plan instead. Only capitalised mentions are
+touched, so prose words that double as names ("were", "global") stay.
+Character names in plans are recognised as their player everywhere.
 
 Spec icons: tank/heal roles map to their spec; "dps" maps to the class's DPS
 spec (SPEC_BY_ROLE — guild default where a class has several, overridable per
@@ -184,7 +185,6 @@ ASSUMED_DPS_SPECS = {}   # player -> "warrior_arms" where the DPS spec was guess
 # into the game as they are.
 PLAYER_CHARS = {}   # norm(player) -> [character display names, main first]
 CHAR_ALIASES = {}   # norm(character) -> norm(player)
-NAME_DISPLAY = {}   # norm(player or character) -> display spelling
 
 
 def role_key(role):
@@ -477,7 +477,7 @@ def load_roster_tab(with_alts=False):
     with_alts=True returns (roster, alts) where alts = {norm(player):
     [(Player, class_key, role, spec, character), ...]} for the 'Alt char'
     columns — used when a lineup slot says "Player (Class)" (play the alt).
-    Also fills PLAYER_CHARS / CHAR_ALIASES / NAME_DISPLAY so character names
+    Also fills PLAYER_CHARS / CHAR_ALIASES so character names
     in plans are recognised and notes can be rewritten to them."""
     # roster lives in the guild database now (Worker API, same CSV layout the sheet tab had; edited on roster.html)
     roster_url = os.environ.get("ES_ROSTER_URL", "https://eternal-shadows.vitek-poor.workers.dev/api/roster.csv")
@@ -527,15 +527,13 @@ def load_roster_tab(with_alts=False):
     # character name -> player, so "Ejakulátorka" in a marker or a note is
     # recognised as Gina. A character spelled like ANOTHER player's name is
     # not an alias (the player wins); one spelled like its own player is fine.
-    PLAYER_CHARS.clear(); CHAR_ALIASES.clear(); NAME_DISPLAY.clear()
+    PLAYER_CHARS.clear(); CHAR_ALIASES.clear()
     for key, main in roster.items():
         chars = [e[4] for e in [main] + alts.get(key, []) if e[4]]
         PLAYER_CHARS[key] = chars
-        NAME_DISPLAY[key] = main[0]
         for c in chars:
             ck = norm(c)
             if ck == key or ck not in roster:
-                NAME_DISPLAY.setdefault(ck, c)
                 if ck != key:
                     CHAR_ALIASES.setdefault(ck, key)
     return (roster, alts) if with_alts else roster
@@ -733,18 +731,20 @@ def roster_for_lineup(roster, alts, lineup):
     return out
 
 
-def char_text_map(lineup_players, renames, roster):
+def char_text_map(lineup_players, renames, roster, chars=False):
     """What notes, text labels and assignment markers should call everyone:
-    {norm(any spelling that means a player): character name on this boss}.
-    Every lineup player — by player name or by any of their characters — maps
-    to the character they bring to this boss (roster = roster_for_lineup(),
-    so the lineup's "(Class / spec)" choice is already in); a renamed or
-    swapped player maps to the replacement's character. Returns (mapping,
-    groups); groups[old] = the keys standing for a rename's old name (so the
-    'does not appear anywhere' warning sees mentions by character name)."""
+    {norm(any spelling that means a player): name to write}. The name is the
+    Roster PLAYER name (default — timeline.html converts to characters at
+    NSRT export) or, with chars=True, the character they bring to this boss
+    (roster = roster_for_lineup(), so the lineup's "(Class / spec)" choice is
+    already in). Every lineup player is covered by player name and by any of
+    their characters; a renamed or swapped player maps to the replacement.
+    Returns (mapping, groups); groups[old] = the keys standing for a
+    rename's old name (so the 'does not appear anywhere' warning sees
+    mentions by character name)."""
     def char_of(key):
         e = roster[key]
-        return e[4] or e[0]
+        return (e[4] or e[0]) if chars else e[0]
 
     def keys_of(key):
         return {key} | {norm(c) for c in PLAYER_CHARS.get(key, [])
@@ -805,7 +805,7 @@ def boss_mode(args, cli_renames):
         plan, doc = fetch_plan(info["code"])
 
         renames, (to_add, to_remove) = lineup_renames(doc, lu, boss_roster, cli_renames)
-        text_map, groups = char_text_map(lu["players"], renames, boss_roster)
+        text_map, groups = char_text_map(lu["players"], renames, boss_roster, args.chars_in_notes)
         a = copy.copy(args)
         a.in_place, a.key, a.sync_icons = True, info["key"], True
         process_plan(info["code"], a, doc, plan, renames, boss_roster, text_map, groups)
@@ -964,9 +964,10 @@ def replace_in_text(text, mapping, hits=None, cap=False):
         new = mapping[old]
         if text[m.start():m.end()] == new:
             continue  # already spelled exactly right
+        if hits is not None:   # counted by the spelling found in the text
+            found = text[m.start():m.end()]
+            hits[found] = hits.get(found, 0) + 1
         out.append(text[pos:m.start()]); out.append(new); pos = m.end(); count += 1
-        if hits is not None:
-            hits[old] = hits.get(old, 0) + 1
     out.append(text[pos:])
     return "".join(out), count
 
@@ -1016,10 +1017,12 @@ MODES
      to lineup players missing from the plan (paired tank/heal/dps, then
      anyone free). Names, class icons, spec icons and border colors are
      synced to the Roster tab. Notes, text labels and assignment markers
-     ("T1 Gina") get the CHARACTER name the player brings to that boss
-     (Roster "Main char"/"Alt char", picked by the lineup's "(Class / spec)":
-     Gina -> Ejakulátorka, "Houdy (Druid)" -> Tragicomix); player markers
-     keep the player name. Plans are saved IN PLACE with the edit keys
+     ("T1 Gina") are kept in PLAYER names too (character names and typos
+     found there become the Roster player name; timeline.html converts them
+     to characters at NSRT export) — or, with --chars-in-notes, in the
+     CHARACTER name the player brings to that boss (Roster Main/Alt char per
+     the lineup's "(Class / spec)": Gina -> Ejakulátorka, "Houdy (Druid)" ->
+     Tragicomix). Plans are saved IN PLACE with the edit keys
      from venomabyss_plans.txt; the original document is kept as
      backup_<code>_rev<N>.json. Whoever cannot be paired is listed as
      PLACE MANUALLY / REMOVE MANUALLY.
@@ -1048,9 +1051,10 @@ SWAPS AND RENAMES (positional; quote anything containing spaces or < >)
   Old=New   Old->New
         rename one player (New takes Old's icon slot; the class/spec icon
         and border color switch to New's roster entry).
-  In --boss mode notes/texts/assignments are written with CHARACTER names
-  (Roster Main char / Alt char per the lineup's class choice), markers with
-  player names; "A" / "Old" may be typed as either (Gina or Ejakulátorka).
+  In --boss mode notes/texts/assignments are written with PLAYER names
+  (or, with --chars-in-notes, the CHARACTER names — Roster Main char / Alt
+  char per the lineup's class choice); "A" / "Old" may be typed as either
+  (Gina or Ejakulátorka).
   Names are matched case- and diacritics-insensitively ("Zirael" finds
   "Zîreael"); an unambiguous prefix works too ("Nesfe" -> "Nesferity").
 
@@ -1118,6 +1122,10 @@ def main():
                    help="sync plan(s) with the '" + LINEUP_TAB + "' sheet tab: plan numbers "
                         "like 02 (several allowed), or 'all'. Edit keys come from the plans "
                         "file; saves IN PLACE. Swaps/renames typed after it are applied on top.")
+    g.add_argument("--chars-in-notes", action="store_true",
+                   help="write notes/texts/assignment markers with the CHARACTER names the players bring "
+                        "to that boss (Roster Main/Alt char per the lineup) instead of player names "
+                        "(default: player names; timeline.html converts them at NSRT export)")
     g.add_argument("--plans-file", default=DEFAULT_PLANS_FILE,
                    help="boss list with view/edit links (default: venomabyss_plans.txt "
                         "next to this script)")
@@ -1251,7 +1259,7 @@ def process_plan(code, args, doc, plan, renames, roster, text_map=None, groups=N
     boss; without it they just get the renames. Markers that are exactly a
     player (or character) name keep their text unless renamed."""
     original_doc = json.loads(json.dumps(doc))  # pristine copy for --in-place backup
-    cap = text_map is not None   # character names: only capitalised mentions
+    cap = text_map is not None   # boss mode: only capitalised mentions
     text_map = dict(text_map or {})
     groups = {o: set(g) for o, g in (groups or {}).items()}
 
@@ -1394,11 +1402,12 @@ def process_plan(code, args, doc, plan, renames, roster, text_map=None, groups=N
           f"{icon_hits} class icons updated" +
           (f", {fmt_hits} markers reformatted." if args.normalize else "."))
     if thits:
-        print("Names in notes/texts/assignments" + (" -> character names:" if cap else ":"))
-        for k, n in sorted(thits.items(), key=lambda kv: NAME_DISPLAY.get(kv[0], kv[0]).lower()):
-            print(f"  - {NAME_DISPLAY.get(k, k)} -> {text_map[k]} ({n}x)")
+        print("Names in notes/texts/assignments" + (" -> " + ("character" if getattr(args, "chars_in_notes", False)
+                                                              else "player") + " names:" if cap else ":"))
+        for k, n in sorted(thits.items(), key=lambda kv: norm(kv[0])):
+            print(f"  - {k} -> {text_map[norm(k)]} ({n}x)")
     for old in renames:
-        if not hits.get(norm(old)) and not any(thits.get(k) for k in groups.get(old, ())):
+        if not hits.get(norm(old)) and not any(norm(k) in groups.get(old, ()) for k in thits):
             print(f"  WARNING: '{old}' does not appear anywhere in the plan — check the spelling")
     if args.check and unknown:
         print("Markers whose name is NOT in the roster sheet:")

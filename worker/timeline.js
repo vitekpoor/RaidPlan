@@ -101,13 +101,16 @@ export async function raidplanNote(env, url) {
   const m = /raidplan\.io\/plan\/([a-z0-9]+)/.exec(lineup.planView || "");
   if (!m) return json({ ok: false, error: "boss has no RaidPlan link" }, 404);
   const code = m[1];
-  const hit = raidplanMemo.get(code);
+  // fresh=1 (NSRT export dialog) = skip the memo and the edge cache, so a plan saved a second ago is what gets exported
+  const fresh = url.searchParams.get("fresh") === "1";
+  const hit = fresh ? null : raidplanMemo.get(code);
   if (hit && Date.now() - hit.at < RAIDPLAN_TTL) return json(hit.body);
-  const mr = await fetch(`https://raidplan.io/api/plan/${code}`, { headers: RP_HEADERS, cf: { cacheTtl: 60 } });
+  const init = fresh ? { headers: RP_HEADERS, cache: "no-store" } : { headers: RP_HEADERS, cf: { cacheTtl: 60 } };
+  const mr = await fetch(`https://raidplan.io/api/plan/${code}`, init);
   if (!mr.ok) return json({ ok: false, error: `raidplan.io ${mr.status}` }, 502);
   const plan = ((await mr.json()) || {}).plan || {};
   if (!plan.doc_url) return json({ ok: false, error: "raidplan.io: plan has no doc_url" }, 502);
-  const dr = await fetch(plan.doc_url, { headers: RP_HEADERS, cf: { cacheTtl: 60 } });
+  const dr = await fetch(plan.doc_url, init);
   if (!dr.ok) return json({ ok: false, error: `raidplan.io doc ${dr.status}` }, 502);
   const doc = (await dr.json()) || {};
   const clean = (t) => String(t || "").replace(/\r/g, "").trim();

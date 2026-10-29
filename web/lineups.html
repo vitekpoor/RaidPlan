@@ -114,7 +114,7 @@
     <span class="bosses" id="syncbosses" title="které plány synchronizovat"></span>
     <input type="text" id="syncchanges" placeholder="výměny navíc: Akka-Meslock, Miky=Hase" title="A-B vymění místa a přiřazení dvou hráčů, Old=New přejmenuje; víc změn odděl čárkou">
     <label class="chk" title="jen ukáže, co by se změnilo – nic se do plánů neuloží"><input type="checkbox" id="syncdry"> jen náhled</label>
-    <button class="btn" id="syncbtn" type="button" title="přejmenuje hráče v plánech na raidplan.io podle sestav; poznámky a assignmenty dostanou jména postav z rosteru podle zvolené classy (GitHub Actions, ~1 min)">Synchronizovat plány</button>
+    <button class="btn" id="syncbtn" type="button" title="přejmenuje hráče v plánech na raidplan.io podle sestav – markery i poznámky/assignmenty zůstávají ve jménech hráčů, na postavy je převádí až NSRT export v Timeline (GitHub Actions, ~1 min)">Synchronizovat plány</button>
     <span id="syncmsg"></span>
   </div>
   <div class="row last" id="synclast"></div>
@@ -351,7 +351,7 @@
       html = "Poslední " + (r.dryRun ? "náhled" : "synchronizace") + " " + esc(new Date(r.finishedAt).toLocaleString("cs-CZ")) + ': <b class="' + (r.ok ? "good" : "bad") + '">' + (r.ok ? "✔ OK" : "⚠ selhala (kód " + r.exitCode + ")") + "</b>" +
         " · plány " + esc(r.bosses.join(" ")) + (r.changes.length ? " · změny: " + esc(r.changes.join(", ")) : "") + (/PLACE MANUALLY|REMOVE MANUALLY/.test(r.log) ? ' · <b class="bad">něco je třeba doplnit ručně (viz log)</b>' : "") +
         (r.runUrl ? ' · <a href="' + esc(r.runUrl) + '" target="_blank" rel="noopener">běh ↗</a>' : "") + " · <details><summary>log</summary><pre>" + fmtLog(r.log || "(prázdný log)") + "</pre></details>";
-    } else if (state.token) html = "Zatím žádná synchronizace. Tlačítko přejmenuje hráče v plánech na raidplan.io podle sestav (kdo vypadl → kdo přibyl, páruje se podle role), srovná ikony a barvy podle rosteru a v poznámkách, textech a assignmentech přepíše jména na jména postav (Main/Alt char z rosteru podle classy v sestavě, např. Gina → Ejakulátorka, „Houdy (Druid)“ → Tragicomix); markery hráčů nesou dál jméno hráče.";
+    } else if (state.token) html = "Zatím žádná synchronizace. Tlačítko přejmenuje hráče v plánech na raidplan.io podle sestav (kdo vypadl → kdo přibyl, páruje se podle role), srovná ikony a barvy podle rosteru a přejmenuje hráče i v poznámkách, textech a assignmentech (všude jména HRÁČŮ; jména postav nebo překlepy tam opraví na jméno hráče). Na jména postav (Main/Alt char z rosteru podle classy v sestavě, např. Gina → Ejakulátorka) je převádí až NSRT export v Timeline.";
     $("#synclast").innerHTML = html;
   }
   function loadSync() {
