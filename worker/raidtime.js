@@ -149,12 +149,14 @@ export async function putRaidtime(request, env) {
 
 const TYPE_TEXT = { absent: "nepřijde", late: "přijde dýl" };
 
-/** The week overview (days, plan, who is missing, lineup hits of the missing players). Returns { text, mentionKeys, week }. */
-export async function overviewText(env, { anchor, offset = 0 } = {}) {
+/** The week overview (days, plan, who is missing, lineup hits of the missing players). Returns { text, mentionKeys, week }.
+ *  hidePast = leave out the raid days already behind us (today stays – the daily report goes out at 18:00 before the raid). */
+export async function overviewText(env, { anchor, offset = 0, hidePast = false } = {}) {
   const w = await raidWeek(env, { anchor, offset });
+  if (hidePast) { const today = todayPrague(); w.days = w.days.filter((d) => d.date >= today); }
   const lines = [`📅 **${w.week.current ? "TENTO TÝDEN" : "PŘÍŠTÍ TÝDEN"} · ${w.week.label.toUpperCase()}**`, ""];
   const missingKeys = new Set();
-  if (!w.days.length) lines.push("• žádný raidový den");
+  if (!w.days.length) lines.push(hidePast ? "• žádný další raidový den tento týden" : "• žádný raidový den");
   for (const d of w.days) {
     const when = d.start || d.end ? ` ${d.start}–${d.end}` : "";
     if (d.off) { lines.push(`• **${czDay(d.date)}** — ❌ zrušeno`); continue; }
@@ -248,9 +250,9 @@ export async function postAnnounce(env, url) {
   }
 }
 
-/** Daily report text (the old attendance.py message, now built here). */
+/** Daily report text (the old attendance.py message, now built here) – only today and the days still ahead in the week. */
 export async function reportText(env) {
-  const o = await overviewText(env, {});
+  const o = await overviewText(env, { hidePast: true });
   return { text: ["📋 **DOCHÁZKA NA RAID**", "━━━━━━━━━━━━━━━━━━━━", "", o.text].join("\n"), mentionKeys: o.mentionKeys };
 }
 
