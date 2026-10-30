@@ -30,6 +30,7 @@ import migration0008 from "./migrations/0008_raid_days.sql";
 import migration0009 from "./migrations/0009_timelines.sql";
 import migration0010 from "./migrations/0010_scout.sql";
 import migration0011 from "./migrations/0011_scout_notes.sql";
+import migration0012 from "./migrations/0012_scout_faction.sql";
 import { json, CORS, requireAuth, requireAdmin, adminLogin, splitSql } from "./lib.js";
 import { getRoster, getRosterCsv, putRoster } from "./roster.js";
 import { postAbsence, getAbsence, getAbsenceCsv, deleteAbsence, importAbsence } from "./absence.js";
@@ -44,7 +45,7 @@ import { getTimeline, putTimeline, deleteTimeline, lorrgsProxy, raidplanNote } f
 import { getResults, postResults, deleteResults } from "./results.js";
 import { submit, publicStatus, run, queueRows, queueStatus, notifyTest, discordRooms, getExtras, importExtras } from "./queue.js";
 
-const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007], ["0008_raid_days", migration0008], ["0009_timelines", migration0009], ["0010_scout", migration0010], ["0011_scout_notes", migration0011]];
+const MIGRATIONS = [["0001_sim_results", migration0001], ["0002_sim_queue", migration0002], ["0003_roster_absence", migration0003], ["0004_flopik", migration0004], ["0005_attendance_lineups", migration0005], ["0006_rio_comps", migration0006], ["0007_absence_time", migration0007], ["0008_raid_days", migration0008], ["0009_timelines", migration0009], ["0010_scout", migration0010], ["0011_scout_notes", migration0011], ["0012_scout_faction", migration0012]];
 
 export default {
   async fetch(request, env, ctx) {

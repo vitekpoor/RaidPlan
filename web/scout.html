@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <!--
-  scout.html - Nábor (jen pro admina): hráči guild, které jsou na serveru v žebříčku progressu pod námi (Eternal Shadows
-  a horší, do max. ranku), s průměrným percentilem parsů 95+ na heroicu nebo mythicu podle Warcraft Logs, plus kontakt
-  z raider.io (About, BattleTag, Discord, socials, looking-for-guild profil). Data stahuje tools/recruit/wcl_scout.mjs
+  scout.html - Nábor (jen pro admina): hráči guild, které jsou na serveru v žebříčku progressu pod námi (mythic žebříček
+  do max. ranku + heroic žebříček, tj. i guildy bez mythic killů), s průměrným percentilem parsů 95+ na heroicu nebo mythicu
+  podle Warcraft Logs (jen aktuální raid), frakce (Aliance/Horda) a kontakt z raider.io (About, BattleTag, Discord, socials,
+  looking-for-guild profil). Data stahuje tools/recruit/wcl_scout.mjs
   (GitHub Actions scout.yml, pondělí + ručně) do D1 přes Worker; stránka čte GET /api/scout (admin token – bez přihlášení
   Worker vrátí 401 a stránka nic neukáže; položka menu "Nábor" se zobrazí jen přihlášenému adminovi, viz es-auth.js).
   Ke každému hráči si admin vede poznámku (stav kontaktu, kdy napsal, text) – POST /api/scout/note, tabulka scout_notes,
@@ -42,6 +43,9 @@
   .pct { font-weight: 700; } .pct.p25 { color: #1eff00; } .pct.p50 { color: #0070ff; } .pct.p75 { color: #a335ee; } .pct.p95 { color: #ff8000; } .pct.p99 { color: #e268a8; } .pct.p100 { color: #e5cc80; } .pct.p0 { color: #666; }
   .role { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   .role.tank { background: var(--tank, #6aa3ff); } .role.healer { background: var(--heal, #4ad17a); } .role.dps { background: var(--dps, #ff6a6a); }
+  .fac { display: inline-block; border-radius: 6px; padding: 1px 7px; font-size: 12px; font-weight: 700; white-space: nowrap; border: 1px solid var(--line); }
+  .fac.alliance { color: #4a9eff; border-color: #4a9eff; } .fac.horde { color: #ff5a5a; border-color: #ff5a5a; } .fac.none { color: var(--muted); }
+  .mv { color: #e5cc80; font-size: 11.5px; }
   .lnk a { margin-right: 8px; white-space: nowrap; }
   .ct { max-width: 26rem; } .ct .bio { color: var(--muted); font-size: 12px; white-space: pre-wrap; max-height: 3.3em; overflow: hidden; }
   .ct .tag { display: inline-block; background: var(--surface2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; margin: 0 4px 3px 0; font-size: 12px; white-space: nowrap; }
@@ -76,7 +80,7 @@
 <div class="card">
 <div class="intro">
   <h4><em>Nábor</em> – hráči z guild pod námi</h4>
-  <p>Guildy na našem serveru, které jsou v žebříčku progressu pod Eternal Shadows (do zvoleného ranku), a jejich hráči s průměrným percentilem parsů 95+ na heroicu nebo mythicu (Warcraft Logs). U každého odkaz na logy a raider.io a kontakt z raider.io profilu (About, BattleTag, Discord), pokud ho má vyplněný. Jen pro přihlášeného admina.</p>
+  <p>Guildy na našem serveru, které jsou v žebříčku progressu pod Eternal Shadows (mythic i heroic žebříček, do zvoleného ranku), a jejich hráči s průměrným percentilem parsů 95+ na heroicu nebo mythicu aktuálního raidu (Warcraft Logs). U každého frakce, odkaz na logy a raider.io a kontakt z raider.io profilu (About, BattleTag, Discord), pokud ho má vyplněný. Jen pro přihlášeného admina.</p>
 </div>
 
 <div id="locked">🔒 Stránka je jen pro admina – přihlas se vpravo nahoře.</div>
@@ -88,12 +92,13 @@
   <span id="msg"></span>
   <label>Obtížnost <select id="diff"><option value="any">HC nebo M</option><option value="hc">Heroic</option><option value="my">Mythic</option></select></label>
   <label>Min. avg <input type="number" id="minavg" min="0" max="100" step="1" value="95"></label>
+  <label>Frakce <select id="fac"><option value="">obě</option><option value="alliance">Aliance</option><option value="horde">Horda</option></select></label>
   <label>Role <select id="role"><option value="">všechny</option><option value="tank">tank</option><option value="healer">healer</option><option value="dps">DPS</option></select></label>
   <label>Třída <select id="cls"><option value="">všechny</option></select></label>
   <label><input type="checkbox" id="contact"> jen s kontaktem</label>
   <label>Stav <select id="nstat"><option value="">všichni</option><option value="none">neoslovení</option><option value="any">s poznámkou</option><option value="contacted">napsáno</option><option value="replied">odpověděl</option><option value="talking">jednáme</option><option value="declined">odmítl</option><option value="joined">přišel</option><option value="skip">nechceme</option></select></label>
   <input type="text" id="q" placeholder="hledat jméno…">
-  <span id="adminbox"><button class="btn-outline" id="xlsx" type="button" title="stáhne tabulku podle aktuálního filtru a řazení jako .xlsx (včetně poznámek)">Excel</button> <button class="btn-outline" id="refresh" type="button" title="spustí scraping Warcraft Logs + raider.io v GitHub Actions (10 min až 2 h podle limitu bodů WCL API)">Obnovit (WCL)</button></span>
+  <span id="adminbox"><button class="btn-outline" id="xlsx" type="button" title="stáhne tabulku podle aktuálního filtru a řazení jako .xlsx (včetně poznámek)">Excel</button> <button class="btn-outline" id="refresh" type="button" title="spustí scraping Warcraft Logs + raider.io v GitHub Actions (cca 2–3 h podle limitu bodů WCL API)">Obnovit (WCL)</button></span>
 </div>
 <div class="guilds" id="guilds"></div>
 <div id="content"></div>
@@ -101,7 +106,7 @@
 <div id="runlog" hidden></div>
 </div>
 
-<p class="hint">Zdroj: <a href="https://raider.io/the-venomous-abyss/realm-rankings/eu/drakthul/mythic" target="_blank" rel="noopener">raider.io</a> – mythic žebříček guild na realmu (guildy pod námi do ranku 20) a rostery jejich first killů (= kdo tam aktuálně raiduje); <a href="https://www.warcraftlogs.com/" target="_blank" rel="noopener">Warcraft Logs</a> (API) – parsy těch hráčů na každém bossovi (Best / Median Perf. Avg = průměr nejlepšího / mediánového percentilu přes zabité bosse; healeři podle HPS); raider.io profil (About, BattleTag, Discord, socials, „hledám guildu“). Výchozí běh (auto) prochází u guild s mythic progressem jen mythic parsy, u ostatních heroic, a hráčům, kteří prošli (95+), pak dotáhne i druhou obtížnost – oba sloupce jsou vyplněné. Hráč, který má 95+ jen na obtížnosti, kterou guilda neprogressuje (např. heroic u mythic guildy), se objeví jen při běhu workflow s volbou diff = both (trvá déle, WCL limit bodů).
+<p class="hint">Zdroj: <a href="https://raider.io/the-venomous-abyss/realm-rankings/eu/drakthul/mythic" target="_blank" rel="noopener">raider.io</a> – žebříčky guild na realmu pro The Venomous Abyss (mythic žebříček: guildy pod námi do ranku 20; heroic žebříček, který obsahuje i guildy bez mythic killů: do ranku 40 – štítek „HC #n“) a rostery <b>všech</b> jejich first killů na heroicu i mythicu (= kdo tam letos raidoval); raider.io profil každého z nich (frakce, ilvl, aktuální guilda – kdo mezitím přešel k nám nebo do guildy nad námi, vypadne; kdo je bez guildy nebo jinde, zůstane se žlutou poznámkou „→ kde je teď“; About, BattleTag, Discord, socials, „hledám guildu“); <a href="https://www.warcraftlogs.com/" target="_blank" rel="noopener">Warcraft Logs</a> (API) – parsy těch hráčů na každém bossovi <b>jen z The Venomous Abyss</b> (Best / Median Perf. Avg = průměr nejlepšího / mediánového percentilu přes zabité bosse; healeři podle HPS). Výchozí běh (auto) projde u každého heroic parsy, u hráčů z mythic first-kill rosterů navíc mythic, a všem, kdo prošli (95+ na kterékoli obtížnosti), dotáhne chybějící obtížnost – oba sloupce jsou vyplněné. Volba diff = both ve workflow projde obě obtížnosti u všech (dvojnásobek bodů WCL).
 Stahuje se každé pondělí ráno (GitHub Actions <code>scout.yml</code>, skript <code>tools/recruit/wcl_scout.mjs</code>), admin může spustit ručně tlačítkem.
 Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: napsáno / odpověděl / jednáme / odmítl / přišel / nechceme, datum prvního kontaktu, text) – poznámky zůstávají i po dalším stažení dat; hráč, který z výběru vypadl, zůstane s poznámkou pod tabulkou.</p>
 </div>
@@ -132,6 +137,8 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
   function day(d) { if (!d) return ""; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? Number(m[3]) + ". " + Number(m[2]) + ". " + m[1] : d; }
   function today() { var t = new Date(); return t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0"); }
   function stBadge(n) { return n && n.status ? '<span class="st ' + esc(n.status) + '">' + esc(STATUS[n.status] || n.status) + "</span>" : ""; }
+  var FACTION = { alliance: "Aliance", horde: "Horda" };
+  function facBadge(f) { return f && FACTION[f] ? '<span class="fac ' + esc(f) + '">' + FACTION[f] + "</span>" : '<span class="fac none">?</span>'; }
   function noteCell(n) {
     if (!n) return '<span class="sub">–</span>';
     return stBadge(n) + (n.contactedAt ? ' <span class="sub">' + esc(day(n.contactedAt)) + "</span>" : "") + (n.note ? '<div class="txt" title="' + esc(n.note) + '">' + esc(n.note) + "</div>" : "");
@@ -181,7 +188,7 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
     var run = d.run || {};
     var running = run.phase === "start" || run.phase === "progress";
     $("#status").innerHTML = (run.finishedAt ? "Poslední sběr " + esc(when(run.finishedAt)) : run.startedAt ? "Běh od " + esc(when(run.startedAt)) : "Zatím žádný sběr") +
-      (run.ourRank ? " · " + esc(run.ourGuild || "my") + " #" + run.ourRank + " na serveru, guildy #" + (run.ourRank + 1) + "–#" + esc(run.maxRank || "?") : "") +
+      (run.ourRank ? " · " + esc(run.ourGuild || "my") + " #" + run.ourRank + " na serveru, guildy M #" + (run.ourRank + 1) + "–#" + esc(run.maxRank || "?") + (run.ourHcRank ? " + HC #" + (run.ourHcRank + 1) + "–#" + esc(run.maxRankHc || "?") : "") : "") +
       (run.phase === "error" ? ' · <b style="color:var(--dps)">poslední běh selhal: ' + esc(run.error || "") + "</b>" : "") +
       (running ? ' · <b style="color:var(--accent)">⏳ běží ' + (run.done != null ? run.done + "/" + run.of + " guild, " + (run.players || 0) + " hráčů" : "") + "</b>" : "") +
       " · " + (d.players || []).length + " hráčů z " + (d.guilds || []).length + " guild";
@@ -190,12 +197,14 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
     var counts = {};
     (d.players || []).forEach(function (p) { counts[p.guildId] = (counts[p.guildId] || 0) + 1; });
     $("#guilds").innerHTML = '<button type="button" data-g="" class="' + (state.guild ? "" : "on") + '">všechny guildy</button>' + (d.guilds || []).map(function (g) {
-      return '<button type="button" data-g="' + g.id + '" class="' + (String(state.guild) === String(g.id) ? "on" : "") + '" title="' + esc(g.faction) + ', world #' + esc(g.worldRank || "?") + '">#' + esc(g.serverRank || "?") + " " + esc(g.name) + " <small>" + (counts[g.id] || 0) + "/" + esc(g.candidates || 0) + "</small></button>";
+      var rk = g.serverRank ? "#" + g.serverRank : "HC #" + (g.hcRank || "?");
+      return '<button type="button" data-g="' + g.id + '" class="' + (String(state.guild) === String(g.id) ? "on" : "") + '" title="' + esc(g.faction) + (g.progress ? ", " + esc(g.progress) : "") + (g.hcRank ? ", HC #" + g.hcRank : "") + ', world #' + esc(g.worldRank || "?") + '">' + rk + " " + esc(g.name) + " <small>" + (counts[g.id] || 0) + "/" + esc(g.candidates || 0) + "</small></button>";
     }).join("");
     // rows
-    var minAvg = Number($("#minavg").value) || 0, role = $("#role").value, cls = $("#cls").value, q = $("#q").value.trim().toLowerCase(), onlyC = $("#contact").checked, diff = $("#diff").value, nstat = $("#nstat").value;
+    var minAvg = Number($("#minavg").value) || 0, role = $("#role").value, cls = $("#cls").value, q = $("#q").value.trim().toLowerCase(), onlyC = $("#contact").checked, diff = $("#diff").value, nstat = $("#nstat").value, fac = $("#fac").value;
     var rows = (d.players || []).filter(function (p) {
       if (state.guild && String(p.guildId) !== String(state.guild)) return false;
+      if (fac && p.faction !== fac) return false;
       if (role && p.role !== role) return false;
       if (cls && p.class !== cls) return false;
       if (onlyC && !hasContact(p)) return false;
@@ -204,6 +213,7 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
       var b = best(p); return b != null && b >= minAvg;
     });
     var key = { name: function (p) { return p.name.toLowerCase(); }, guild: function (p) { return (p.guildName || "").toLowerCase(); }, spec: function (p) { return p.class + " " + p.spec; },
+                fac: function (p) { return p.faction || "zz"; },
                 hc: function (p) { return p.hcBest == null ? -1 : p.hcBest; }, hcm: function (p) { return p.hcMedian == null ? -1 : p.hcMedian; },
                 my: function (p) { return p.myBest == null ? -1 : p.myBest; }, mym: function (p) { return p.myMedian == null ? -1 : p.myMedian; },
                 ilvl: function (p) { return p.ilvl == null ? -1 : p.ilvl; }, best: best, contact: function (p) { return hasContact(p) ? 1 : 0; },
@@ -211,7 +221,7 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
     rows.sort(function (a, b) { var x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * state.dir || a.name.localeCompare(b.name); });
     state.rows = rows;
     function th(id, label, title) { return '<th data-s="' + id + '" class="' + (state.sort === id ? "on" : "") + '" title="' + esc(title || "") + '">' + label + (state.sort === id ? ' <span class="dir">' + (state.dir < 0 ? "▼" : "▲") + "</span>" : "") + "</th>"; }
-    var html = '<table class="sc"><thead><tr>' + th("name", "Hráč") + th("spec", "Spec") + th("guild", "Guilda") +
+    var html = '<table class="sc"><thead><tr>' + th("name", "Hráč") + th("fac", "Frakce", "Aliance / Horda podle raider.io") + th("spec", "Spec") + th("guild", "Guilda", "guilda, v jejíchž first killech hráč byl; žlutě aktuální guilda podle raider.io, pokud se liší") +
       th("hc", "HC best", "Heroic: průměr nejlepšího percentilu přes zabité bosse") + th("hcm", "HC median") + th("my", "M best", "Mythic: průměr nejlepšího percentilu") + th("mym", "M median") +
       th("ilvl", "ilvl") + th("contact", "Kontakt (raider.io)") + th("note", "Moje poznámka", "stav oslovení, datum, text – klikni na řádek a uprav") + "<th>Odkazy</th></tr></thead><tbody>";
     rows.forEach(function (p) {
@@ -222,16 +232,18 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
       Object.keys(p.socials || {}).forEach(function (k) { contact.push('<span class="tag">' + esc(k) + ": " + esc(p.socials[k]) + "</span>"); });
       if (p.recruitment && p.recruitment.length) contact.push('<span class="tag lfg" title="má na raider.io profil „hledám guildu“">🔎 hledá guildu</span>');
       var bio = p.bio ? '<div class="bio" title="' + esc(p.bio) + '">' + esc(p.bio) + "</div>" : "";
+      var moved = p.data && p.data.moved ? '<div class="mv" title="podle raider.io už není v této guildě">→ ' + esc(p.data.moved) + "</div>" : "";
       html += '<tr class="p" data-k="' + esc(p.key) + '"><td><span class="nm" style="color:' + col + '">' + esc(p.name) + '</span><div class="sub">' + esc(p.realm) + "</div></td>" +
+        "<td>" + facBadge(p.faction) + "</td>" +
         '<td><span class="role ' + esc(p.role) + '"></span>' + esc(p.spec) + '<div class="sub">' + esc(p.class) + "</div></td>" +
-        "<td>" + esc(p.guildName) + "</td>" +
+        "<td>" + esc(p.guildName) + moved + "</td>" +
         '<td class="num">' + pct(p.hcBest) + '<div class="sub">' + (p.hcKills || 0) + " killů</div></td><td class=\"num\">" + pct(p.hcMedian) + "</td>" +
         '<td class="num">' + pct(p.myBest) + '<div class="sub">' + (p.myKills || 0) + " killů</div></td><td class=\"num\">" + pct(p.myMedian) + "</td>" +
         '<td class="num">' + (p.ilvl != null ? p.ilvl : "–") + "</td>" +
         '<td class="ct">' + (contact.join("") || '<span class="sub">–</span>') + bio + "</td>" +
         '<td class="nt">' + noteCell(p.note) + "</td>" +
         '<td class="lnk"><a href="' + esc(p.wclUrl) + '" target="_blank" rel="noopener">logy</a><a href="' + esc(p.rioUrl) + '" target="_blank" rel="noopener">raider.io</a></td></tr>';
-      if (state.open[p.key]) html += '<tr class="det"><td colspan="11">' + detail(p) + "</td></tr>";
+      if (state.open[p.key]) html += '<tr class="det"><td colspan="12">' + detail(p) + "</td></tr>";
     });
     html += "</tbody></table>";
     if (!rows.length) html = '<p class="hint">Nikdo neodpovídá filtru' + (d.players && d.players.length ? "" : " – data se ještě nestáhla (tlačítko „Obnovit (WCL)“ nebo workflow scout.yml)") + ".</p>";
@@ -252,13 +264,15 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
       }).join("") + "</table></div>";
     }
     var rec = (p.recruitment || []).map(function (r) { return '<div class="sub">🔎 ' + esc(JSON.stringify(r).slice(0, 600)) + "</div>"; }).join("");
-    var rg = p.data && p.data.rioGuild ? '<div class="sub">raider.io guilda: ' + esc(p.data.rioGuild.name) + " (" + esc(p.data.rioGuild.realm) + ")</div>" : "";
-    return noteEditor(p) + '<div class="cols" style="margin-top:10px">' + tbl("Heroic", p.data && p.data.hc) + tbl("Mythic", p.data && p.data.my) + "</div>" + (p.bio ? '<div class="bio-full">' + esc(p.bio) + "</div>" : "") + rec + rg +
+    var g0 = p.data && p.data.rioGuild;
+    var rg = g0 ? '<div class="sub">raider.io guilda: ' + esc(g0.name) + " (" + esc(g0.realmName || (typeof g0.realm === "string" ? g0.realm : "")) + ")</div>" : p.data && p.data.moved ? '<div class="sub">raider.io: bez guildy</div>' : "";
+    var fk = p.data && p.data.firstKills ? '<div class="sub">ve first killech guildy: ' + (p.data.firstKills.hc || 0) + "× HC, " + (p.data.firstKills.my || 0) + "× M</div>" : "";
+    return noteEditor(p) + '<div class="cols" style="margin-top:10px">' + tbl("Heroic", p.data && p.data.hc) + tbl("Mythic", p.data && p.data.my) + "</div>" + (p.bio ? '<div class="bio-full">' + esc(p.bio) + "</div>" : "") + rec + rg + fk +
       '<div class="sub">staženo ' + esc(when(p.fetchedAt)) + "</div>";
   }
 
   // ---- events
-  ["diff", "minavg", "role", "cls", "contact", "q", "nstat"].forEach(function (id) { $("#" + id).addEventListener("input", render); });
+  ["diff", "minavg", "role", "cls", "contact", "q", "nstat", "fac"].forEach(function (id) { $("#" + id).addEventListener("input", render); });
   document.addEventListener("submit", function (ev) { var f = ev.target.closest("form.note-ed"); if (!f) return; ev.preventDefault(); saveNote(f, false); });
   document.addEventListener("click", function (ev) {
     var b = ev.target.closest("button[data-del]"); if (!b) return;
@@ -288,17 +302,17 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
     if (!rows.length) { msg("Nic k exportu", "err"); return; }
     $("#xlsx").disabled = true; msg("Připravuji Excel…");
     loadXlsx().then(function () {
-      var head = ["Hráč", "Realm", "Třída", "Spec", "Role", "Guilda", "HC best", "HC median", "HC killy", "M best", "M median", "M killy", "ilvl",
+      var head = ["Hráč", "Realm", "Frakce", "Třída", "Spec", "Role", "Guilda", "Nyní (raider.io)", "HC best", "HC median", "HC killy", "M best", "M median", "M killy", "ilvl",
                   "BattleTag", "Discord", "Socials", "Hledá guildu", "About (raider.io)", "Stav", "Napsáno dne", "Poznámka", "Poznámka upravena", "Logy", "raider.io"];
       var data = rows.map(function (p) {
         var n = p.note || {};
-        return [p.name, p.realm, p.class, p.spec, p.role, p.guildName, p.hcBest, p.hcMedian, p.hcKills || 0, p.myBest, p.myMedian, p.myKills || 0, p.ilvl,
+        return [p.name, p.realm, FACTION[p.faction] || "", p.class, p.spec, p.role, p.guildName, (p.data && p.data.moved) || "", p.hcBest, p.hcMedian, p.hcKills || 0, p.myBest, p.myMedian, p.myKills || 0, p.ilvl,
                 p.battletag, p.discord, Object.keys(p.socials || {}).map(function (k) { return k + ": " + p.socials[k]; }).join(", "),
                 p.recruitment && p.recruitment.length ? "ano" : "", p.bio, STATUS[n.status] && n.status ? STATUS[n.status] : "", n.contactedAt ? day(n.contactedAt) : "", n.note || "",
                 n.updatedAt ? when(n.updatedAt) : "", p.wclUrl, p.rioUrl];
       });
       var ws = XLSX.utils.aoa_to_sheet([head].concat(data));
-      ws["!cols"] = [14, 12, 12, 13, 7, 20, 8, 9, 8, 8, 9, 8, 6, 16, 16, 24, 10, 40, 10, 12, 40, 16, 40, 40].map(function (w) { return { wch: w }; });
+      ws["!cols"] = [14, 12, 8, 12, 13, 7, 20, 18, 8, 9, 8, 8, 9, 8, 6, 16, 16, 24, 10, 40, 10, 12, 40, 16, 40, 40].map(function (w) { return { wch: w }; });
       ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: head.length - 1 } }) };
       var wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Nábor");
@@ -307,7 +321,7 @@ Kliknutím na řádek se otevřou parsy po bossech a <b>poznámka</b> (stav: nap
     }).catch(function (e) { msg("Chyba: " + e.message, "err"); }).then(function () { $("#xlsx").disabled = false; });
   });
   $("#refresh").addEventListener("click", function () {
-    if (!confirm("Spustit scraping Warcraft Logs + raider.io v GitHub Actions? Trvá 10 min až 2 h (limit bodů WCL API); hotové guildy se do tabulky doplňují průběžně.")) return;
+    if (!confirm("Spustit scraping Warcraft Logs + raider.io v GitHub Actions? Trvá cca 2–3 h (limit bodů WCL API, ~35 guild); hotové guildy se do tabulky doplňují průběžně.")) return;
     $("#refresh").disabled = true; msg("Spouštím…");
     fetch(API_BASE + "/api/scout/refresh", { method: "POST", headers: esAuth.headers({ "Content-Type": "application/json" }), body: JSON.stringify({ minAvg: Number($("#minavg").value) || 95, reason: "scout page" }) })
       .then(function (r) { return r.json(); }).then(function (d) {

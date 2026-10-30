@@ -5,13 +5,13 @@
 //
 //   GET  /api/scout                    (admin) { ok, run, guilds: [...], players: [...] }
 //   GET  /api/scout/status             (admin) { ok, run, lastDispatch, running }
-//   POST /api/scout/refresh            (admin) dispatch scout.yml { minAvg?, maxRank?, diff?, reason? } (Worker secret GITHUB_TOKEN), deduped 10 min
+//   POST /api/scout/refresh            (admin) dispatch scout.yml { minAvg?, maxRank?, maxRankHc?, diff?, reason? } (Worker secret GITHUB_TOKEN), deduped 10 min
 //   POST /api/scout/note               (admin) { key, status, contactedAt, note } → scout_notes (migration 0011; survives the scrape's
 //                                              upsert + prune, a player who drops out and returns gets the note back)
 //   POST /api/scout/run                (auth)  { runId, phase: start | progress | finish | error, ...info } → meta scout_run
 //                                              (finish with prune: true deletes guilds/players of other runs)
-//   POST /api/scout/guilds             (auth)  { runId, guilds: [{ id, name, faction, serverRank, worldRank, candidates, players }] } upsert
-//   POST /api/scout/players            (auth)  { runId, players: [{ key, name, realm, class, spec, role, guildId, guildName, ilvl,
+//   POST /api/scout/guilds             (auth)  { runId, guilds: [{ id, name, faction, serverRank (mythic), hcRank, worldRank, progress, candidates, players }] } upsert
+//   POST /api/scout/players            (auth)  { runId, players: [{ key, name, realm, class, spec, role, faction, guildId, guildName, ilvl,
 //                                                hcBest, hcMedian, hcKills, myBest, myMedian, myKills, wclUrl, rioUrl, bio, battletag,
 //                                                discord, socials, recruitment, data }] } upsert
 
@@ -38,12 +38,13 @@ const str = (v, max = 2000) => String(v == null ? "" : v).slice(0, max);
 
 export async function getScout(env) {
   const run = await metaGet(env, "scout_run");
-  const guilds = (await env.DB.prepare("SELECT * FROM scout_guilds ORDER BY server_rank, name").all()).results
-    .map((g) => ({ id: g.id, name: g.name, faction: g.faction, serverRank: g.server_rank, worldRank: g.world_rank, candidates: g.candidates, players: g.players, fetchedAt: g.fetched_at }));
+  // mythic-ranked guilds first (by mythic rank), then the heroic-only ones by heroic rank
+  const guilds = (await env.DB.prepare("SELECT * FROM scout_guilds ORDER BY (server_rank IS NULL), server_rank, hc_rank, name").all()).results
+    .map((g) => ({ id: g.id, name: g.name, faction: g.faction, serverRank: g.server_rank, hcRank: g.hc_rank, worldRank: g.world_rank, progress: g.progress || "", candidates: g.candidates, players: g.players, fetchedAt: g.fetched_at }));
   const players = (await env.DB.prepare(
     `SELECT p.*, n.status AS n_status, n.contacted_at AS n_contacted, n.note AS n_note, n.updated_at AS n_updated
      FROM scout_players p LEFT JOIN scout_notes n ON n.key = p.key ORDER BY p.guild_name, p.name`).all()).results.map((r) => ({
-    key: r.key, name: r.name, realm: r.realm, class: r.class, spec: r.spec, role: r.role, guildId: r.guild_id, guildName: r.guild_name, ilvl: r.ilvl,
+    key: r.key, name: r.name, realm: r.realm, class: r.class, spec: r.spec, role: r.role, faction: r.faction || "", guildId: r.guild_id, guildName: r.guild_name, ilvl: r.ilvl,
     hcBest: r.hc_best, hcMedian: r.hc_median, hcKills: r.hc_kills, myBest: r.my_best, myMedian: r.my_median, myKills: r.my_kills,
     wclUrl: r.wcl_url, rioUrl: r.rio_url, bio: r.bio, battletag: r.battletag, discord: r.discord,
     socials: parse(r.socials, {}), recruitment: parse(r.recruitment, []), data: parse(r.data, {}), fetchedAt: r.fetched_at,
@@ -84,11 +85,11 @@ export async function postGuilds(request, env) {
   const guilds = Array.isArray(b.guilds) ? b.guilds : [];
   if (!guilds.length) return json({ ok: true, guilds: 0 });
   const stmt = env.DB.prepare(
-    `INSERT INTO scout_guilds (id, name, faction, server_rank, world_rank, candidates, players, run_id, fetched_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-     ON CONFLICT(id) DO UPDATE SET name = ?2, faction = ?3, server_rank = ?4, world_rank = ?5, candidates = ?6, players = ?7, run_id = ?8, fetched_at = ?9`);
+    `INSERT INTO scout_guilds (id, name, faction, server_rank, world_rank, candidates, players, run_id, fetched_at, hc_rank, progress)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+     ON CONFLICT(id) DO UPDATE SET name = ?2, faction = ?3, server_rank = ?4, world_rank = ?5, candidates = ?6, players = ?7, run_id = ?8, fetched_at = ?9, hc_rank = ?10, progress = ?11`);
   await env.DB.batch(guilds.filter((g) => Number(g.id)).map((g) => stmt.bind(
-    Number(g.id), str(g.name, 200), str(g.faction, 20), num(g.serverRank), num(g.worldRank), Number(g.candidates) || 0, Number(g.players) || 0, runId, now)));
+    Number(g.id), str(g.name, 200), str(g.faction, 20), num(g.serverRank), num(g.worldRank), Number(g.candidates) || 0, Number(g.players) || 0, runId, now, num(g.hcRank), str(g.progress, 60))));
   return json({ ok: true, guilds: guilds.length });
 }
 
@@ -100,16 +101,17 @@ export async function postPlayers(request, env) {
   if (!players.length) return json({ ok: true, players: 0 });
   const stmt = env.DB.prepare(
     `INSERT INTO scout_players (key, name, realm, class, spec, role, guild_id, guild_name, ilvl, hc_best, hc_median, hc_kills, my_best, my_median, my_kills,
-       wcl_url, rio_url, bio, battletag, discord, socials, recruitment, data, run_id, fetched_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
+       wcl_url, rio_url, bio, battletag, discord, socials, recruitment, data, run_id, fetched_at, faction)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
      ON CONFLICT(key) DO UPDATE SET name = ?2, realm = ?3, class = ?4, spec = ?5, role = ?6, guild_id = ?7, guild_name = ?8, ilvl = ?9,
        hc_best = ?10, hc_median = ?11, hc_kills = ?12, my_best = ?13, my_median = ?14, my_kills = ?15, wcl_url = ?16, rio_url = ?17, bio = ?18,
-       battletag = ?19, discord = ?20, socials = ?21, recruitment = ?22, data = ?23, run_id = ?24, fetched_at = ?25`);
+       battletag = ?19, discord = ?20, socials = ?21, recruitment = ?22, data = ?23, run_id = ?24, fetched_at = ?25, faction = ?26`);
   const rows = players.filter((p) => p && p.key && p.name).map((p) => stmt.bind(
     str(p.key, 120), str(p.name, 60), str(p.realm, 60), str(p.class, 30), str(p.spec, 30), str(p.role, 10), num(p.guildId), str(p.guildName, 200), num(p.ilvl),
     num(p.hcBest), num(p.hcMedian), Number(p.hcKills) || 0, num(p.myBest), num(p.myMedian), Number(p.myKills) || 0,
     str(p.wclUrl, 300), str(p.rioUrl, 300), str(p.bio, 4000), str(p.battletag, 100), str(p.discord, 100),
-    JSON.stringify(p.socials || {}).slice(0, 2000), JSON.stringify(p.recruitment || []).slice(0, 8000), JSON.stringify(p.data || {}).slice(0, 20000), runId, now));
+    JSON.stringify(p.socials || {}).slice(0, 2000), JSON.stringify(p.recruitment || []).slice(0, 8000), JSON.stringify(p.data || {}).slice(0, 20000), runId, now,
+    ["alliance", "horde"].includes(String(p.faction || "").toLowerCase()) ? String(p.faction).toLowerCase() : ""));
   // D1 batch limit is generous, but keep statements per batch modest
   for (let i = 0; i < rows.length; i += 50) await env.DB.batch(rows.slice(i, i + 50));
   return json({ ok: true, players: rows.length });
@@ -149,6 +151,7 @@ export async function refresh(request, env) {
   const inputs = {
     min_avg: String(Math.min(100, Math.max(0, Number(body.minAvg) || 95))),
     max_rank: String(Math.min(100, Math.max(1, parseInt(body.maxRank, 10) || 20))),
+    max_rank_hc: String(Math.min(200, Math.max(1, parseInt(body.maxRankHc, 10) || 40))),
     diff: ["auto", "both", "hc", "my"].includes(body.diff) ? body.diff : "auto",
     reason: str(body.reason || "page", 80),
   };
