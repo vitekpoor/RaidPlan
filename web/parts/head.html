@@ -89,6 +89,10 @@ h2 em { color: var(--accent); font-style: normal; }
 figure.shot { margin: -6px 0 20px; }
 figure.shot img { max-width: 100%; border-radius: var(--radius-sm); display: block; }
 figure.shot figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
+figure.video { margin: 0 0 20px; }
+figure.video .player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
+figure.video .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+figure.video figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .hc {
   border-left: 3px solid var(--gold); background: var(--surface);
   padding: 10px 16px 12px; margin: -6px 0 20px; font-size: 14px;
