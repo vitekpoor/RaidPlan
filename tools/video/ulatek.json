@@ -1,16 +1,83 @@
 {
+  "_": "Ula'tek Mythic kill 2026-11-08 (WCL qtADfMXZYC4TVNbj fight 7). Video time = fight time + 2.4 s. Coordinates = 1920x1080.",
   "callouts": [
     {
-      "at": "4:57", "pause": 4, "show": 5,
-      "title": "Marker 1 – pozice ranged",
-      "text": "Při Anguished Cry všichni ranged na červenou jedničku.\nMelee zůstávají u bosse.",
-      "arrow": [1380, 670], "circle": [1380, 670, 70]
+      "at": "0:12", "pause": 4, "show": 5,
+      "title": "Blightscale Wretch",
+      "text": "Addka se cleavuje. Při soaku se musí jít pod ní, jinak dostaneš debuff.",
+      "arrow": [630, 190], "circle": [630, 190, 60]
     },
     {
-      "at": "5:02", "show": 4,
+      "at": "0:18", "pause": 4, "show": 5,
+      "title": "Vajíčka (Toxic Incubation)",
+      "text": "Vajíčka nesou assignutí lidi. Switch jenom pokud je low dmg, jinak boss.",
+      "arrow": [880, 400], "circle": [880, 400, 55]
+    },
+    {
+      "at": "0:37.3", "pause": 4, "show": 3,
+      "title": "Fester Burst",
+      "text": "Addka soak.",
+      "arrow": [1200, 530], "circle": [1200, 530, 80], "box": [1180, 70], "width": 480
+    },
+    {
+      "at": "0:39", "pause": 4, "show": 5,
+      "title": "Spectral Coils",
+      "text": "Soak vajec.",
+      "arrow": [1320, 434], "box": [560, 60], "width": 480
+    },
+    {
+      "at": "0:52.5", "pause": 4, "show": 5,
+      "title": "Caustic Waves",
+      "text": "Vlny od bosse – levá / pravá, viz NSRT.",
+      "arrow": [940, 130], "circle": [940, 130, 90], "box": [600, 250]
+    },
+    {
+      "at": "2:30", "pause": 4, "show": 5,
+      "title": "Venomous Heart",
+      "text": "Dmg amp do srdce + hlavně dodge věci.",
+      "arrow": [1480, 352]
+    },
+    {
+      "at": "2:59", "pause": 4, "show": 5,
+      "title": "Doomscale Warden",
+      "text": "Při dmg a cleave vajca okolo.",
+      "arrow": [940, 230], "circle": [940, 230, 90]
+    },
+    {
+      "at": "3:07", "pause": 4, "show": 5,
+      "title": "Vajca",
+      "text": "Vemou se vajca podle assignmentu.",
+      "arrow": [1400, 480]
+    },
+    {
+      "at": "3:17.5", "pause": 4, "show": 5,
+      "title": "Tethers (Grasping Fangs)",
+      "text": "Break – musí se breaknout najednou. Velké defky, viz timeline.",
+      "arrow": [1010, 400], "box": [1100, 620]
+    },
+    {
+      "at": "4:37", "pause": 4, "show": 5,
       "title": "Weakened Doomscale",
-      "text": "Dorazit addy na 30 % – dostanou Weakened a dají se přerušit.",
-      "arrow": [1480, 520], "box": [720, 300], "width": 620, "color": "#5ee0ff"
+      "text": "Mark a kick podle assignmentu, viz NSRT.",
+      "arrow": [1470, 470]
+    },
+    {
+      "at": "5:38", "pause": 4, "show": 5,
+      "title": "Soak",
+      "text": "Soaky podle assignment pozice, viz NSRT.",
+      "arrow": [960, 375]
+    },
+    {
+      "at": "6:40", "pause": 4, "show": 5,
+      "title": "Serpent's Bite",
+      "text": "Soaky mají assignment pozice + lidi, kdo je soakuje, viz raidplan.",
+      "arrow": [1300, 272], "box": [560, 60]
+    },
+    {
+      "at": "8:09", "pause": 4, "show": 6,
+      "title": "Safe spot",
+      "text": "Zde safe spot na midu u gejty. POZOR – VLNY ZEZADU! Potom gejt.",
+      "arrow": [900, 520], "circle": [900, 520, 120], "box": [1150, 560]
     }
   ]
 }
