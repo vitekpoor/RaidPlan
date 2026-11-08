@@ -9,24 +9,24 @@
     },
     {
       "at": "0:18", "pause": 4, "show": 5,
-      "title": "Vajíčka (Toxic Incubation)",
+      "title": "Vajíčka (Blightscale Spawn)",
       "text": "Vajíčka nesou assignutí lidi. Switch jenom pokud je low dmg, jinak boss.",
       "arrow": [880, 400], "circle": [880, 400, 55]
     },
     {
-      "at": "0:37.3", "pause": 4, "show": 3,
+      "at": "0:39.3", "pause": 4, "show": 3,
       "title": "Fester Burst",
       "text": "Addka soak.",
       "arrow": [1200, 530], "circle": [1200, 530, 80], "box": [1180, 70], "width": 480
     },
     {
-      "at": "0:39", "pause": 4, "show": 5,
+      "at": "0:46", "pause": 4, "show": 5,
       "title": "Spectral Coils",
       "text": "Soak vajec.",
       "arrow": [1320, 434], "box": [560, 60], "width": 480
     },
     {
-      "at": "0:52.5", "pause": 4, "show": 5,
+      "at": "0:54", "pause": 4, "show": 5,
       "title": "Caustic Waves",
       "text": "Vlny od bosse – levá / pravá, viz NSRT.",
       "arrow": [940, 130], "circle": [940, 130, 90], "box": [600, 250]
@@ -38,9 +38,9 @@
       "arrow": [1480, 352]
     },
     {
-      "at": "2:59", "pause": 4, "show": 5,
+      "at": "3:01", "pause": 4, "show": 5,
       "title": "Doomscale Warden",
-      "text": "Při dmg a cleave vajca okolo.",
+      "text": "Prio dmg a cleave vajca okolo.",
       "arrow": [940, 230], "circle": [940, 230, 90]
     },
     {
