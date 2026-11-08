@@ -1,0 +1,16 @@
+{
+  "callouts": [
+    {
+      "at": "4:57", "pause": 4, "show": 5,
+      "title": "Marker 1 – pozice ranged",
+      "text": "Při Anguished Cry všichni ranged na červenou jedničku.\nMelee zůstávají u bosse.",
+      "arrow": [1380, 670], "circle": [1380, 670, 70]
+    },
+    {
+      "at": "5:02", "show": 4,
+      "title": "Weakened Doomscale",
+      "text": "Dorazit addy na 30 % – dostanou Weakened a dají se přerušit.",
+      "arrow": [1480, 520], "box": [720, 300], "width": 620, "color": "#5ee0ff"
+    }
+  ]
+}
