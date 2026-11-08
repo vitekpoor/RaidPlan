@@ -29,9 +29,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("out")
     ap.add_argument("--title", required=True)
-    ap.add_argument("--sub", default="Mythic · taktika")
+    ap.add_argument("--sub", default="Mythic · kill")
     ap.add_argument("--guild", default="ETERNAL SHADOWS")
     ap.add_argument("--note", default="")
+    ap.add_argument("--tagline", default="", help="optional line under the title")
     ap.add_argument("--backdrop")
     ap.add_argument("--logo", default="web/assets/images/apple-touch-icon.png")
     a = ap.parse_args()
@@ -80,8 +81,8 @@ def main():
     y += size + 50
     d.rectangle([x, y, x + 220, y + 6], fill=ACCENT)
     y += 40
-    d.text((x, y), "Video s popisky mechanik – u každé důležité mechaniky se video zastaví a šipka ukáže, co dělat.",
-           font=font("segoeui.ttf", 34), fill=INK)
+    if a.tagline:
+        d.text((x, y), a.tagline, font=font("segoeui.ttf", 34), fill=INK)
     if a.note:
         d.text((x, H - 150), a.note, font=font("segoeui.ttf", 28), fill=MUTED)
 
