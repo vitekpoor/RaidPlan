@@ -203,6 +203,8 @@ def main():
     ap.add_argument("--preview", nargs=2, metavar=("FROM", "TO"))
     ap.add_argument("--encoder", default="nvenc", choices=["nvenc", "x264"])
     ap.add_argument("--audio", type=int, default=0)
+    ap.add_argument("--mix", help="mix several audio tracks with gains in dB instead of --audio, e.g. 1:-4,2:+10 "
+                                  "(Archon: 0 = game+mic, 1 = game only, 2 = microphone)")
     ap.add_argument("--keep-png")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--list", action="store_true", help="print original-video time -> output time of every callout")
@@ -280,6 +282,13 @@ def main():
     fc.append(f"[{cur}]format=yuv420p[vout]")
 
     aidx = f"[0:a:{a.audio}]"
+    if a.mix:  # e.g. 1:-4,2:+10 -> game -4 dB, mic +10 dB, limiter against clipping
+        parts = [p.split(":") for p in a.mix.split(",")]
+        for k, (trk, gain) in enumerate(parts):
+            fc.append(f"[0:a:{int(trk)}]volume={float(gain):+.1f}dB[mx{k}]")
+        fc.append("".join(f"[mx{k}]" for k in range(len(parts))) +
+                  f"amix=inputs={len(parts)}:normalize=0,alimiter=limit=0.95:level=0[amix]")
+        aidx = "[amix]"
     if cuts:  # source pieces + silence during the pauses
         fc.append(f"{aidx}asplit={len(cuts) + 1}" + "".join(f"[as{k}]" for k in range(len(cuts) + 1)))
         pieces, prev = [], 0.0
