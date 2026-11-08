@@ -208,6 +208,8 @@ def main():
     ap.add_argument("--keep-png")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--list", action="store_true", help="print original-video time -> output time of every callout")
+    ap.add_argument("--intro", help="title card PNG shown before the video (tools/video/intro.py makes one)")
+    ap.add_argument("--intro-sec", type=float, default=4.0, help="how long the title card stays (default 4 s)")
     a = ap.parse_args()
 
     if a.list:
@@ -273,11 +275,20 @@ def main():
     cmd += ["-i", a.input]
     for png, _, _ in overlays:
         cmd += ["-i", png]
+    intro_sec = 0.0
+    if a.intro:  # title card first, everything else shifts by its length
+        intro_sec = a.intro_sec
+        cmd += ["-loop", "1", "-framerate", str(FPS), "-t", f"{intro_sec:.3f}", "-i", a.intro]
 
-    fc = ["[0:v]" + ",".join([f"fps={FPS}"] + loops) + "[v0]"]
+    fc = ["[0:v]" + ",".join([f"fps={FPS}"] + loops) + ",format=yuv420p[v0]"]
     cur = "v0"
+    if intro_sec:
+        m = 1 + len(overlays)
+        fc.append(f"[{m}:v]fps={FPS},scale={W}:{H},format=yuv420p,fade=t=out:st={intro_sec - 0.5:.3f}:d=0.5[vi]")
+        fc.append("[vi][v0]concat=n=2:v=1:a=0[v0c]")
+        cur = "v0c"
     for k, (png, s, e) in enumerate(overlays):
-        fc.append(f"[{cur}][{k + 1}:v]overlay=0:0:enable='between(t,{s:.3f},{e:.3f})'[v{k + 1}]")
+        fc.append(f"[{cur}][{k + 1}:v]overlay=0:0:enable='between(t,{s + intro_sec:.3f},{e + intro_sec:.3f})'[v{k + 1}]")
         cur = f"v{k + 1}"
     fc.append(f"[{cur}]format=yuv420p[vout]")
 
@@ -304,6 +315,10 @@ def main():
         amap = "[aout]"
     else:
         amap = aidx
+    if intro_sec:
+        fc.append(f"anullsrc=r=48000:cl=stereo:d={intro_sec:.3f}[ai]")
+        fc.append(f"[ai]{amap}concat=n=2:v=0:a=1[afinal]")
+        amap = "[afinal]"
 
     cmd += ["-filter_complex", ";".join(fc), "-map", "[vout]", "-map", amap]
     enc = {"nvenc": ["-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", "23",
