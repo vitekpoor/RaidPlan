@@ -205,7 +205,22 @@ def main():
     ap.add_argument("--audio", type=int, default=0)
     ap.add_argument("--keep-png")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--list", action="store_true", help="print original-video time -> output time of every callout")
     a = ap.parse_args()
+
+    if a.list:
+        with open(a.callouts, encoding="utf-8") as f:
+            spec = json.load(f)
+        cs = sorted(spec["callouts"], key=lambda c: parse_time(c["at"]))
+        off = 0.0
+        mm = lambda s: f"{int(s // 60)}:{s % 60:04.1f}"
+        print(f"{'#':>2}  {'original':>8}  {'in output':>9}  {'resumes':>8}  pause  title")
+        for i, c in enumerate(cs, 1):
+            at, p = parse_time(c["at"]), float(c.get("pause", 0) or 0)
+            print(f"{i:>2}  {mm(at):>8}  {mm(at + off):>9}  {mm(at + off + p):>8}  {p:>5.1f}  {c.get('title', '')}")
+            off += p
+        print(f"output is {off:.1f}s longer than the original")
+        return
 
     ffmpeg = find_ffmpeg()
     with open(a.callouts, encoding="utf-8") as f:
