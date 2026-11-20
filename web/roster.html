@@ -102,7 +102,7 @@
   <a class="btn-outline" href="/api/es?p=esroster" target="_blank" rel="noopener" title="Zkopíruje aktuální roster do schránky – ve hře /esa import a Ctrl+V">Export pro addon</a>
 </div>
 
-<table class="roster"><thead><tr><th></th><th>ID · Hráč</th><th>Main</th><th>Alt / další postavy</th><th>Poznámka</th><th></th></tr></thead>
+<table class="roster"><thead><tr><th></th><th id="thplayer">Hráč</th><th>Main</th><th>Alt / další postavy</th><th>Poznámka</th><th></th></tr></thead>
 <tbody id="main" data-bench="0"></tbody><tbody id="bench" data-bench="1" title="lavička"></tbody></table>
 
 <p class="hint" id="hint">Roster je zdroj pravdy pro formuláře (Omluvenky, SimC), stránku Simy, addon ES Attendance i RaidPlan sestavy. Spec se doplňuje automaticky z posledního simu, když chybí.</p>
@@ -165,7 +165,7 @@
   function rowView(p) {
     var main = p.characters.filter(function (c) { return c.main; })[0] || p.characters[0];
     var alts = p.characters.filter(function (c) { return c !== main; });
-    return '<tr><td class="grab"></td><td class="player"><span class="pid" title="ID hráče v databázi">' + p.id + '</span>' + esc(p.name) + '</td><td>' + (main ? charView(main) : '<div class="char"><span class="cinfo">–</span></div>') +
+    return '<tr><td class="grab"></td><td class="player">' + esc(p.name) + '</td><td>' + (main ? charView(main) : '<div class="char"><span class="cinfo">–</span></div>') +
       '</td><td>' + alts.map(charView).join("") + '</td><td class="note">' + esc(p.note) + '</td><td class="act"></td></tr>';
   }
 
@@ -199,6 +199,7 @@
   function render() {
     var list = state.edit ? state.draft : state.players;
     $("#page").classList.toggle("edit", state.edit);
+    $("#thplayer").textContent = state.edit ? "ID · Hráč" : "Hráč";   // ID hráče jen v editaci
     var mainRows = [], benchRows = [];
     if (state.edit) {
       list.forEach(function (p, i) { (p.bench ? benchRows : mainRows).push(rowEdit(p, i)); });
