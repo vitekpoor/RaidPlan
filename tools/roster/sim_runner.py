@@ -423,8 +423,14 @@ def wowaudit_upload(character, report_id):
     h = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
     try:
         chars = requests.get(f"{WOWAUDIT_API}/characters", headers=h, timeout=60).json()
-        want = sim_results.name_key(character)
-        cid = next((c.get("id") for c in chars if sim_results.name_key(c.get("name")) == want), None)
+        # postavy se stejným jménem na různých realmech má roster jako "Jméno-Realm" – wowaudit zná jméno a realm zvlášť
+        cname, _, crealm = str(character).partition("-")
+        want = sim_results.name_key(cname)
+        rkey = lambda v: re.sub(r"[\s\-_'’`]", "", sim_results.name_key(v))  # noqa: E731
+        hits = [c for c in chars if sim_results.name_key(c.get("name")) == want]
+        if crealm and len(hits) > 1:
+            hits = [c for c in hits if rkey(c.get("realm")) == rkey(crealm)] or hits
+        cid = hits[0].get("id") if hits else None
         if not cid:
             return "wowaudit: postava není v týmu"
         r = requests.post(f"{WOWAUDIT_API}/wishlists", headers={**h, "Content-Type": "application/json"},

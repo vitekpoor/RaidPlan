@@ -602,10 +602,11 @@ a.best:hover .open { color: var(--ink-strong); }
   function charLinksHtml(name) {
     var c = state.crests[nkey(name)] || {};
     var sv = (c.server || state.defaultServer || DEFAULT_SERVER).replace(/_/g, "-"), rg = c.region || DEFAULT_REGION;
-    var n = encodeURIComponent(String(name || "").trim());
+    // postavy se stejným jménem na různých realmech se jmenují "Jméno-Realm" (roster) – do odkazů patří jen jméno
+    var n = encodeURIComponent(String(name || "").trim().replace(/-.*$/, ""));
     var room = discordRoom(name);
     return '<span class="links">' + CHAR_SITES.map(function (s) {
-      return '<a class="clink ' + s.key + '" href="' + esc(s.url(rg, sv, n)) + '" target="_blank" rel="noopener" title="' + esc(s.label + " – " + name + "-" + sv) + '">' +
+      return '<a class="clink ' + s.key + '" href="' + esc(s.url(rg, sv, n)) + '" target="_blank" rel="noopener" title="' + esc(s.label + " – " + decodeURIComponent(n) + "-" + sv) + '">' +
         '<img src="' + s.icon + '" alt="' + esc(s.label) + '" loading="lazy"></a>';
     }).join("") +
       (room ? '<a class="clink discord" href="' + esc(room.url) + '" target="_blank" rel="noopener" title="' + esc("Discord místnost – " + room.player) + '"><img src="' + DISCORD_ICON + '" alt="Discord" loading="lazy"></a>' : "") +

@@ -20,6 +20,11 @@ export function nameKey(s) {
   return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
+/** Realm comparison key: "Burning Blade" = "BurningBlade" = SimC "burning_blade"; "Drak'thul" = "drakthul". */
+export function realmKey(s) {
+  return nameKey(s).replace(/[\s\-_'’`]/g, "");
+}
+
 /** Same as Apps Script simSpecKey_ / simClassKey_: lower-case letters only ("Death Knight" → "deathknight"). */
 export function specKey(s) {
   return String(s || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -101,6 +106,8 @@ export function playerOf(roster, character) {
   const key = nameKey(character);
   for (const r of roster) {
     if ((r.main && nameKey(r.main) === key) || (r.alt && nameKey(r.alt) === key)) return r.player;
+    // any character of the player, by its label ("Name-Realm" for same-named characters, else the name)
+    if ((r.characters || []).some((c) => nameKey(c.label || c.name) === key)) return r.player;
   }
   return "";
 }

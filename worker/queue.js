@@ -16,7 +16,7 @@
 // DISCORD_SIM_CHANNEL (shared channel id for players without a room),
 // DISCORD_PLAYERS_CATEGORY ("TVOJE ROMKA, Players"), SIM_PAGE_URL (link in Discord messages).
 
-import { json, nameKey, specKey, numOrNull, nowIso, whenText, requireAuth, requireAdmin, fetchRoster, playerOf, CORS } from "./lib.js";
+import { json, nameKey, realmKey, specKey, numOrNull, nowIso, whenText, requireAuth, requireAdmin, fetchRoster, playerOf, CORS } from "./lib.js";
 import { simSummary } from "./results.js";
 
 const SIM_MAX_SIMC = 200000;
@@ -107,12 +107,17 @@ export function parseReportLink(s) {
   return null;
 }
 
-function findRosterCharacter(roster, name, cls) {
-  const key = nameKey(name), ck = specKey(cls);
+/**
+ * Roster character of a SimC export. `name` of the result is the character's LABEL (worker/roster.js): the plain name,
+ * or "Name-Realm" when several roster characters share the name – then class and the export's `server=` pick the one.
+ */
+function findRosterCharacter(roster, name, cls, server) {
+  const key = nameKey(name), ck = specKey(cls), sk = realmKey(server);
   const hits = [];
   for (const r of roster) {
-    if (r.main && nameKey(r.main) === key) hits.push({ name: r.main, cls: r.mainClass, role: r.mainRole, player: r.player });
-    if (r.alt && nameKey(r.alt) === key) hits.push({ name: r.alt, cls: r.altClass, role: r.altRole, player: r.player });
+    for (const c of r.characters || []) {
+      if (nameKey(c.name) === key) hits.push({ name: c.label || c.name, cls: c.class, role: c.role, realm: c.realm || "", player: r.player });
+    }
   }
   if (!hits.length) {
     return { error: `Postava „${name}“ není v rosteru (list Roster). Pošli string z postavy, se kterou raiduješ, nebo napiš raid leaderovi, ať ji do rosteru doplní.` };
@@ -120,6 +125,14 @@ function findRosterCharacter(roster, name, cls) {
   const byClass = hits.filter((h) => !ck || !h.cls || specKey(h.cls) === ck);
   if (!byClass.length) {
     return { error: `Postava „${name}“ je v rosteru jako ${hits.map((h) => h.cls).join(" / ")}, ale string je z classy ${cls}. Pošli string ze správné postavy, nebo ať raid leader opraví roster.` };
+  }
+  if (byClass.length > 1) {
+    // same name (and class) on several realms: the export's server decides
+    const byRealm = byClass.filter((h) => sk && realmKey(h.realm) === sk);
+    if (byRealm.length !== 1) {
+      return { error: `Postava „${name}“ je v rosteru vícekrát (${byClass.map((h) => h.realm || "bez realmu").join(" / ")}) a string je z realmu „${server || "?"}“, který k žádné nesedí. Napiš raid leaderovi, ať v rosteru opraví realm.` };
+    }
+    return { character: byRealm[0] };
   }
   return { character: byClass[0] };
 }
@@ -133,7 +146,7 @@ export async function submit(request, env, ctx, url) {
   if (!p.ok) return json({ ok: false, message: "⚠ " + p.error });
   let roster;
   try { roster = await fetchRoster(env, ctx, url.origin); } catch (e) { return json({ ok: false, message: "⚠ Roster se nepodařilo načíst (" + e.message + ") – zkus to za chvíli." }, 502); }
-  const found = findRosterCharacter(roster, p.name, p.cls);
+  const found = findRosterCharacter(roster, p.name, p.cls, p.server);
   if (found.error) return json({ ok: false, message: "⚠ " + found.error });
   const ch = found.character;
   const ck = nameKey(ch.name), sk = specKey(p.spec), now = nowIso();
